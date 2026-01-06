@@ -1,5 +1,6 @@
 import { renderHomeView } from './views/homeView.js';
 import { renderTutorialBooksView } from './views/tutorialBooksView.js';
+import { renderTraitorsTomeReferenceView } from './views/traitorsTomeReferenceView.js';
 
 function normalizeHash(rawHash) {
     const hash = (rawHash || '').trim();
@@ -31,6 +32,11 @@ function renderRoute({ mountEl }) {
 
     if (route === '/tutorial') {
         renderTutorialBooksView({ mountEl, onNavigate: navigateTo });
+        return;
+    }
+
+    if (route === '/tutorial/traitors-tome') {
+        renderTraitorsTomeReferenceView({ mountEl, onNavigate: navigateTo });
         return;
     }
 

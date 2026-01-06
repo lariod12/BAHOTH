@@ -31,6 +31,11 @@ export function renderTutorialBooksView({ mountEl, onNavigate }) {
         button.addEventListener('click', () => {
             const book = button.getAttribute('data-book');
             console.log(`Tutorial book selected: ${book}`);
+            if (book === 'traitors-tome') {
+                onNavigate('#/tutorial/traitors-tome');
+                return;
+            }
+
             alert('Content coming soon...');
         });
     }
