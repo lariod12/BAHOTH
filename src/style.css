@@ -199,10 +199,21 @@ html {
 .table-scroll {
     width: min(1100px, 92vw);
     margin: 0 auto;
-    overflow: auto;
     border: 1px solid var(--hairline);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.03);
+}
+
+.table-scroll__body {
+    overflow: auto;
+    max-height: min(60vh, calc(100vh - 380px));
+}
+
+.table-scroll__footer {
+    padding: 16px;
+    text-align: center;
+    border-top: 1px solid var(--hairline);
+    background: rgba(0, 0, 0, 0.5);
 }
 
 .reference-table {

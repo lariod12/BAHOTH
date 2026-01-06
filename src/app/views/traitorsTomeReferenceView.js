@@ -144,12 +144,17 @@ function renderReferenceTable() {
 
     return `
         <div class="table-scroll">
-            <table class="reference-table">
-                ${thead}
-                <tbody>
-                    ${rows}
-                </tbody>
-            </table>
+            <div class="table-scroll__body" role="region" aria-label="Traitors Tome reference table">
+                <table class="reference-table">
+                    ${thead}
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-scroll__footer">
+                <button class="link-button" type="button" data-action="back">BACK</button>
+            </div>
         </div>
     `.trim();
 }
@@ -182,7 +187,7 @@ function renderSearchControls() {
 function renderTraitorsTomeReferenceMarkup() {
     return `
         <div class="welcome-container">
-            <div class="welcome-content welcome-content--page">
+            <div class="welcome-content welcome-content--page welcome-content--has-bottom-gap">
                 <p class="welcome-kicker">TRAITORS TOME</p>
                 <h2 class="page-title">BẢNG TRA</h2>
                 <p class="page-subtitle">Bảng tham chiếu để tra cứu theo phòng.</p>
@@ -190,10 +195,6 @@ function renderTraitorsTomeReferenceMarkup() {
                 ${renderSearchControls()}
 
                 ${renderReferenceTable()}
-
-                <div class="page-footer">
-                    <button class="link-button" type="button" data-action="back">Back</button>
-                </div>
             </div>
         </div>
     `.trim();
@@ -209,7 +210,7 @@ export function renderTraitorsTomeReferenceView({ mountEl, onNavigate }) {
     const omenSelect = mountEl.querySelector('[data-field="omen"]');
     const resultEl = mountEl.querySelector('[data-role="result"]');
     const table = mountEl.querySelector('.reference-table');
-    const tableScroll = mountEl.querySelector('.table-scroll');
+    const tableScroll = mountEl.querySelector('.table-scroll__body');
 
     if (!roomInput || !omenSelect || !resultEl || !table || !tableScroll) return;
     if (!(omenSelect instanceof HTMLSelectElement)) return;
