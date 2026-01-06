@@ -331,6 +331,7 @@ select.field__input option {
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.86);
+    white-space: pre-line;
 }
 
 .reference-table .is-highlight {

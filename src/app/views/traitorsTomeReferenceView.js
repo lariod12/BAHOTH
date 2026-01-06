@@ -1,3 +1,5 @@
+import { getTraitorDescriptionByHauntNumber } from '../data/traitorsTomeTraitorMap.js';
+
 const REFERENCE_ROWS = [
     {
         room: 'Căn Phòng Bỏ Hoang',
@@ -289,7 +291,16 @@ export function renderTraitorsTomeReferenceView({ mountEl, onNavigate }) {
             const roomName = visible[0].querySelector('th[scope="row"]')?.textContent?.trim() || 'Room';
             const omenLabel = getOmenLabel(omenKey) || 'Omen';
             const value = visible[0].querySelector(`[data-omen="${omenKey}"]`)?.textContent?.trim() || '-';
-            resultEl.textContent = `${roomName} • ${omenLabel}: ${value}`;
+            const hauntNumber = Number(value);
+            const traitorDesc = getTraitorDescriptionByHauntNumber(hauntNumber);
+
+            const lines = [
+                `${roomName} • ${omenLabel}: ${value}`,
+                Number.isFinite(hauntNumber) ? `Chuyện ma: Trang ${hauntNumber}` : 'Chuyện ma: -',
+                `Kẻ phản bội: ${traitorDesc ?? 'Không rõ'}`,
+            ];
+
+            resultEl.textContent = lines.join('\n');
             return;
         }
 
