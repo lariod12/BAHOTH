@@ -1,6 +1,22 @@
 import { getTraitorDescriptionByHauntNumber } from '../data/traitorsTomeTraitorMap.js';
 import { OMEN_DEFS, REFERENCE_ROWS } from '../data/traitorsTomeReferenceTableData.js';
 
+const ROOM_NAME_EN_MAP = {
+    'Căn Phòng Bỏ Hoang': 'Abandoned Room',
+    'Ban Công': 'Balcony',
+    'Hầm Mộ': 'Catacombs',
+    'Căn Phòng Bị Cháy': 'Charred Room',
+    'Phòng Ăn': 'Dining Room',
+    'Lò Than': 'Furnace Room',
+    'Khán Đài': 'Gallery',
+    'Phòng Thể Dục': 'Gymnasium',
+    'Căn Phòng Bùa Bỡn': 'Junk Room',
+    'Nhà Bếp': 'Kitchen',
+    'Phòng Ngủ Chính': 'Master Bedroom',
+    'Căn Buồng Hình Sao': 'Pentagram Chamber',
+    'Phòng Gia Nhân': 'Servants Quarters',
+};
+
 function normalizeText(text) {
     return (text || '')
         .toString()
@@ -11,6 +27,12 @@ function normalizeText(text) {
         .replace(/[\u0300-\u036f]/g, '')
         // Normalize whitespace
         .replace(/\s+/g, ' ');
+}
+
+function renderRoomDisplayName(roomVi) {
+    const roomEn = ROOM_NAME_EN_MAP[roomVi];
+    if (!roomEn) return roomVi;
+    return `${roomVi} <span class="room-name__en">(${roomEn})</span>`;
 }
 
 function getOmenLabel(omenKey) {
@@ -40,10 +62,11 @@ function renderReferenceTable() {
     `.trim();
 
     const rows = REFERENCE_ROWS.map((r) => {
-        const roomKey = normalizeText(r.room);
+        const roomEn = ROOM_NAME_EN_MAP[r.room] || '';
+        const roomKey = normalizeText(`${r.room} ${roomEn}`);
         return `
             <tr data-room="${roomKey}">
-                <th scope="row">${r.room}</th>
+                <th scope="row">${renderRoomDisplayName(r.room)}</th>
                 <td data-omen="bite">${r.bite}</td>
                 <td data-omen="book">${r.book}</td>
                 <td data-omen="orb">${r.orb}</td>

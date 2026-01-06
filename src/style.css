@@ -331,11 +331,20 @@ html {
     left: 0;
     z-index: 3;
     box-shadow: 1px 0 0 var(--hairline);
+    width: 240px;
 }
 
 .reference-table tbody th[scope="row"] {
     text-align: left;
     font-weight: 650;
+}
+
+.room-name__en {
+    display: block;
+    margin-top: 2px;
+    font-weight: 500;
+    font-size: 0.9em;
+    color: var(--muted);
 }
 
 .reference-table tbody th[scope="row"] {
@@ -344,6 +353,9 @@ html {
     z-index: 2;
     background: rgba(0, 0, 0, 0.92);
     box-shadow: 1px 0 0 var(--hairline);
+    /* Allow the room name to wrap so it doesn't consume too much horizontal space */
+    white-space: normal;
+    max-width: 240px;
 }
 
 .reference-table tbody tr:nth-child(even) {
@@ -427,6 +439,22 @@ select.field__input option {
 @media (max-width: 768px) {
     .reference-search__fields {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 520px) {
+    .reference-table thead th:first-child {
+        width: 180px;
+    }
+
+    .reference-table tbody th[scope="row"] {
+        max-width: 180px;
+        padding: 8px 10px;
+        font-size: 0.95rem;
+    }
+
+    .room-name__en {
+        font-size: 0.85em;
     }
 }
 

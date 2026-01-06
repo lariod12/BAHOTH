@@ -120,9 +120,9 @@ export const TRANSLATION_SECTIONS = [
         columns: ['English', 'Vietnamese', 'Effect'],
         entries: [
             {
-                en: 'Abandoned Room',
-                vi: 'Căn Phòng Bùa Bỡn',
-                desc: 'Ai rời khỏi căn phòng này phải đổ xúc xắc Sức Mạnh được 3+. Nếu thất bại, mất 1 điểm Tốc Độ.',
+                en: 'Junk Room',
+                vi: 'Căn Phòng Bừa Bộn',
+                desc: 'Khi rời khỏi phòng, bạn phải đổ xúc xắc Sức Mạnh được 3+. Nếu thất bại, mất 1 điểm Tốc Độ (nhưng vẫn tiếp tục di chuyển).',
             },
             {
                 en: 'Mystic Elevator',
