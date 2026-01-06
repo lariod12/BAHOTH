@@ -295,9 +295,8 @@ export function renderTraitorsTomeReferenceView({ mountEl, onNavigate }) {
             const traitorDesc = getTraitorDescriptionByHauntNumber(hauntNumber);
 
             const lines = [
-                `${roomName} • ${omenLabel}: ${value}`,
                 Number.isFinite(hauntNumber) ? `Chuyện ma: Trang ${hauntNumber}` : 'Chuyện ma: -',
-                `Kẻ phản bội: ${traitorDesc ?? 'Không rõ'}`,
+                `KẺ PHẢN BỘI: ${traitorDesc ?? 'Không rõ'}`,
             ];
 
             resultEl.textContent = lines.join('\n');
