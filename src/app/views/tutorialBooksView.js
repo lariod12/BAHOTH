@@ -36,6 +36,11 @@ export function renderTutorialBooksView({ mountEl, onNavigate }) {
                 return;
             }
 
+            if (book === 'survival') {
+                onNavigate('#/tutorial/survival');
+                return;
+            }
+
             alert('Content coming soon...');
         });
     }

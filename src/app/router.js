@@ -40,6 +40,11 @@ function renderRoute({ mountEl }) {
         return;
     }
 
+    if (route === '/tutorial/survival') {
+        renderTraitorsTomeReferenceView({ mountEl, onNavigate: navigateTo });
+        return;
+    }
+
     // Fallback
     navigateTo('#/');
 }
