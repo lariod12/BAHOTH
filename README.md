@@ -15,19 +15,25 @@ Dự án này là phiên bản digital của board game Betrayal at House on the
 ## Cài đặt
 
 ```bash
-npm install
+yarn install
+```
+
+hoặc đơn giản:
+
+```bash
+yarn
 ```
 
 ## Chạy development server
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 ## Build cho production
 
 ```bash
-npm run build
+yarn build
 ```
 
 Output sẽ được tạo trong folder `dist/` - sẵn sàng để deploy static.
@@ -35,7 +41,7 @@ Output sẽ được tạo trong folder `dist/` - sẵn sàng để deploy stati
 ## Preview build
 
 ```bash
-npm run preview
+yarn preview
 ```
 
 ## Cấu trúc dự án
