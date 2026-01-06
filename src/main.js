@@ -1,20 +1,12 @@
-// Main entry point for Betrayal at House on the Hill
+import { initRouter } from './app/router.js';
 
-const playButton = document.getElementById('playButton');
-const tutorialButton = document.getElementById('tutorialButton');
+const appRoot = document.getElementById('app');
 
-playButton?.addEventListener('click', () => {
-    console.log('Play button clicked!');
-    // TODO: Navigate to game screen
-    alert('Game starting soon...');
-});
+if (!appRoot) {
+    throw new Error('Missing #app root element');
+}
 
-tutorialButton?.addEventListener('click', () => {
-    console.log('Tutorial button clicked!');
-    // TODO: Navigate to tutorial screen
-    alert('Tutorial coming soon...');
-});
+initRouter({ mountEl: appRoot });
 
-// Initialize app
-console.log('Betrayal at House on the Hill - Game initialized');
+console.log('Betrayal at House on the Hill - App initialized');
 

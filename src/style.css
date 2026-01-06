@@ -79,6 +79,10 @@ body {
     animation: fadeIn 700ms ease-out;
 }
 
+.welcome-content--page {
+    max-width: 720px;
+}
+
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -128,11 +132,62 @@ body {
     text-transform: uppercase;
 }
 
+.page-title {
+    font-size: clamp(1.6rem, 5vw, 2.2rem);
+    font-weight: 650;
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+}
+
+.page-subtitle {
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.95rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    line-height: 1.55;
+}
+
 .welcome-actions {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 12px;
+}
+
+.page-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.page-footer {
+    margin-top: 18px;
+}
+
+.link-button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: rgba(255, 255, 255, 0.86);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 10px 12px;
+}
+
+.link-button:hover {
+    color: rgba(255, 255, 255, 1);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+
+.link-button:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.75);
+    outline-offset: 4px;
+    border-radius: 10px;
 }
 
 .action-button {
