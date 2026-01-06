@@ -20,9 +20,14 @@ body {
     justify-content: center;
     align-items: center;
     color: var(--fg);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     -webkit-font-smoothing: antialiased;
     text-rendering: geometricPrecision;
+}
+
+html {
+    overflow-x: hidden;
 }
 
 .welcome-container {
@@ -32,6 +37,7 @@ body {
     justify-content: center;
     align-items: center;
     position: relative;
+    overflow: hidden;
 }
 
 .welcome-container::before {
@@ -224,9 +230,23 @@ body {
     text-transform: uppercase;
 }
 
+.reference-table thead th:first-child {
+    left: 0;
+    z-index: 3;
+    box-shadow: 1px 0 0 var(--hairline);
+}
+
 .reference-table tbody th[scope="row"] {
     text-align: left;
     font-weight: 650;
+}
+
+.reference-table tbody th[scope="row"] {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.92);
+    box-shadow: 1px 0 0 var(--hairline);
 }
 
 .reference-table tbody tr:nth-child(even) {
