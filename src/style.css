@@ -293,6 +293,11 @@ html {
     font-weight: 650;
 }
 
+.translation-table__cell--desc {
+    white-space: pre-line;
+    line-height: 1.45;
+}
+
 .translation-table tbody tr:nth-child(even) {
     background: rgba(255, 255, 255, 0.04);
 }

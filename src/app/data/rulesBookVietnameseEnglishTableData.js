@@ -115,6 +115,108 @@ export const TRANSLATION_SECTIONS = [
         ],
     },
     {
+        id: 'room-functions',
+        title: 'Chức năng lát phòng (Room tile effects)',
+        columns: ['English', 'Vietnamese', 'Effect'],
+        entries: [
+            {
+                en: 'Abandoned Room',
+                vi: 'Căn Phòng Bùa Bỡn',
+                desc: 'Ai rời khỏi căn phòng này phải đổ xúc xắc Sức Mạnh được 3+. Nếu thất bại, mất 1 điểm Tốc Độ.',
+            },
+            {
+                en: 'Mystic Elevator',
+                vi: 'Thang Máy Huyền Bí',
+                desc: 'Mỗi lượt 1 lần, đổ 2 xúc xắc và di chuyển căn phòng này tới bất kỳ cạnh của cột tương ứng:\n4: Một tầng bất kỳ\n3: Tầng lầu\n2: Tầng trệt\n1: Tầng hầm\n0: Tầng hầm, rồi nhận 1 xúc xắc sát thương vật lý',
+            },
+            {
+                en: 'Catacombs',
+                vi: 'Hầm Mộ',
+                desc: 'Có thể đổ xúc xắc Tinh Táo được 6+ để băng qua. Nếu thất bại, ngừng di chuyển.',
+            },
+            {
+                en: 'Furnace Room',
+                vi: 'Lò Than',
+                desc: 'Nếu bạn kết thúc lượt ở đây, nhận 1 điểm sát thương vật lý.',
+            },
+            {
+                en: 'Stairs From Basement',
+                vi: 'Cầu Thang Từ Tầng Hầm',
+                desc: 'Dẫn tới Sảnh Chính và ngược lại.',
+            },
+            {
+                en: 'Chasm',
+                vi: 'Vực Thẳm',
+                desc: 'Bạn có thể đổ xúc xắc Tốc Độ được 3+ để băng qua. Nếu thất bại, ngừng di chuyển.',
+            },
+            {
+                en: 'Larder',
+                vi: 'Kho Lương Thực',
+                desc: 'Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Sức Mạnh.',
+            },
+            {
+                en: 'Crypt',
+                vi: 'Nhà Mồ',
+                desc: 'Nếu bạn kết thúc lượt ở đây, nhận 1 điểm sát thương tinh thần.',
+            },
+            {
+                en: 'Pentagram Chamber',
+                vi: 'Căn Buồng Hình Sao',
+                desc: 'Ai rời khỏi căn phòng này phải đổ xúc xắc Trí Tuệ được 4+. Nếu thất bại, mất 1 điểm Tinh Táo (nhưng vẫn tiếp tục di chuyển).',
+            },
+            {
+                en: 'Collapsed Room',
+                vi: 'Căn Phòng Đổ Sập',
+                desc: 'Bạn phải đổ xúc xắc Tốc Độ được 5+ để khỏi ngã. Nếu thất bại, rút 1 lát tầng hầm và đặt nó vào trong game. Bạn sẽ rơi xuống đó và nhận 1 xúc xắc sát thương vật lý.',
+            },
+            {
+                en: 'Library',
+                vi: 'Thư Viện',
+                desc: 'Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Trí Tuệ.',
+            },
+            {
+                en: 'Chapel',
+                vi: 'Nhà Thờ',
+                desc: 'Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Tinh Táo.',
+            },
+            {
+                en: 'Coal Chute',
+                vi: 'Ống Dẫn Than',
+                desc: 'Cầu trượt 1 chiều tới Chiếu Nghỉ Tầng Hầm.',
+            },
+            {
+                en: 'Graveyard',
+                vi: 'Nghĩa Địa',
+                desc: 'Ai rời khỏi căn phòng này phải đổ xúc xắc Tinh Táo được 4+. Nếu thất bại, mất 1 điểm Trí Tuệ (nhưng vẫn tiếp tục di chuyển).',
+            },
+            {
+                en: 'Gymnasium',
+                vi: 'Phòng Thể Dục',
+                desc: 'Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Tốc Độ.',
+            },
+            {
+                en: 'Vault',
+                vi: 'Hầm Chứa',
+                desc: 'Bạn có thể đổ xúc xắc Trí Tuệ được 6+ để mở và lấy hết đồ trong hầm chứa.',
+            },
+            {
+                en: 'Tower',
+                vi: 'Tòa Tháp',
+                desc: 'Bạn có thể đổ xúc xắc Sức Mạnh được 3+ để băng qua. Nếu thất bại, ngừng di chuyển.',
+            },
+            {
+                en: 'Attic',
+                vi: 'Gác Mái',
+                desc: 'Ai rời khỏi căn phòng này phải đổ xúc xắc Tốc Độ được 3+. Nếu thất bại, mất 1 điểm Sức Mạnh (nhưng vẫn tiếp tục di chuyển).',
+            },
+            {
+                en: 'Gallery',
+                vi: 'Khán Đài',
+                desc: 'Bạn có thể nhảy xuống Phòng Khiêu Vũ nếu đã có nó trong nhà. Nếu làm vậy, nhận 1 xúc xắc sát thương vật lý.',
+            },
+        ],
+    },
+    {
         id: 'tokens',
         title: 'Miếng khác (Tokens)',
         entries: [

@@ -10,6 +10,10 @@ function escapeHtml(raw) {
         .replaceAll("'", '&#039;');
 }
 
+function renderMultilineText(raw) {
+    return escapeHtml(raw).replaceAll('\n', '<br />');
+}
+
 function normalizeText(text) {
     return (text || '')
         .toString()
@@ -22,19 +26,47 @@ function normalizeText(text) {
         .replace(/\s+/g, ' ');
 }
 
-function renderTranslationTableRows(entries) {
-    return entries
-        .map((entry) => `
-            <tr>
-                <td class="translation-table__cell translation-table__cell--vi" data-role="vi">${escapeHtml(entry.vi)}</td>
-                <td class="translation-table__cell translation-table__cell--en" data-role="en">${escapeHtml(entry.en)}</td>
-            </tr>
-        `.trim())
+function getSectionColumns(section) {
+    const columns = Array.isArray(section.columns) ? section.columns : null;
+    if (columns && columns.length >= 2) return columns;
+    return ['Vietnamese', 'English'];
+}
+
+function renderSectionHeaderRow(section) {
+    const columns = getSectionColumns(section);
+    const ths = columns.map((c) => `<th scope="col">${escapeHtml(c)}</th>`).join('');
+    return `<tr>${ths}</tr>`;
+}
+
+function renderTranslationTableRows(section) {
+    const columns = getSectionColumns(section);
+    const isThreeCol = columns.length >= 3;
+
+    return (section.entries || [])
+        .map((entry) => {
+            if (isThreeCol) {
+                return `
+                    <tr>
+                        <td class="translation-table__cell translation-table__cell--en" data-role="en">${escapeHtml(entry.en)}</td>
+                        <td class="translation-table__cell translation-table__cell--vi" data-role="vi">${escapeHtml(entry.vi)}</td>
+                        <td class="translation-table__cell translation-table__cell--desc" data-role="desc">${renderMultilineText(entry.desc)}</td>
+                    </tr>
+                `.trim();
+            }
+
+            return `
+                <tr>
+                    <td class="translation-table__cell translation-table__cell--vi" data-role="vi">${escapeHtml(entry.vi)}</td>
+                    <td class="translation-table__cell translation-table__cell--en" data-role="en">${escapeHtml(entry.en)}</td>
+                </tr>
+            `.trim();
+        })
         .join('');
 }
 
 function renderTranslationSection(section) {
-    const rows = renderTranslationTableRows(section.entries);
+    const headerRow = renderSectionHeaderRow(section);
+    const rows = renderTranslationTableRows(section);
 
     return `
         <section class="translation-card" aria-label="${escapeHtml(section.title)}">
@@ -42,10 +74,7 @@ function renderTranslationSection(section) {
             <div class="translation-card__body">
                 <table class="translation-table">
                     <thead>
-                        <tr>
-                            <th scope="col">Vietnamese</th>
-                            <th scope="col">English</th>
-                        </tr>
+                        ${headerRow}
                     </thead>
                     <tbody>
                         ${rows}
@@ -121,7 +150,8 @@ export function renderRulesBookReferenceView({ mountEl, onNavigate }) {
     for (const row of rows) {
         const vi = row.querySelector('[data-role="vi"]')?.textContent || '';
         const en = row.querySelector('[data-role="en"]')?.textContent || '';
-        row.dataset.search = normalizeText(`${vi} ${en}`);
+        const desc = row.querySelector('[data-role="desc"]')?.textContent || '';
+        row.dataset.search = normalizeText(`${vi} ${en} ${desc}`);
     }
 
     function applySearchFilter(rawQuery) {
