@@ -216,6 +216,87 @@ html {
     background: rgba(0, 0, 0, 0.5);
 }
 
+.translation-scroll {
+    width: min(1100px, 92vw);
+    margin: 0 auto;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.translation-scroll__body {
+    overflow: auto;
+    max-height: min(70vh, calc(100vh - 320px));
+    padding: 14px;
+}
+
+.translation-scroll__footer {
+    padding: 16px;
+    text-align: center;
+    border-top: 1px solid var(--hairline);
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.translation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    align-items: start;
+}
+
+.translation-card {
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+}
+
+.translation-card__title {
+    padding: 12px 12px;
+    border-bottom: 1px solid var(--hairline);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.9rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.translation-card__body {
+    overflow: auto;
+    max-height: 52vh;
+}
+
+.translation-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.translation-table th,
+.translation-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
+}
+
+.translation-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.92);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.translation-table__cell--vi {
+    font-weight: 650;
+}
+
+.translation-table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.04);
+}
+
 .reference-table {
     width: 100%;
     border-collapse: collapse;

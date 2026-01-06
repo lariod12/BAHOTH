@@ -41,6 +41,11 @@ export function renderTutorialBooksView({ mountEl, onNavigate }) {
                 return;
             }
 
+            if (book === 'rulesbook') {
+                onNavigate('#/tutorial/rulesbook');
+                return;
+            }
+
             alert('Content coming soon...');
         });
     }
