@@ -6,6 +6,10 @@ Digital edition của board game Betrayal at House on the Hill (2nd Edition).
 
 Dự án này là phiên bản digital của board game Betrayal at House on the Hill, cho phép người chơi trải nghiệm game trên web.
 
+## Lưu ý
+
+**⚠️ Mobile First Design**: Dự án này được thiết kế theo phương pháp **Mobile First**, ưu tiên tối ưu hóa giao diện và trải nghiệm cho thiết bị di động. Giao diện sẽ được phát triển với mobile làm mục tiêu chính, sau đó mở rộng cho desktop.
+
 ## Công nghệ
 
 - **Vite** - Build tool và dev server
