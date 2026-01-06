@@ -253,6 +253,85 @@ html {
     background: rgba(255, 255, 255, 0.04);
 }
 
+.reference-search {
+    width: min(1100px, 92vw);
+    margin: 0 auto 14px;
+    padding: 12px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.reference-search__fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+}
+
+.field__label {
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.86);
+}
+
+.field__input {
+    appearance: none;
+    width: 100%;
+    padding: 12px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.95rem;
+}
+
+.field__input::placeholder {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+select.field__input {
+    color-scheme: dark;
+    background-color: rgba(0, 0, 0, 0.72);
+}
+
+select.field__input option {
+    background-color: #000;
+    color: #fff;
+}
+
+.field__input:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.75);
+    outline-offset: 3px;
+}
+
+.reference-search__result {
+    margin-top: 10px;
+    min-height: 18px;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.86);
+}
+
+.reference-table .is-highlight {
+    background: rgba(255, 255, 255, 0.12) !important;
+}
+
+@media (max-width: 768px) {
+    .reference-search__fields {
+        grid-template-columns: 1fr;
+    }
+}
+
 .action-button {
     background: transparent;
     color: var(--fg);
