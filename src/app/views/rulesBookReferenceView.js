@@ -4,28 +4,54 @@ import rulesContent from '../../../rules.md?raw';
 
 // Custom renderer to add IDs to headings for TOC navigation
 const renderer = {
-    heading(text, level) {
-        const escapedText = text.text || text;
-        const lower = escapedText.toLowerCase();
-        // Custom slugify to match the TOC links in rules.md (e.g. #tổng-quan)
-        // We keep Vietnamese characters, just replace spaces with dashes
-        // and remove special characters that are likely not in the anchor
+    heading(token) {
+        const text = token.text || '';
+        const lower = text.toLowerCase();
+        // Custom slugify to match the TOC links in rules.md
         const id = lower
-            .replace(/[^\w\s\u00C0-\u1EF9]/g, '') // Keep words, spaces, and VN chars
+            .replace(/[^\w\s\u00C0-\u1EF9]/g, '')
             .replace(/\s+/g, '-');
 
+        // Add header to search index
+        searchIndex.push({ id, text: text });
+
         return `
-            <h${level} id="${id}">
-                ${escapedText}
-            </h${level}>`;
+            <h${token.depth} id="${id}">
+                ${text}
+            </h${token.depth}>`;
+    },
+    paragraph(token) {
+        const text = token.text || '';
+        const id = `rule-p-${ruleParagraphIndex++}`;
+        // Strip HTML tags for clean search text
+        const cleanText = text.replace(/<[^>]*>/g, '');
+        searchIndex.push({ id, text: cleanText });
+
+        // IMPORTANT: We must parse the inline tokens to ensure bold/italic/links work
+        // marked's renderer context has access to the parser
+        const inlineHtml = this.parser.parseInline(token.tokens);
+
+        return `<p id="${id}">${inlineHtml}</p>`;
     }
 };
 
 marked.use({ renderer });
 
 let activeTab = 'rules'; // 'rules' | 'reference'
+let searchIndex = [];
+let ruleParagraphIndex = 0;
 
 export function renderRulesBookReferenceView({ mountEl, onNavigate }) {
+    // Reset index on each render to avoid duplicates if re-rendering purely
+    // Note: If we caching the parsed HTML, we should also cache the index.
+    // For now, we rebuild it.
+    searchIndex = [];
+    ruleParagraphIndex = 0;
+
+    // We need to parse ONLY if we are re-rendering the HTML content, 
+    // but the function `renderRulesBookReferenceMarkup` is called every render.
+    // So we just let it rebuild. It's fast enough.
+
     const render = () => {
         mountEl.innerHTML = renderRulesBookReferenceMarkup(activeTab);
         attachEventListeners({ mountEl, onNavigate, render });
@@ -50,9 +76,12 @@ function attachEventListeners({ mountEl, onNavigate, render }) {
         });
     });
 
-    // TOC Navigation for Rules Tab
+    // TOC Navigation and Container Click Handling for Rules Tab
     if (activeTab === 'rules') {
         const rulesContainer = mountEl.querySelector('.rules-markdown-container');
+        const searchInput = mountEl.querySelector('[data-field="rules-search"]');
+        const searchResults = mountEl.querySelector('[data-role="rules-search-result"]');
+
         if (rulesContainer) {
             rulesContainer.addEventListener('click', (event) => {
                 const link = event.target.closest('a');
@@ -60,16 +89,13 @@ function attachEventListeners({ mountEl, onNavigate, render }) {
                     const href = link.getAttribute('href');
                     if (href && href.startsWith('#')) {
                         event.preventDefault();
-                        // Decode URI component to handle non-ASCII characters in IDs (like Vietnamese)
                         const targetId = decodeURIComponent(href.substring(1));
                         const targetElement = document.getElementById(targetId);
 
                         if (targetElement) {
-                            // Calculate position relative to container to scroll properly
-                            // We scroll the container, not the window
                             const containerRect = rulesContainer.getBoundingClientRect();
                             const targetRect = targetElement.getBoundingClientRect();
-                            const offset = targetRect.top - containerRect.top + rulesContainer.scrollTop - 20; // 20px padding
+                            const offset = targetRect.top - containerRect.top + rulesContainer.scrollTop - 20;
 
                             rulesContainer.scrollTo({
                                 top: offset,
@@ -80,56 +106,154 @@ function attachEventListeners({ mountEl, onNavigate, render }) {
                 }
             });
         }
+
+        // Rules Search Logic
+        if (searchInput && searchResults) {
+            searchInput.addEventListener('input', (e) => {
+                const query = normalizeText(e.target.value);
+                if (!query || query.length < 2) {
+                    searchResults.innerHTML = '';
+                    searchResults.style.display = 'none';
+                    return;
+                }
+
+                const matches = searchIndex.filter(item => normalizeText(item.text).includes(query));
+
+                if (matches.length === 0) {
+                    searchResults.innerHTML = '<div class="search-item">No results found</div>';
+                    searchResults.style.display = 'block';
+                    return;
+                }
+
+                const resultsHtml = matches.slice(0, 10).map(item => {
+                    const text = item.text;
+                    const normalizedText = normalizeText(text);
+                    const matchIndex = normalizedText.indexOf(query);
+
+                    // Create a snippet around the match
+                    let snippet = text;
+                    if (text.length > 60) {
+                        const start = Math.max(0, matchIndex - 20);
+                        const end = Math.min(text.length, matchIndex + 40);
+                        snippet = (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : '');
+                    }
+
+                    // Highlight the query in the snippet
+                    // Escape special regex chars in query
+                    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // We need to match roughly based on the TOC links in rules.md
+                    // This is tricky with normalization (e.g. accents). 
+                    // Simplest approach: simple regex match if possible, or just highlight the exact string if accents match.
+                    // Given 'normalizeText' removes accents, exact regex match on original text might fail if user typed sans-accent.
+                    // For now, let's do a case-insensitive regex match on the original text snippet using the user's raw input if it matches,
+                    // or fallback to just bolding the matching section if we can identify it.
+
+                    // Better approach for VN text: 
+                    // 1. Find the index again in the snippet (re-calculating relative to snippet start)
+                    // 2. Wrap that range. 
+                    // However, 'normalizeText' removes accents, so indices might shift if characters are composed/decomposed, 
+                    // though usually it just strips marks.
+
+                    // ALTERNATIVE: Use the input value directly for highlighting if checking against original text?
+                    // But we filtered based on normalized text.
+
+                    // Workaround: We will just bold/highlight the snippet without exact query matching styling 
+                    // OR we try to match the visible text. 
+                    // Let's rely on the fact that usually users type mostly matching accents or we accept imperfect highlighting.
+                    // But specific request is "highlight word being searched".
+
+                    // Let's try to construct a Regex that matches the characters roughly.
+                    // Or simply: just highlight the snippet part since we trimmed it around the match.
+
+                    // Let's try to find the match index in the snippet using normalized version of snippet.
+                    const normSnippet = normalizeText(snippet);
+                    const matchStartInSnippet = normSnippet.indexOf(query);
+
+                    let finalHtml = escapeHtml(snippet); // Default escaped
+
+                    if (matchStartInSnippet !== -1) {
+                        const originalMatchStr = snippet.substr(matchStartInSnippet, query.length);
+                        // Note: This substring length assumes normalized length == original length. 
+                        // This is mostly true for VN (removing accents doesn't change char count usually, e.g. 'á' -> 'a').
+
+                        const before = snippet.substring(0, matchStartInSnippet);
+                        const match = snippet.substring(matchStartInSnippet, matchStartInSnippet + query.length);
+                        const after = snippet.substring(matchStartInSnippet + query.length);
+
+                        finalHtml = `${escapeHtml(before)}<span class="highlight">${escapeHtml(match)}</span>${escapeHtml(after)}`;
+                    }
+
+                    return `
+                        <div class="search-item" data-target-id="${item.id}">
+                            ${finalHtml}
+                        </div>
+                    `;
+                }).join('');
+
+                searchResults.innerHTML = resultsHtml;
+                searchResults.style.display = 'block';
+            });
+
+            // Handle clicking on search results
+            searchResults.addEventListener('click', (e) => {
+                const item = e.target.closest('.search-item');
+                if (item && item.dataset.targetId) {
+                    const targetId = item.dataset.targetId;
+                    const targetElement = document.getElementById(targetId);
+
+                    if (targetElement && rulesContainer) {
+                        const containerRect = rulesContainer.getBoundingClientRect();
+                        const targetRect = targetElement.getBoundingClientRect();
+                        const offset = targetRect.top - containerRect.top + rulesContainer.scrollTop - 50; // More padding for header
+
+                        rulesContainer.scrollTo({
+                            top: offset,
+                            behavior: 'smooth'
+                        });
+
+                        // Visual feedback
+                        targetElement.style.transition = 'background 0.5s';
+                        targetElement.style.backgroundColor = 'rgba(255, 255, 0, 0.3)';
+                        setTimeout(() => {
+                            targetElement.style.backgroundColor = 'transparent';
+                        }, 2000);
+
+                        // Clear search
+                        searchResults.style.display = 'none';
+                        searchInput.value = '';
+                    }
+                }
+            });
+
+            // Hide search results when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                    searchResults.style.display = 'none';
+                }
+            });
+        }
     }
 
-    // Detailed search functionality for Reference Table
+    // Reference Table Search
     if (activeTab === 'reference') {
         const searchInput = mountEl.querySelector('[data-field="search"]');
         const resultsContainer = mountEl.querySelector('[data-role="result"]');
 
         if (searchInput) {
             searchInput.focus();
-
             searchInput.addEventListener('input', (event) => {
                 const query = normalizeText(event.target.value);
+                const translationGrid = mountEl.querySelector('.translation-grid');
+
                 if (!query) {
                     resultsContainer.innerHTML = '';
-                    // Show all sections again
-                    mountEl.querySelectorAll('.translation-section').forEach(el => el.style.display = 'block');
+                    translationGrid.querySelectorAll('.translation-section').forEach(el => el.style.display = 'block');
+                    translationGrid.querySelectorAll('.translation-row').forEach(el => el.style.display = 'table-row');
                     return;
                 }
 
-                const matches = [];
-                mountEl.querySelectorAll('.translation-section').forEach(section => {
-                    section.style.display = 'none'; // Hide all initially
-                });
-
-                // Simple search logic - could be optimized
-                TRANSLATION_SECTIONS.forEach(section => {
-                    const matchedEntries = section.entries.filter(entry => {
-                        return normalizeText(entry.vi).includes(query) || normalizeText(entry.en).includes(query);
-                    });
-
-                    if (matchedEntries.length > 0) {
-                        matches.push({ ...section, entries: matchedEntries });
-                    }
-                });
-
-                // Note: For a simpler implementation, we might just filter visually if the lists are small,
-                // but re-rendering the filtered list is cleaner for the results container.
-                // However, the original code might have had a specific way.
-                // Let's stick to a simple visual filter of the existing DOM if possible, or re-render sections.
-
-                // Re-rendering filtered sections into the result container or main grid:
-                // Actually, let's just show/hide the sections in the main grid and filter rows.
-
-                // Reset display
-                mountEl.querySelectorAll('.translation-section').forEach(el => el.style.display = 'none');
-                mountEl.querySelectorAll('.translation-row').forEach(el => el.style.display = 'none');
-
                 let hasResult = false;
-                // Loop through DOM for filtering
-                mountEl.querySelectorAll('.translation-section').forEach(sectionEl => {
+                translationGrid.querySelectorAll('.translation-section').forEach(sectionEl => {
                     const rows = sectionEl.querySelectorAll('.translation-row');
                     let sectionHasMatch = false;
                     rows.forEach(row => {
@@ -139,10 +263,15 @@ function attachEventListeners({ mountEl, onNavigate, render }) {
                             row.style.display = 'table-row';
                             sectionHasMatch = true;
                             hasResult = true;
+                        } else {
+                            row.style.display = 'none';
                         }
                     });
+
                     if (sectionHasMatch) {
                         sectionEl.style.display = 'block';
+                    } else {
+                        sectionEl.style.display = 'none';
                     }
                 });
 
@@ -156,9 +285,19 @@ function renderRulesBookReferenceMarkup(currentTab) {
     let content = '';
 
     if (currentTab === 'rules') {
+        const parsedRules = marked.parse(rulesContent);
         content = `
+            <div class="rules-search-container">
+                <input 
+                    type="text" 
+                    class="rules-search-input" 
+                    placeholder="Search in rules..." 
+                    data-field="rules-search"
+                />
+                <div class="rules-search-results" data-role="rules-search-result" style="display: none;"></div>
+            </div>
             <div class="rules-markdown-container">
-                ${marked.parse(rulesContent)}
+                ${parsedRules}
             </div>
         `;
     } else {
@@ -200,7 +339,7 @@ function renderRulesBookReferenceMarkup(currentTab) {
                     <button class="tab-button ${currentTab === 'reference' ? 'active' : ''}" data-tab="reference">Reference Table</button>
                 </div>
                 
-                <div class="tab-content">
+                <div class="tab-content" style="position: relative;">
                     ${content}
                 </div>
 
@@ -213,7 +352,7 @@ function renderRulesBookReferenceMarkup(currentTab) {
             .tabs-header {
                 display: flex;
                 gap: 1rem;
-                margin-bottom: 1.5rem;
+                margin-bottom: 1rem;
                 border-bottom: 2px solid rgba(255,255,255,0.1);
             }
             .tab-button {
@@ -234,14 +373,57 @@ function renderRulesBookReferenceMarkup(currentTab) {
             .tab-button:hover {
                 color: #fff;
             }
+            .rules-search-container {
+                margin-bottom: 1rem;
+                position: relative;
+            }
+            .rules-search-input {
+                width: 100%;
+                padding: 0.8rem;
+                background: rgba(0,0,0,0.3);
+                border: 1px solid rgba(255,255,255,0.2);
+                border-radius: 4px;
+                color: white;
+                font-family: inherit;
+            }
+            .rules-search-results {
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                background: #1a1a1a;
+                border: 1px solid #333;
+                max-height: 300px;
+                overflow-y: auto;
+                z-index: 10;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            }
+            .search-item {
+                padding: 0.8rem;
+                cursor: pointer;
+                border-bottom: 1px solid #333;
+                color: #ddd;
+                font-size: 0.9em;
+            }
+            .search-item:hover {
+                background: #333;
+            }
+            .highlight {
+                background-color: #ffd700;
+                color: #000;
+                font-weight: bold;
+                border-radius: 2px;
+                padding: 0 2px;
+            }
             .rules-markdown-container {
                 text-align: left;
                 padding: 1rem;
                 background: rgba(0,0,0,0.2);
                 border-radius: 8px;
-                max-height: 60vh;
+                max-height: 55vh;
                 overflow-y: auto;
                 color: #ddd;
+                position: relative;
             }
             .rules-markdown-container h1, .rules-markdown-container h2, .rules-markdown-container h3 {
                 color: #fff;
