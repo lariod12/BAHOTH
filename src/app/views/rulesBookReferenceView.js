@@ -2,6 +2,27 @@ import { TRANSLATION_SECTIONS } from '../data/rulesBookVietnameseEnglishTableDat
 import { marked } from 'marked';
 import rulesContent from '../../../rules.md?raw';
 
+// Custom renderer to add IDs to headings for TOC navigation
+const renderer = {
+    heading(text, level) {
+        const escapedText = text.text || text;
+        const lower = escapedText.toLowerCase();
+        // Custom slugify to match the TOC links in rules.md (e.g. #tổng-quan)
+        // We keep Vietnamese characters, just replace spaces with dashes
+        // and remove special characters that are likely not in the anchor
+        const id = lower
+            .replace(/[^\w\s\u00C0-\u1EF9]/g, '') // Keep words, spaces, and VN chars
+            .replace(/\s+/g, '-');
+
+        return `
+            <h${level} id="${id}">
+                ${escapedText}
+            </h${level}>`;
+    }
+};
+
+marked.use({ renderer });
+
 let activeTab = 'rules'; // 'rules' | 'reference'
 
 export function renderRulesBookReferenceView({ mountEl, onNavigate }) {
@@ -28,6 +49,38 @@ function attachEventListeners({ mountEl, onNavigate, render }) {
             }
         });
     });
+
+    // TOC Navigation for Rules Tab
+    if (activeTab === 'rules') {
+        const rulesContainer = mountEl.querySelector('.rules-markdown-container');
+        if (rulesContainer) {
+            rulesContainer.addEventListener('click', (event) => {
+                const link = event.target.closest('a');
+                if (link) {
+                    const href = link.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        event.preventDefault();
+                        // Decode URI component to handle non-ASCII characters in IDs (like Vietnamese)
+                        const targetId = decodeURIComponent(href.substring(1));
+                        const targetElement = document.getElementById(targetId);
+
+                        if (targetElement) {
+                            // Calculate position relative to container to scroll properly
+                            // We scroll the container, not the window
+                            const containerRect = rulesContainer.getBoundingClientRect();
+                            const targetRect = targetElement.getBoundingClientRect();
+                            const offset = targetRect.top - containerRect.top + rulesContainer.scrollTop - 20; // 20px padding
+
+                            rulesContainer.scrollTo({
+                                top: offset,
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                }
+            });
+        }
+    }
 
     // Detailed search functionality for Reference Table
     if (activeTab === 'reference') {
