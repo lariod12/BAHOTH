@@ -39,6 +39,7 @@ out/
 .DS_Store
 *.sublime-project
 *.sublime-workspace
+local/*
 
 # OS files
 .DS_Store
