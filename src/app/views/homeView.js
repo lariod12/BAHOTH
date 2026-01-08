@@ -24,7 +24,7 @@ export function renderHomeView({ mountEl, onNavigate }) {
 
     createRoomButton?.addEventListener('click', () => {
         console.log('Create Room button clicked!');
-        alert('Create Room feature coming soon...');
+        onNavigate('#/room');
     });
 
     joinRoomButton?.addEventListener('click', () => {

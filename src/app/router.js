@@ -1,4 +1,5 @@
 import { renderHomeView } from './views/homeView.js';
+import { renderRoomView } from './views/roomView.js';
 import { renderTutorialBooksView } from './views/tutorialBooksView.js';
 import { renderTraitorsTomeReferenceView } from './views/traitorsTomeReferenceView.js';
 import { renderRulesBookReferenceView } from './views/rulesBookReferenceView.js';
@@ -28,6 +29,11 @@ function renderRoute({ mountEl }) {
 
     if (route === '/' || route === '/home') {
         renderHomeView({ mountEl, onNavigate: navigateTo });
+        return;
+    }
+
+    if (route === '/room') {
+        renderRoomView({ mountEl, onNavigate: navigateTo });
         return;
     }
 
