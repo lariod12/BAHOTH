@@ -1643,17 +1643,75 @@ select.field__input option {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    font-size: 1.8rem;
+    background: linear-gradient(145deg, rgba(30, 25, 35, 0.95), rgba(15, 12, 18, 0.98));
+    border: 1px solid rgba(139, 90, 43, 0.4);
+    border-radius: 10px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+
+.dice-event-btn::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 11px;
+    background: linear-gradient(145deg, rgba(139, 90, 43, 0.3), rgba(80, 50, 25, 0.1));
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.dice-event-btn:hover:not(:disabled) {
+    border-color: rgba(139, 90, 43, 0.7);
+    box-shadow: 
+        0 6px 20px rgba(139, 90, 43, 0.2),
+        0 2px 8px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dice-event-btn:hover:not(:disabled)::before {
+    opacity: 1;
+}
+
+.dice-event-btn:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dice-icon {
+    width: 32px;
+    height: 32px;
+    color: #c9a55c;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.dice-icon--inline {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    color: currentColor;
+    vertical-align: middle;
+}
+
+.dice-event-btn:hover:not(:disabled) .dice-icon {
+    color: #e0c080;
+    transform: rotate(15deg);
 }
 
 .dice-event-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
     cursor: not-allowed;
+}
+
+.dice-event-btn:disabled .dice-icon {
+    color: #666;
 }
 
 /* ============================================================
@@ -1820,7 +1878,11 @@ select.field__input option {
     .dice-event-btn {
         width: 72px;
         height: 72px;
-        font-size: 2rem;
+    }
+
+    .dice-event-btn .dice-icon {
+        width: 38px;
+        height: 38px;
     }
 
     .dice-modal {

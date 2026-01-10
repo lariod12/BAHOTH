@@ -96,7 +96,15 @@ function renderDiceRollOverlay(gameState, myId) {
             </div>
             <span class="dice-or">hoac</span>
             <button class="action-button action-button--primary dice-roll-btn" type="button" data-action="roll-random">
-                🎲 Tung Xi Ngau
+                <svg class="dice-icon dice-icon--inline" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="4" y="4" width="40" height="40" rx="6" stroke="currentColor" stroke-width="2.5" fill="none"/>
+                    <circle cx="14" cy="14" r="3.5" fill="currentColor"/>
+                    <circle cx="34" cy="14" r="3.5" fill="currentColor"/>
+                    <circle cx="24" cy="24" r="3.5" fill="currentColor"/>
+                    <circle cx="14" cy="34" r="3.5" fill="currentColor"/>
+                    <circle cx="34" cy="34" r="3.5" fill="currentColor"/>
+                </svg>
+                Tung Xi Ngau
             </button>
         </div>
     ` : `
@@ -207,7 +215,14 @@ function renderGameControls(gameState, myId) {
                 </button>
             </div>
             <button class="dice-event-btn" type="button" data-action="dice-event" disabled title="Chi kich hoat khi co su kien">
-                🎲
+                <svg class="dice-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="4" y="4" width="40" height="40" rx="6" stroke="currentColor" stroke-width="2.5" fill="none"/>
+                    <circle cx="14" cy="14" r="3.5" fill="currentColor"/>
+                    <circle cx="34" cy="14" r="3.5" fill="currentColor"/>
+                    <circle cx="24" cy="24" r="3.5" fill="currentColor"/>
+                    <circle cx="14" cy="34" r="3.5" fill="currentColor"/>
+                    <circle cx="34" cy="34" r="3.5" fill="currentColor"/>
+                </svg>
             </button>
         </div>
     `;
