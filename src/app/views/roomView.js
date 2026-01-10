@@ -104,7 +104,7 @@ function renderPlayerSlot(player, room, myId) {
 /**
  * Render waiting slot
  */
-function renderWaitingSlot(slotNum, totalPlayers) {
+function renderWaitingSlot(slotNum, totalPlayers, maxPlayers) {
     let note = 'Share the Room ID to invite';
     if (slotNum === 1) note = 'Share the Room ID to invite';
     else if (totalPlayers < MIN_PLAYERS) note = 'Min ' + MIN_PLAYERS + ' players required';
@@ -129,10 +129,11 @@ function renderWaitingSlot(slotNum, totalPlayers) {
 function renderPlayersList(room, myId) {
     if (!room) return '';
 
+    const maxPlayers = room.maxPlayers || MAX_PLAYERS;
     const playerSlots = room.players.map(p => renderPlayerSlot(p, room, myId)).join('');
-    const waitingCount = MAX_PLAYERS - room.players.length;
+    const waitingCount = maxPlayers - room.players.length;
     const waitingSlots = Array.from({ length: waitingCount }, (_, i) =>
-        renderWaitingSlot(i + 1, room.players.length)
+        renderWaitingSlot(i + 1, room.players.length, maxPlayers)
     ).join('');
 
     return playerSlots + waitingSlots;
@@ -262,6 +263,7 @@ function canStartGame(room) {
 function renderRoomMarkup(room, myId) {
     const roomId = room?.id || 'Loading...';
     const playerCount = room?.players?.length || 0;
+    const maxPlayers = room?.maxPlayers || MAX_PLAYERS;
     const myPlayer = getMyPlayer(room, myId);
     const amHost = isHost(room, myId);
     const canStart = canStartGame(room);
@@ -279,7 +281,7 @@ function renderRoomMarkup(room, myId) {
         : '';
 
     const startHint = amHost
-        ? (canStart ? `All players ready (${playerCount}/${MAX_PLAYERS}). Ready to start!` : `Waiting for players... (${playerCount}/${MAX_PLAYERS})`)
+        ? (canStart ? `All players ready (${playerCount}/${maxPlayers}). Ready to start!` : `Waiting for players... (${playerCount}/${maxPlayers})`)
         : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
 
     return `
@@ -306,12 +308,12 @@ function renderRoomMarkup(room, myId) {
                     <section class="room-panel room-panel--players" data-panel="players">
                         <div class="room-panel__header">
                             <p class="welcome-kicker">Players</p>
-                            <p class="room-panel__meta">${playerCount} / ${MAX_PLAYERS}</p>
+                            <p class="room-panel__meta">${playerCount} / ${maxPlayers}</p>
                         </div>
                         <div class="players-list" id="players-list">
                             ${renderPlayersList(room, myId)}
                         </div>
-                        <p class="room-hint">Min ${MIN_PLAYERS} players to start - Max ${MAX_PLAYERS} players</p>
+                        <p class="room-hint">Min ${MIN_PLAYERS} players to start - Max ${maxPlayers} players</p>
                     </section>
 
                     <section class="room-panel room-panel--characters" data-panel="characters">
