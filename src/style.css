@@ -530,6 +530,18 @@ select.field__input option {
     overflow: clip;
 }
 
+/* Rulesbook page */
+.rulesbook-container {
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: clip;
+}
+
+.rulesbook-container .welcome-content {
+    display: flex;
+    flex-direction: column;
+}
+
 .room-surface {
     width: min(1100px, 94vw);
     margin: 0 auto;
