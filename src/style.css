@@ -525,7 +525,9 @@ select.field__input option {
 
 /* Room page */
 .room-container {
+    min-height: auto;
     padding: 48px 18px 32px;
+    overflow: clip;
 }
 
 .room-surface {
