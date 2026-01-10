@@ -1,11 +1,15 @@
 // Game View - Dice rolling phase and main gameplay
 import { CHARACTER_BY_ID } from '../data/charactersData.js';
 import * as socketClient from '../services/socketClient.js';
+import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
 
 /** @type {any} */
 let currentGameState = null;
 let mySocketId = null;
 let unsubscribeGameState = null;
+let sidebarOpen = false;
+let introShown = false;
+let introTimeout = null;
 
 /**
  * Get character's Speed value at startIndex
@@ -128,7 +132,86 @@ function renderDiceRollOverlay(gameState, myId) {
 }
 
 /**
- * Render player bar (bottom HUD)
+ * Render sidebar toggle button
+ */
+function renderSidebarToggle() {
+    return `
+        <button class="sidebar-toggle" type="button" data-action="toggle-sidebar" title="Toggle Players">
+            <svg class="sidebar-toggle__icon" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="6" r="4"/>
+                <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
+            </svg>
+        </button>
+    `;
+}
+
+/**
+ * Render sidebar with other players
+ */
+function renderSidebar(gameState, myId) {
+    if (!gameState) return '';
+
+    const players = gameState.players || [];
+    const playerState = gameState.playerState || {};
+    const playerPositions = playerState.playerPositions || {};
+    const turnOrder = gameState.turnOrder || [];
+    const currentIndex = gameState.currentTurnIndex ?? 0;
+    const currentTurnPlayer = turnOrder[currentIndex];
+
+    // Filter out current player
+    const otherPlayers = players.filter(p => p.id !== myId);
+
+    const openClass = sidebarOpen ? 'is-open' : '';
+
+    if (otherPlayers.length === 0) {
+        return `
+            <aside class="game-sidebar ${openClass}">
+                <div class="sidebar-header">
+                    <span class="sidebar-title">Players</span>
+                    <button class="sidebar-close" type="button" data-action="close-sidebar">&times;</button>
+                </div>
+                <div class="sidebar-empty">No other players</div>
+            </aside>
+        `;
+    }
+
+    const playersHtml = otherPlayers.map(player => {
+        const charName = getCharacterName(player.characterId);
+        const position = playerPositions[player.id] || 'unknown';
+        const isCurrentTurn = player.id === currentTurnPlayer;
+        const turnIndex = turnOrder.indexOf(player.id);
+
+        return `
+            <div class="sidebar-player ${isCurrentTurn ? 'is-current-turn' : ''}">
+                <div class="sidebar-player__icon">
+                    <svg class="pawn-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="6" r="4"/>
+                        <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
+                    </svg>
+                </div>
+                <div class="sidebar-player__info">
+                    <span class="sidebar-player__name">${charName}</span>
+                    <span class="sidebar-player__order">#${turnIndex + 1}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <aside class="game-sidebar ${openClass}">
+            <div class="sidebar-header">
+                <span class="sidebar-title">Players</span>
+                <button class="sidebar-close" type="button" data-action="close-sidebar">&times;</button>
+            </div>
+            <div class="sidebar-players">
+                ${playersHtml}
+            </div>
+        </aside>
+    `;
+}
+
+/**
+ * Render player bar (bottom HUD) with card slots
  */
 function renderPlayerBar(gameState, myId) {
     if (!gameState) return '';
@@ -140,11 +223,38 @@ function renderPlayerBar(gameState, myId) {
     const movesLeft = gameState.playerMoves?.[myId] ?? 0;
     const myTurn = isMyTurn(gameState, myId);
 
+    // TODO: Get actual cards from game state when implemented
+    const omenCards = [];
+    const eventCards = [];
+    const itemCards = [];
+
     return `
         <div class="player-bar ${myTurn ? 'is-my-turn' : ''}">
             <div class="player-bar__info">
-                <span class="player-bar__name">${charName}</span>
-                <span class="player-bar__moves">Luot di: <strong>${movesLeft}</strong></span>
+                <div class="player-bar__avatar">
+                    <svg class="pawn-icon pawn-icon--large" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="6" r="4"/>
+                        <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
+                    </svg>
+                </div>
+                <div class="player-bar__details">
+                    <span class="player-bar__name">${charName}</span>
+                    <span class="player-bar__moves">Luot di: <strong>${movesLeft}</strong></span>
+                </div>
+            </div>
+            <div class="player-bar__cards">
+                <div class="card-slot card-slot--omen" title="Omen Cards">
+                    <span class="card-slot__label">Omen</span>
+                    <span class="card-slot__count">${omenCards.length}</span>
+                </div>
+                <div class="card-slot card-slot--event" title="Event Cards">
+                    <span class="card-slot__label">Event</span>
+                    <span class="card-slot__count">${eventCards.length}</span>
+                </div>
+                <div class="card-slot card-slot--item" title="Item Cards">
+                    <span class="card-slot__label">Item</span>
+                    <span class="card-slot__count">${itemCards.length}</span>
+                </div>
             </div>
         </div>
     `;
@@ -229,13 +339,18 @@ function renderGameControls(gameState, myId) {
 }
 
 /**
- * Render welcome message
+ * Render game intro overlay (shows for 5 seconds when entering game)
  */
-function renderWelcomeMessage() {
+function renderGameIntro() {
+    if (introShown) return '';
+
     return `
-        <div class="game-welcome">
-            <h1 class="game-welcome__title">Chao mung den Vinh thu bo hoang</h1>
-            <p class="game-welcome__subtitle">Betrayal at House on the Hill</p>
+        <div class="game-intro" data-action="skip-intro">
+            <div class="game-intro__content">
+                <h1 class="game-intro__title">Chao mung den Vinh thu bo hoang</h1>
+                <p class="game-intro__subtitle">Betrayal at House on the Hill</p>
+                <p class="game-intro__hint">Click de bat dau...</p>
+            </div>
         </div>
     `;
 }
@@ -252,12 +367,25 @@ function renderGameScreen(gameState, myId) {
     if (isRolling) {
         content = renderDiceRollOverlay(gameState, myId);
     } else if (isPlaying) {
+        // Build map data
+        const mapState = gameState.map || null;
+        const playerState = gameState.playerState || {};
+        const playerPositions = playerState.playerPositions || {};
+        const players = gameState.players || [];
+        const playerNames = buildPlayerNamesMap(players, getCharacterName);
+        const myPosition = playerPositions[myId];
+
         content = `
-            ${renderWelcomeMessage()}
-            ${renderTurnOrder(gameState, myId)}
-            <div class="game-area">
-                <!-- Map will go here later -->
-                <p class="game-placeholder">Ban do se duoc hien thi o day</p>
+            ${renderGameIntro()}
+            ${renderSidebarToggle()}
+            <div class="game-layout">
+                ${renderSidebar(gameState, myId)}
+                <div class="game-main">
+                    ${renderTurnOrder(gameState, myId)}
+                    <div class="game-area">
+                        ${renderGameMap(mapState, playerPositions, playerNames, myId, myPosition)}
+                    </div>
+                </div>
             </div>
             ${renderPlayerBar(gameState, myId)}
             ${renderGameControls(gameState, myId)}
@@ -278,15 +406,69 @@ function renderGameScreen(gameState, myId) {
 }
 
 /**
+ * Hide intro and re-render
+ */
+function hideIntro(mountEl) {
+    if (introShown) return;
+    introShown = true;
+    if (introTimeout) {
+        clearTimeout(introTimeout);
+        introTimeout = null;
+    }
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Toggle sidebar open/close
+ */
+function toggleSidebar(mountEl) {
+    sidebarOpen = !sidebarOpen;
+    const sidebar = mountEl.querySelector('.game-sidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('is-open', sidebarOpen);
+    }
+}
+
+/**
+ * Close sidebar
+ */
+function closeSidebar(mountEl) {
+    sidebarOpen = false;
+    const sidebar = mountEl.querySelector('.game-sidebar');
+    if (sidebar) {
+        sidebar.classList.remove('is-open');
+    }
+}
+
+/**
  * Attach event listeners
  */
 function attachEventListeners(mountEl, roomId) {
     // Roll dice manually
     mountEl.addEventListener('click', async (e) => {
         const target = /** @type {HTMLElement} */ (e.target);
+        const action = target.dataset.action || target.closest('[data-action]')?.dataset.action;
+
+        // Skip intro
+        if (action === 'skip-intro') {
+            hideIntro(mountEl);
+            return;
+        }
+
+        // Toggle sidebar
+        if (action === 'toggle-sidebar') {
+            toggleSidebar(mountEl);
+            return;
+        }
+
+        // Close sidebar
+        if (action === 'close-sidebar') {
+            closeSidebar(mountEl);
+            return;
+        }
 
         // Roll manual
-        if (target.dataset.action === 'roll-manual') {
+        if (action === 'roll-manual') {
             const input = /** @type {HTMLInputElement} */ (mountEl.querySelector('#dice-manual-input'));
             const value = parseInt(input?.value || '0', 10);
             if (value >= 1 && value <= 16) {
@@ -298,15 +480,16 @@ function attachEventListeners(mountEl, roomId) {
         }
 
         // Roll random
-        if (target.dataset.action === 'roll-random') {
+        if (action === 'roll-random') {
             const randomValue = Math.floor(Math.random() * 16) + 1;
             await socketClient.rollDice(randomValue);
             return;
         }
 
         // Move
-        if (target.dataset.action === 'move') {
-            const direction = target.dataset.direction;
+        if (action === 'move') {
+            const moveTarget = target.closest('[data-direction]');
+            const direction = moveTarget?.dataset.direction;
             if (direction) {
                 await socketClient.move(direction);
             }
@@ -314,7 +497,7 @@ function attachEventListeners(mountEl, roomId) {
         }
 
         // Dice event (disabled for now)
-        if (target.dataset.action === 'dice-event') {
+        if (action === 'dice-event') {
             // Placeholder for future events
             return;
         }
@@ -351,6 +534,13 @@ async function updateGameUI(mountEl, gameState, myId) {
                 await socketClient.setMoves(speed);
                 return; // Will re-render after state update
             }
+        }
+
+        // Start intro timer if not shown yet
+        if (!introShown && !introTimeout) {
+            introTimeout = setTimeout(() => {
+                hideIntro(mountEl);
+            }, 5000);
         }
     }
 
@@ -389,5 +579,13 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
             unsubscribeGameState();
             unsubscribeGameState = null;
         }
+        if (introTimeout) {
+            clearTimeout(introTimeout);
+            introTimeout = null;
+        }
+        // Reset state for next game
+        sidebarOpen = false;
+        introShown = false;
+        movesInitializedForTurn = -1;
     }, { once: true });
 }

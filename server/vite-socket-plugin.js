@@ -1,6 +1,8 @@
 // Vite plugin to attach Socket.IO server during development
 import { Server as SocketIOServer } from 'socket.io';
 import * as roomManager from './roomManager.js';
+import * as playerManager from './playerManager.js';
+import * as mapManager from './mapManager.js';
 
 /**
  * @returns {import('vite').Plugin}
@@ -208,6 +210,11 @@ export function socketIOPlugin() {
                         return;
                     }
 
+                    // Initialize player state and map
+                    const playerIds = room.players.map((p) => p.id);
+                    playerManager.initializeGame(room.id, playerIds, 'entrance-hall');
+                    mapManager.initializeMap(room.id);
+
                     if (callback) {
                         callback({ success: true });
                     }
@@ -228,31 +235,108 @@ export function socketIOPlugin() {
                         return;
                     }
 
+                    // If all rolled and game is now in playing phase, set turn order in playerManager
+                    if (result.allRolled && result.room.gamePhase === 'playing') {
+                        playerManager.setTurnOrder(result.room.id, result.room.turnOrder);
+                    }
+
                     if (callback) {
                         callback({ success: true, hasTies: result.hasTies, allRolled: result.allRolled });
                     }
 
-                    // Broadcast updated game state
-                    io.to(result.room.id).emit('game:state', result.room);
+                    // Broadcast updated game state with map
+                    const mapState = mapManager.getFullMapState(result.room.id);
+                    const playerState = playerManager.getFullPlayerState(result.room.id);
+                    const fullState = {
+                        ...result.room,
+                        map: mapState,
+                        playerState: playerState,
+                    };
+                    io.to(result.room.id).emit('game:state', fullState);
                 });
 
                 // Move (direction)
                 socket.on('game:move', ({ direction }, callback) => {
-                    const result = roomManager.useMove(socket.id, direction);
-
-                    if (!result.success) {
+                    const room = roomManager.getRoomBySocket(socket.id);
+                    if (!room) {
                         if (callback) {
-                            callback({ success: false, error: result.error });
+                            callback({ success: false, error: 'Not in a room' });
                         }
                         return;
                     }
 
-                    if (callback) {
-                        callback({ success: true, turnEnded: result.turnEnded });
+                    // Get current player position
+                    const currentPosition = playerManager.getPlayerPosition(room.id, socket.id);
+                    if (!currentPosition) {
+                        if (callback) {
+                            callback({ success: false, error: 'Player position not found' });
+                        }
+                        return;
                     }
 
-                    // Broadcast updated game state
-                    io.to(result.room.id).emit('game:state', result.room);
+                    // Check if can move in that direction
+                    const moveCheck = mapManager.canMoveInDirection(room.id, currentPosition, direction);
+                    if (!moveCheck.canMove) {
+                        if (callback) {
+                            callback({ success: false, error: 'No door in that direction' });
+                        }
+                        return;
+                    }
+
+                    // Use move from roomManager (deduct moves)
+                    const moveResult = roomManager.useMove(socket.id, direction);
+                    if (!moveResult.success) {
+                        if (callback) {
+                            callback({ success: false, error: moveResult.error });
+                        }
+                        return;
+                    }
+
+                    let targetRoom = moveCheck.targetRoom;
+                    let newRoomRevealed = null;
+
+                    // If needs reveal, reveal new room
+                    if (moveCheck.needsReveal) {
+                        const revealResult = mapManager.revealRoom(room.id, currentPosition, direction);
+                        if (!revealResult.success) {
+                            if (callback) {
+                                callback({ success: false, error: revealResult.error });
+                            }
+                            return;
+                        }
+                        targetRoom = revealResult.newRoom.id;
+                        newRoomRevealed = revealResult.newRoom;
+                    }
+
+                    // Update player position
+                    playerManager.setPlayerPosition(room.id, socket.id, targetRoom);
+
+                    // Also use playerManager to track move
+                    playerManager.useMove(room.id, socket.id);
+
+                    // If turn ended, move to next player
+                    if (moveResult.turnEnded) {
+                        playerManager.nextTurn(room.id);
+                    }
+
+                    if (callback) {
+                        callback({ 
+                            success: true, 
+                            turnEnded: moveResult.turnEnded,
+                            newRoom: newRoomRevealed,
+                            movedTo: targetRoom,
+                        });
+                    }
+
+                    // Broadcast updated game state with map and player state
+                    const mapState = mapManager.getFullMapState(room.id);
+                    const playerState = playerManager.getFullPlayerState(room.id);
+                    const fullState = {
+                        ...moveResult.room,
+                        map: mapState,
+                        playerState: playerState,
+                    };
+                    io.to(room.id).emit('game:state', fullState);
                 });
 
                 // Set player moves (called when turn starts to set speed-based moves)
@@ -264,7 +348,17 @@ export function socketIOPlugin() {
                     }
 
                     if (room) {
-                        io.to(room.id).emit('game:state', room);
+                        // Also set in playerManager
+                        playerManager.setPlayerMoves(room.id, socket.id, moves);
+
+                        const mapState = mapManager.getFullMapState(room.id);
+                        const playerState = playerManager.getFullPlayerState(room.id);
+                        const fullState = {
+                            ...room,
+                            map: mapState,
+                            playerState: playerState,
+                        };
+                        io.to(room.id).emit('game:state', fullState);
                     }
                 });
 
@@ -277,7 +371,14 @@ export function socketIOPlugin() {
                     }
 
                     if (room) {
-                        socket.emit('game:state', room);
+                        const mapState = mapManager.getFullMapState(roomId);
+                        const playerState = playerManager.getFullPlayerState(roomId);
+                        const fullState = {
+                            ...room,
+                            map: mapState,
+                            playerState: playerState,
+                        };
+                        socket.emit('game:state', fullState);
                     }
                 });
 

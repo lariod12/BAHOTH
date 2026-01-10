@@ -1418,12 +1418,13 @@ select.field__input option {
    ============================================================ */
 
 .game-container {
-    min-height: 100dvh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     background: linear-gradient(160deg, #0d0f12 0%, #1a1e24 50%, #12151a 100%);
     color: var(--fg);
     position: relative;
+    overflow: hidden;
 }
 
 /* Loading state */
@@ -1522,10 +1523,12 @@ select.field__input option {
 /* Game area placeholder */
 .game-area {
     flex: 1;
+    min-height: 0; /* Important for flex child to respect parent height */
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px;
+    padding: 8px;
+    overflow: auto;
 }
 
 .game-placeholder {
@@ -1887,5 +1890,1067 @@ select.field__input option {
 
     .dice-modal {
         padding: 32px;
+    }
+}
+
+/* ============================================================
+   GAME MAP
+   ============================================================ */
+
+.game-map {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(20, 15, 25, 0.9) 0%, rgba(10, 8, 12, 0.95) 100%);
+    border: 1px solid rgba(139, 90, 43, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+    gap: 12px;
+}
+
+.game-map--empty {
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.game-map__header {
+    text-align: center;
+}
+
+.game-map__location {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #c9a55c;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.game-map__placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+.game-map__grid {
+    display: grid;
+    grid-template-columns: repeat(var(--grid-size, 5), 90px);
+    grid-template-rows: repeat(var(--grid-size, 5), 90px);
+    gap: 6px;
+    position: relative;
+}
+
+/* Room Tile */
+.map-room {
+    width: 90px;
+    height: 90px;
+    position: relative;
+    background: linear-gradient(145deg, rgba(35, 30, 40, 0.95), rgba(20, 18, 25, 0.98));
+    border: 2px solid rgba(139, 90, 43, 0.4);
+    border-radius: 6px;
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    transition: all 0.2s ease;
+}
+
+.map-room:hover {
+    border-color: rgba(139, 90, 43, 0.6);
+    box-shadow: 
+        0 6px 20px rgba(0, 0, 0, 0.6),
+        0 0 20px rgba(139, 90, 43, 0.15);
+}
+
+.map-room--current {
+    border-color: rgba(201, 165, 92, 0.7);
+    box-shadow: 
+        0 0 25px rgba(201, 165, 92, 0.3),
+        inset 0 0 15px rgba(201, 165, 92, 0.1);
+}
+
+.map-room--occupied {
+    border-color: rgba(139, 90, 43, 0.5);
+}
+
+/* Floor Types */
+.map-room--ground {
+    background: linear-gradient(145deg, rgba(40, 35, 30, 0.95), rgba(25, 22, 18, 0.98));
+}
+
+.map-room--upper {
+    background: linear-gradient(145deg, rgba(35, 30, 45, 0.95), rgba(20, 18, 28, 0.98));
+}
+
+.map-room--basement {
+    background: linear-gradient(145deg, rgba(25, 28, 30, 0.95), rgba(12, 14, 16, 0.98));
+}
+
+.map-room__inner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    position: relative;
+}
+
+.map-room__name {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    text-align: center;
+    line-height: 1.2;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Doors */
+.map-door {
+    position: absolute;
+    background: rgba(139, 90, 43, 0.6);
+    border-radius: 2px;
+}
+
+.map-door--north {
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 6px;
+}
+
+.map-door--south {
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 6px;
+}
+
+.map-door--east {
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 20px;
+}
+
+.map-door--west {
+    left: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 20px;
+}
+
+.map-door--connected {
+    background: rgba(201, 165, 92, 0.8);
+    box-shadow: 0 0 8px rgba(201, 165, 92, 0.4);
+}
+
+.map-door--open {
+    background: rgba(139, 90, 43, 0.4);
+    animation: doorPulse 2s ease-in-out infinite;
+}
+
+@keyframes doorPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+/* Player Markers */
+.map-players {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.map-player {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, rgba(80, 60, 40, 0.9), rgba(50, 35, 25, 0.95));
+    border: 2px solid rgba(139, 90, 43, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    cursor: default;
+}
+
+.map-player--me {
+    background: linear-gradient(145deg, rgba(201, 165, 92, 0.9), rgba(139, 90, 43, 0.95));
+    border-color: rgba(201, 165, 92, 0.8);
+    box-shadow: 0 0 10px rgba(201, 165, 92, 0.4);
+}
+
+/* Game Area */
+/* Game area already defined above - this is duplicate, removed */
+
+.game-placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+/* Responsive Map */
+@media (max-width: 600px) {
+    /* Ensure game controls always visible on mobile */
+    .game-welcome {
+        padding: 8px 16px;
+    }
+
+    .game-welcome__title {
+        font-size: 1.2rem;
+    }
+
+    .game-welcome__subtitle {
+        font-size: 0.75rem;
+    }
+
+    .turn-order {
+        padding: 6px 12px;
+    }
+
+    .turn-order__label {
+        font-size: 0.65rem;
+    }
+
+    .turn-indicator {
+        padding: 4px 8px;
+        font-size: 0.7rem;
+    }
+
+    .game-area {
+        padding: 4px;
+    }
+
+    .player-bar {
+        padding: 8px 12px;
+    }
+
+    .player-bar__name {
+        font-size: 0.9rem;
+    }
+
+    .player-bar__moves {
+        font-size: 0.75rem;
+    }
+
+    .game-controls {
+        padding: 12px;
+        gap: 20px;
+    }
+
+    .move-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+
+    .move-center {
+        width: 40px;
+        height: 40px;
+    }
+
+    .moves-remaining {
+        font-size: 1rem;
+    }
+
+    .dice-event-btn {
+        width: 50px;
+        height: 50px;
+    }
+
+    .dice-event-btn .dice-icon {
+        width: 26px;
+        height: 26px;
+    }
+
+    /* Map sizing for mobile */
+    .game-map {
+        padding: 6px;
+        gap: 6px;
+    }
+
+    .game-map__location {
+        font-size: 0.85rem;
+    }
+
+    .game-map__grid {
+        grid-template-columns: repeat(var(--grid-size, 5), 60px);
+        grid-template-rows: repeat(var(--grid-size, 5), 60px);
+        gap: 3px;
+    }
+
+    .map-room {
+        width: 60px;
+        height: 60px;
+    }
+
+    .map-room__inner {
+        padding: 4px;
+    }
+
+    .map-room__name {
+        font-size: 0.45rem;
+    }
+
+    .map-player {
+        width: 14px;
+        height: 14px;
+        font-size: 0.4rem;
+        border-width: 1px;
+    }
+
+    .map-players {
+        margin-top: 3px;
+        gap: 2px;
+    }
+
+    .map-door--north,
+    .map-door--south {
+        width: 12px;
+        height: 3px;
+    }
+
+    .map-door--east,
+    .map-door--west {
+        width: 3px;
+        height: 12px;
+    }
+}
+
+/* Very small screens */
+@media (max-width: 400px) {
+    .game-map__grid {
+        grid-template-columns: repeat(var(--grid-size, 5), 50px);
+        grid-template-rows: repeat(var(--grid-size, 5), 50px);
+        gap: 2px;
+    }
+
+    .map-room {
+        width: 50px;
+        height: 50px;
+        border-width: 1px;
+    }
+
+    .map-room__name {
+        font-size: 0.4rem;
+    }
+
+    .map-player {
+        width: 12px;
+        height: 12px;
+        font-size: 0.35rem;
+        border-width: 1px;
+    }
+
+    .move-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 0.9rem;
+    }
+
+    .move-center {
+        width: 36px;
+        height: 36px;
+    }
+
+    .dice-event-btn {
+        width: 44px;
+        height: 44px;
+    }
+}
+
+/* ============================================================
+   GAME LAYOUT WITH SIDEBAR
+   ============================================================ */
+
+.game-layout {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ============================================================
+   SIDEBAR TOGGLE BUTTON
+   ============================================================ */
+
+.sidebar-toggle {
+    position: fixed;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 150;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, rgba(30, 25, 35, 0.95), rgba(15, 12, 18, 0.98));
+    border: 1px solid rgba(139, 90, 43, 0.4);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-toggle:hover {
+    border-color: rgba(139, 90, 43, 0.7);
+    box-shadow: 
+        0 6px 20px rgba(139, 90, 43, 0.2),
+        0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.sidebar-toggle__icon {
+    width: 20px;
+    height: 20px;
+    color: #c9a55c;
+    transition: color 0.2s ease;
+}
+
+.sidebar-toggle:hover .sidebar-toggle__icon {
+    color: #e0c080;
+}
+
+/* ============================================================
+   GAME INTRO OVERLAY
+   ============================================================ */
+
+.game-intro {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(15, 10, 20, 0.98) 0%, rgba(0, 0, 0, 0.99) 100%);
+    cursor: pointer;
+    animation: introFadeIn 0.5s ease-out;
+}
+
+.game-intro::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 45%, rgba(201, 165, 92, 0.08) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.game-intro__content {
+    text-align: center;
+    z-index: 1;
+    animation: introSlideUp 0.8s ease-out 0.2s both;
+}
+
+.game-intro__title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: clamp(1.8rem, 5vw, 3rem);
+    font-weight: 700;
+    color: #f5f5f5;
+    margin: 0 0 16px;
+    text-shadow: 
+        0 2px 20px rgba(0, 0, 0, 0.8),
+        0 0 40px rgba(201, 165, 92, 0.3);
+    letter-spacing: 0.02em;
+}
+
+.game-intro__subtitle {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0 0 32px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+
+.game-intro__hint {
+    font-size: 0.85rem;
+    color: rgba(201, 165, 92, 0.6);
+    margin: 0;
+    animation: hintPulse 2s ease-in-out infinite;
+}
+
+@keyframes introFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes introSlideUp {
+    from { 
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes hintPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+.game-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+
+.game-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 140px;
+    background: linear-gradient(180deg, rgba(20, 18, 22, 0.98) 0%, rgba(12, 10, 14, 0.99) 100%);
+    border-right: 1px solid rgba(139, 90, 43, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.game-sidebar.is-open {
+    transform: translateX(0);
+}
+
+.sidebar-header {
+    padding: 12px 10px;
+    border-bottom: 1px solid rgba(139, 90, 43, 0.2);
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sidebar-close {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sidebar-close:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.sidebar-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(201, 165, 92, 0.8);
+}
+
+.sidebar-players {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sidebar-empty {
+    padding: 16px 10px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.sidebar-player {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.sidebar-player:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(139, 90, 43, 0.3);
+}
+
+.sidebar-player.is-current-turn {
+    background: rgba(201, 165, 92, 0.15);
+    border-color: rgba(201, 165, 92, 0.4);
+}
+
+.sidebar-player__icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, rgba(80, 60, 40, 0.8), rgba(50, 35, 25, 0.9));
+    border: 1px solid rgba(139, 90, 43, 0.5);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.sidebar-player__icon .pawn-icon {
+    width: 16px;
+    height: 16px;
+    color: rgba(201, 165, 92, 0.9);
+}
+
+.sidebar-player.is-current-turn .sidebar-player__icon {
+    background: linear-gradient(145deg, rgba(201, 165, 92, 0.6), rgba(139, 90, 43, 0.7));
+    border-color: rgba(201, 165, 92, 0.7);
+    box-shadow: 0 0 8px rgba(201, 165, 92, 0.4);
+}
+
+.sidebar-player.is-current-turn .sidebar-player__icon .pawn-icon {
+    color: #fff;
+}
+
+.sidebar-player__info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sidebar-player__name {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-player__order {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* ============================================================
+   PLAYER BAR WITH CARDS
+   ============================================================ */
+
+.player-bar__info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.player-bar__avatar {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, rgba(201, 165, 92, 0.8), rgba(139, 90, 43, 0.9));
+    border: 2px solid rgba(201, 165, 92, 0.7);
+    border-radius: 50%;
+    box-shadow: 0 0 12px rgba(201, 165, 92, 0.3);
+}
+
+.pawn-icon {
+    color: currentColor;
+}
+
+.pawn-icon--large {
+    width: 24px;
+    height: 24px;
+    color: #fff;
+}
+
+.player-bar__details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.player-bar__cards {
+    display: flex;
+    gap: 8px;
+}
+
+.card-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    min-width: 50px;
+    transition: all 0.2s ease;
+}
+
+.card-slot:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.card-slot__label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.card-slot__count {
+    font-size: 1rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.card-slot--omen {
+    border-color: rgba(147, 112, 219, 0.3);
+}
+
+.card-slot--omen:hover {
+    border-color: rgba(147, 112, 219, 0.5);
+}
+
+.card-slot--omen .card-slot__count {
+    color: #b19cd9;
+}
+
+.card-slot--event {
+    border-color: rgba(255, 165, 0, 0.3);
+}
+
+.card-slot--event:hover {
+    border-color: rgba(255, 165, 0, 0.5);
+}
+
+.card-slot--event .card-slot__count {
+    color: #ffa500;
+}
+
+.card-slot--item {
+    border-color: rgba(100, 200, 100, 0.3);
+}
+
+.card-slot--item:hover {
+    border-color: rgba(100, 200, 100, 0.5);
+}
+
+.card-slot--item .card-slot__count {
+    color: #7fd87f;
+}
+
+/* ============================================================
+   MAP PAWN ICON
+   ============================================================ */
+
+.map-pawn {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pawnBounce 2s ease-in-out infinite;
+}
+
+.map-pawn__icon {
+    width: 28px;
+    height: 28px;
+    color: #fff;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 10px rgba(201, 165, 92, 0.5));
+}
+
+@keyframes pawnBounce {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50% { transform: translateX(-50%) translateY(-3px); }
+}
+
+/* Larger rooms for better visibility */
+.game-map__grid {
+    grid-template-columns: repeat(var(--grid-size, 5), 110px);
+    grid-template-rows: repeat(var(--grid-size, 5), 110px);
+}
+
+.map-room {
+    width: 110px;
+    height: 110px;
+}
+
+.map-room__name {
+    font-size: 0.7rem;
+}
+
+/* Responsive sidebar and layout */
+@media (max-width: 768px) {
+    .game-sidebar {
+        width: 120px;
+    }
+
+    .sidebar-toggle {
+        width: 36px;
+        height: 36px;
+        left: 6px;
+    }
+
+    .sidebar-toggle__icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .sidebar-player {
+        padding: 6px;
+    }
+
+    .sidebar-player__icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .sidebar-player__icon .pawn-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .sidebar-player__name {
+        font-size: 0.6rem;
+    }
+
+    .sidebar-player__order {
+        font-size: 0.5rem;
+    }
+
+    .player-bar__avatar {
+        width: 32px;
+        height: 32px;
+    }
+
+    .pawn-icon--large {
+        width: 18px;
+        height: 18px;
+    }
+
+    .card-slot {
+        padding: 6px 8px;
+        min-width: 40px;
+    }
+
+    .card-slot__label {
+        font-size: 0.5rem;
+    }
+
+    .card-slot__count {
+        font-size: 0.85rem;
+    }
+
+    .game-map__grid {
+        grid-template-columns: repeat(var(--grid-size, 5), 80px);
+        grid-template-rows: repeat(var(--grid-size, 5), 80px);
+    }
+
+    .map-room {
+        width: 80px;
+        height: 80px;
+    }
+
+    .map-room__name {
+        font-size: 0.6rem;
+    }
+
+    .map-pawn__icon {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+@media (max-width: 600px) {
+    .game-sidebar {
+        width: 100px;
+    }
+
+    .sidebar-header {
+        padding: 8px 6px;
+    }
+
+    .sidebar-title {
+        font-size: 0.6rem;
+    }
+
+    .sidebar-close {
+        width: 20px;
+        height: 20px;
+        font-size: 0.85rem;
+    }
+
+    .sidebar-players {
+        padding: 6px;
+        gap: 4px;
+    }
+
+    .sidebar-player {
+        flex-direction: column;
+        padding: 6px 4px;
+
+    .sidebar-toggle {
+        width: 32px;
+        height: 32px;
+        left: 4px;
+    }
+
+    .sidebar-toggle__icon {
+        width: 16px;
+        height: 16px;
+    }
+
+    .game-intro__title {
+        font-size: 1.5rem;
+    }
+
+    .game-intro__subtitle {
+        font-size: 0.85rem;
+    }
+        gap: 4px;
+    }
+
+    .sidebar-player__icon {
+        width: 22px;
+        height: 22px;
+    }
+
+    .sidebar-player__icon .pawn-icon {
+        width: 12px;
+        height: 12px;
+    }
+
+    .sidebar-player__name {
+        font-size: 0.5rem;
+        text-align: center;
+    }
+
+    .sidebar-player__order {
+        display: none;
+    }
+
+    .player-bar {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .player-bar__cards {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .game-map__grid {
+        grid-template-columns: repeat(var(--grid-size, 5), 65px);
+        grid-template-rows: repeat(var(--grid-size, 5), 65px);
+    }
+
+    .map-room {
+        width: 65px;
+        height: 65px;
+    }
+
+    .map-room__name {
+        font-size: 0.5rem;
+    }
+
+    .map-pawn__icon {
+        width: 18px;
+        height: 18px;
+    }
+}
+
+@media (max-width: 400px) {
+    .game-sidebar {
+        width: 90px;
+    }
+
+    .sidebar-player__icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .sidebar-player__name {
+        font-size: 0.45rem;
+    }
+
+    .sidebar-toggle {
+        width: 28px;
+        height: 28px;
+    }
+
+    .sidebar-toggle__icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .card-slot {
+        padding: 4px 6px;
+        min-width: 32px;
+    }
+
+    .card-slot__label {
+        font-size: 0.45rem;
+    }
+
+    .card-slot__count {
+        font-size: 0.75rem;
+    }
+
+    .game-map__grid {
+        grid-template-columns: repeat(var(--grid-size, 5), 55px);
+        grid-template-rows: repeat(var(--grid-size, 5), 55px);
+    }
+
+    .map-room {
+        width: 55px;
+        height: 55px;
+    }
+
+    .map-room__name {
+        font-size: 0.4rem;
+    }
+
+    .map-pawn__icon {
+        width: 14px;
+        height: 14px;
     }
 }
