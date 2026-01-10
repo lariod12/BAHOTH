@@ -34,8 +34,11 @@ function renderHomeMarkup() {
                         <label class="form-label" for="room-id-input">Room ID</label>
                         <input class="form-input" type="text" id="room-id-input" placeholder="BAH-XXXXXX" maxlength="10" />
                     </div>
+                    <div class="room-status" id="room-status" style="display: none;">
+                        <span class="room-status__text" id="room-status-text"></span>
+                    </div>
                     <p class="join-modal__error" id="join-error"></p>
-                    <button class="action-button action-button--primary join-modal__submit" type="button" data-action="submit-join">
+                    <button class="action-button action-button--primary join-modal__submit" type="button" data-action="submit-join" id="submit-join-btn">
                         Join
                     </button>
                 </div>
@@ -56,6 +59,15 @@ function renderHomeMarkup() {
                     <div class="form-group">
                         <label class="form-label" for="host-name">Your Name</label>
                         <input class="form-input" type="text" id="host-name" placeholder="Enter your name" maxlength="20" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="max-players">Max Players</label>
+                        <select class="form-input form-select" id="max-players">
+                            <option value="3">3 players</option>
+                            <option value="4">4 players</option>
+                            <option value="5">5 players</option>
+                            <option value="6" selected>6 players</option>
+                        </select>
                     </div>
                     <p class="join-modal__error" id="create-error"></p>
                     <button class="action-button action-button--primary join-modal__submit" type="button" data-action="submit-create">
@@ -81,6 +93,13 @@ export function renderHomeView({ mountEl, onNavigate }) {
     const hostNameInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#host-name'));
     const joinError = mountEl.querySelector('#join-error');
     const createError = mountEl.querySelector('#create-error');
+    const roomStatus = mountEl.querySelector('#room-status');
+    const roomStatusText = mountEl.querySelector('#room-status-text');
+    const submitJoinBtn = /** @type {HTMLButtonElement} */ (mountEl.querySelector('#submit-join-btn'));
+
+    // Track room check state
+    let checkedRoomId = null;
+    let isRoomFull = false;
 
     // Modal controls
     const openJoinModal = () => {
@@ -92,6 +111,57 @@ export function renderHomeView({ mountEl, onNavigate }) {
     const closeJoinModal = () => {
         joinModal?.setAttribute('aria-hidden', 'true');
         joinModal?.classList.remove('is-open');
+        if (joinError) joinError.textContent = '';
+        if (roomStatus) roomStatus.style.display = 'none';
+        if (roomStatusText) roomStatusText.textContent = '';
+        checkedRoomId = null;
+        isRoomFull = false;
+        if (submitJoinBtn) submitJoinBtn.disabled = false;
+    };
+
+    // Check room status when Room ID changes
+    const checkRoomStatus = async (roomId) => {
+        if (!roomId || roomId.length < 10) {
+            if (roomStatus) roomStatus.style.display = 'none';
+            if (submitJoinBtn) submitJoinBtn.disabled = false;
+            isRoomFull = false;
+            checkedRoomId = null;
+            return;
+        }
+
+        const result = await socketClient.checkRoom(roomId);
+
+        if (!result.success) {
+            if (roomStatus) roomStatus.style.display = 'none';
+            if (joinError) joinError.textContent = result.error || 'Room not found';
+            if (submitJoinBtn) submitJoinBtn.disabled = true;
+            isRoomFull = true;
+            return;
+        }
+
+        const room = result.room;
+        checkedRoomId = roomId;
+
+        if (roomStatus) roomStatus.style.display = 'block';
+
+        if (room.isFull) {
+            if (roomStatusText) {
+                roomStatusText.textContent = `Room is full (${room.playerCount}/${room.maxPlayers})`;
+                roomStatusText.classList.add('room-status--full');
+                roomStatusText.classList.remove('room-status--ok');
+            }
+            if (submitJoinBtn) submitJoinBtn.disabled = true;
+            isRoomFull = true;
+        } else {
+            if (roomStatusText) {
+                roomStatusText.textContent = `${room.playerCount}/${room.maxPlayers} players`;
+                roomStatusText.classList.remove('room-status--full');
+                roomStatusText.classList.add('room-status--ok');
+            }
+            if (submitJoinBtn) submitJoinBtn.disabled = false;
+            isRoomFull = false;
+        }
+
         if (joinError) joinError.textContent = '';
     };
 
@@ -126,12 +196,15 @@ export function renderHomeView({ mountEl, onNavigate }) {
 
     // Submit create room
     const submitCreateButton = mountEl.querySelector('[data-action="submit-create"]');
+    const maxPlayersSelect = /** @type {HTMLSelectElement} */ (mountEl.querySelector('#max-players'));
+
     submitCreateButton?.addEventListener('click', async () => {
         const name = hostNameInput?.value.trim() || 'Host';
+        const maxPlayers = parseInt(maxPlayersSelect?.value || '6', 10);
 
         if (createError) createError.textContent = '';
 
-        const result = await socketClient.createRoom(name);
+        const result = await socketClient.createRoom(name, maxPlayers);
 
         if (result.success && result.room) {
             closeCreateModal();
@@ -193,6 +266,22 @@ export function renderHomeView({ mountEl, onNavigate }) {
         if (e.key === 'Enter') {
             submitJoinButton?.click();
         }
+    });
+
+    // Check room status on input change (debounced)
+    let checkTimeout = null;
+    roomIdInput?.addEventListener('input', () => {
+        if (checkTimeout) clearTimeout(checkTimeout);
+        checkTimeout = setTimeout(() => {
+            const roomId = roomIdInput?.value.trim().toUpperCase();
+            checkRoomStatus(roomId);
+        }, 500);
+    });
+
+    // Also check on blur
+    roomIdInput?.addEventListener('blur', () => {
+        const roomId = roomIdInput?.value.trim().toUpperCase();
+        if (roomId) checkRoomStatus(roomId);
     });
 
     hostNameInput?.addEventListener('keydown', (e) => {

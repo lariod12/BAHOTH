@@ -127,14 +127,18 @@ function generateRoomId() {
  * Create a new room
  * @param {string} hostSocketId
  * @param {string} hostName
+ * @param {number} [maxPlayers=6]
  * @returns {Room}
  */
-export function createRoom(hostSocketId, hostName) {
+export function createRoom(hostSocketId, hostName, maxPlayers = 6) {
     let roomId = generateRoomId();
     // Ensure unique
     while (rooms.has(roomId)) {
         roomId = generateRoomId();
     }
+
+    // Validate maxPlayers (3-6)
+    const validMax = Math.max(3, Math.min(6, maxPlayers));
 
     const room = {
         id: roomId,
@@ -147,7 +151,7 @@ export function createRoom(hostSocketId, hostName) {
                 characterId: null,
             },
         ],
-        maxPlayers: 6,
+        maxPlayers: validMax,
         minPlayers: 3,
         createdAt: new Date().toISOString(),
     };

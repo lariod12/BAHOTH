@@ -30,10 +30,10 @@ export function socketIOPlugin() {
                 console.log(`[Socket.IO] Client connected: ${socket.id}`);
 
                 // Create room
-                socket.on('room:create', ({ playerName }, callback) => {
-                    const room = roomManager.createRoom(socket.id, playerName || 'Host');
+                socket.on('room:create', ({ playerName, maxPlayers }, callback) => {
+                    const room = roomManager.createRoom(socket.id, playerName || 'Host', maxPlayers || 6);
                     socket.join(room.id);
-                    console.log(`[Socket.IO] Room created: ${room.id} by ${socket.id}`);
+                    console.log(`[Socket.IO] Room created: ${room.id} by ${socket.id} (max: ${room.maxPlayers})`);
 
                     if (callback) {
                         callback({ success: true, room });
@@ -41,6 +41,32 @@ export function socketIOPlugin() {
 
                     // Broadcast room state
                     io.to(room.id).emit('room:state', room);
+                });
+
+                // Check room status (before joining)
+                socket.on('room:check', ({ roomId }, callback) => {
+                    const room = roomManager.getRoom(roomId);
+
+                    if (!room) {
+                        if (callback) {
+                            callback({ success: false, error: 'Room not found' });
+                        }
+                        return;
+                    }
+
+                    const isFull = room.players.length >= room.maxPlayers;
+
+                    if (callback) {
+                        callback({
+                            success: true,
+                            room: {
+                                id: room.id,
+                                playerCount: room.players.length,
+                                maxPlayers: room.maxPlayers,
+                                isFull,
+                            },
+                        });
+                    }
                 });
 
                 // Join room

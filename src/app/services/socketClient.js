@@ -90,16 +90,35 @@ export function disconnect() {
 /**
  * Create a new room
  * @param {string} playerName
+ * @param {number} [maxPlayers=6]
  * @returns {Promise<{ success: boolean; room?: any; error?: string }>}
  */
-export function createRoom(playerName) {
+export function createRoom(playerName, maxPlayers = 6) {
     return new Promise((resolve) => {
         if (!socket?.connected) {
             resolve({ success: false, error: 'Not connected' });
             return;
         }
 
-        socket.emit('room:create', { playerName }, (response) => {
+        socket.emit('room:create', { playerName, maxPlayers }, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Check room status before joining
+ * @param {string} roomId
+ * @returns {Promise<{ success: boolean; room?: any; error?: string }>}
+ */
+export function checkRoom(roomId) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        socket.emit('room:check', { roomId }, (response) => {
             resolve(response);
         });
     });
