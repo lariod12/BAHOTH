@@ -331,7 +331,7 @@ function renderRulesBookReferenceMarkup(currentTab) {
     }
 
     return `
-        <div class="welcome-container rulesbook-container">
+        <div class="welcome-container">
             <div class="welcome-content welcome-content--page welcome-content--has-bottom-gap">
                 <p class="welcome-kicker">RULESBOOK</p>
                 <div class="tabs-header">
