@@ -94,9 +94,6 @@ function renderReferenceTable() {
                     </tbody>
                 </table>
             </div>
-            <div class="table-scroll__footer">
-                <button class="link-button" type="button" data-action="back">BACK</button>
-            </div>
         </div>
     `.trim();
 }
@@ -128,7 +125,7 @@ function renderSearchControls() {
 
 function renderTraitorsTomeReferenceMarkup() {
     return `
-        <div class="welcome-container">
+        <div class="welcome-container welcome-container--scrollable">
             <div class="welcome-content welcome-content--page welcome-content--has-bottom-gap">
                 <p class="welcome-kicker">TRAITORS TOME</p>
                 <h2 class="page-title">BẢNG TRA</h2>
@@ -137,6 +134,10 @@ function renderTraitorsTomeReferenceMarkup() {
                 ${renderSearchControls()}
 
                 ${renderReferenceTable()}
+
+                <div class="page-footer">
+                    <button class="link-button" type="button" data-action="back">BACK</button>
+                </div>
             </div>
         </div>
     `.trim();

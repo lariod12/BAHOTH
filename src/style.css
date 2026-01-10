@@ -18,16 +18,29 @@ html {
     height: 100%;
 }
 
+html:has(.room-container),
+html:has(.welcome-container--scrollable) {
+    overflow-y: scroll;
+    height: auto;
+}
+
 body {
     font-family: ui-serif, Georgia, "Times New Roman", serif;
     background: var(--bg);
-    height: 100%;
     min-height: 100vh;
     color: var(--fg);
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: visible;
     -webkit-font-smoothing: antialiased;
     text-rendering: geometricPrecision;
+}
+
+body:has(.room-container),
+body:has(.welcome-container--scrollable) {
+    height: auto;
+}
+
+body:not(:has(.room-container)) {
+    height: 100%;
 }
 
 #app {
@@ -36,13 +49,25 @@ body {
 
 .welcome-container {
     width: 100%;
-    height: 100vh;
-    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     justify-content: center;
     align-items: center;
     position: relative;
     overflow: hidden;
+}
+
+.welcome-container.room-container {
+    overflow: visible;
+}
+
+.welcome-container.welcome-container--scrollable {
+    overflow: visible;
+    height: auto;
+    min-height: 100dvh;
+    align-items: flex-start;
+    padding: 32px 0;
 }
 
 .welcome-container::before {
@@ -524,9 +549,11 @@ select.field__input option {
 
 /* Room page */
 .room-container {
-    min-height: auto;
+    height: auto;
+    min-height: 100dvh;
     padding: 48px 18px 32px;
-    overflow: clip;
+    overflow: visible;
+    align-items: flex-start;
 }
 
 .room-surface {
@@ -834,7 +861,9 @@ select.field__input option {
 
 @media (max-width: 640px) {
     .room-container {
-        padding-top: 32px;
+        padding: 20px 12px 24px;
+        min-height: auto;
+        height: auto;
     }
 
     .room-header {
@@ -844,6 +873,15 @@ select.field__input option {
 
     .room-actions {
         justify-content: flex-start;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .room-actions .chip-button {
+        flex: 1;
+        text-align: center;
+        padding: 8px 12px;
+        font-size: 0.9rem;
     }
 
     .character-grid {
@@ -851,25 +889,24 @@ select.field__input option {
     }
 
     .chip-button {
-        width: 100%;
         justify-content: center;
         min-height: 44px;
     }
 
-    .room-actions {
-        width: 100%;
-        gap: 10px;
-    }
-
     .room-grid {
-        gap: 12px;
+        gap: 10px;
     }
 
     .room-mobile-tabs {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-bottom: 12px;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .room-tab {
+        padding: 10px 12px;
+        font-size: 0.9rem;
     }
 
     .room-surface[data-active-panel="players"] [data-panel="characters"] {
@@ -881,18 +918,74 @@ select.field__input option {
     }
 
     .room-panel {
-        padding: 14px;
+        padding: 12px;
         min-height: auto;
+    }
+
+    .room-panel__header {
+        margin-bottom: 10px;
+    }
+
+    .players-list {
+        gap: 6px;
+    }
+
+    .player-slot {
+        padding: 10px;
+    }
+
+    .player-slot__top {
+        margin-bottom: 4px;
+    }
+
+    .player-name {
+        font-size: 0.92rem;
+    }
+
+    .player-note {
+        font-size: 0.82rem;
+    }
+
+    .badge {
+        padding: 4px 8px;
+        font-size: 0.7rem;
     }
 
     .room-footer {
         position: static;
-        padding: 16px 0 0;
+        padding: 14px 0 0;
         background: transparent;
         backdrop-filter: none;
     }
 
     .room-start__button {
         width: 100%;
+        padding: 0.85rem 2rem;
+    }
+
+    .room-start__hint {
+        font-size: 0.85rem;
+    }
+
+    .room-hint {
+        margin-top: 8px;
+        font-size: 0.82rem;
+    }
+
+    .room-panel__header .welcome-kicker {
+        margin-bottom: 0;
+        font-size: 0.72rem;
+    }
+
+    .room-panel__meta {
+        font-size: 0.82rem;
+    }
+
+    .page-title {
+        font-size: 1.4rem;
+    }
+
+    .room-subtitle {
+        font-size: 0.88rem;
     }
 }
