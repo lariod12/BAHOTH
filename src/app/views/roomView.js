@@ -19,7 +19,12 @@ function renderRoomMarkup({ roomId }) {
                 </header>
 
                 <div class="room-grid">
-                    <section class="room-panel room-panel--players">
+                    <nav class="room-mobile-tabs" aria-label="Room sections">
+                        <button class="room-tab is-active" type="button" data-tab="players" aria-pressed="true">Players</button>
+                        <button class="room-tab" type="button" data-tab="characters" aria-pressed="false">Characters</button>
+                    </nav>
+
+                    <section class="room-panel room-panel--players" data-panel="players">
                         <div class="room-panel__header">
                             <p class="welcome-kicker">Players</p>
                             <p class="room-panel__meta">4 / ${MOCK_MAX_PLAYERS}</p>
@@ -119,7 +124,7 @@ function renderRoomMarkup({ roomId }) {
                         <p class="room-hint">Min ${MOCK_MIN_PLAYERS} players to start · Max ${MOCK_MAX_PLAYERS} players</p>
                     </section>
 
-                    <section class="room-panel room-panel--characters">
+                    <section class="room-panel room-panel--characters" data-panel="characters">
                         <div class="room-panel__header">
                             <p class="welcome-kicker">Choose character</p>
                             <p class="room-panel__meta">UI-only mock</p>
@@ -192,6 +197,30 @@ export function renderRoomView({ mountEl, onNavigate }) {
     const roomId = MOCK_ROOM_ID;
 
     mountEl.innerHTML = renderRoomMarkup({ roomId });
+
+    const mobileTabs = Array.from(mountEl.querySelectorAll('[data-tab]'));
+    const setMobileTab = (tab) => {
+        const surface = mountEl.querySelector('.room-surface');
+        if (surface) {
+            surface.setAttribute('data-active-panel', tab);
+        }
+
+        for (const btn of mobileTabs) {
+            const isActive = btn.getAttribute('data-tab') === tab;
+            btn.classList.toggle('is-active', isActive);
+            btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        }
+    };
+
+    for (const tabButton of mobileTabs) {
+        tabButton.addEventListener('click', () => {
+            const tab = tabButton.getAttribute('data-tab');
+            if (!tab) return;
+            setMobileTab(tab);
+        });
+    }
+
+    setMobileTab('players');
 
     const copyButton = mountEl.querySelector('[data-action="copy-id"]');
     copyButton?.addEventListener('click', async () => {
