@@ -1,5 +1,16 @@
-// Room Manager - In-memory room storage and logic
+// Room Manager - JSON file-based room storage and logic
 // This module manages all room state for the Socket.IO server.
+// Rooms are persisted to server/data/rooms.json
+
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const DATA_DIR = join(__dirname, 'data');
+const ROOMS_FILE = join(DATA_DIR, 'rooms.json');
 
 /**
  * @typedef {'joined' | 'selecting' | 'ready'} PlayerStatus
@@ -17,8 +28,14 @@
  *   players: Player[];
  *   maxPlayers: number;
  *   minPlayers: number;
- *   createdAt: Date;
+ *   createdAt: string;
  * }} Room
+ *
+ * @typedef {{
+ *   rooms: Record<string, Room>;
+ *   socketToRoom: Record<string, string>;
+ *   lastUpdated: string;
+ * }} RoomsData
  */
 
 /** @type {Map<string, Room>} */
@@ -26,6 +43,72 @@ const rooms = new Map();
 
 /** @type {Map<string, string>} */
 const socketToRoom = new Map();
+
+/**
+ * Ensure data directory exists
+ */
+function ensureDataDir() {
+    if (!existsSync(DATA_DIR)) {
+        mkdirSync(DATA_DIR, { recursive: true });
+    }
+}
+
+/**
+ * Load rooms from JSON file
+ */
+function loadRooms() {
+    ensureDataDir();
+
+    if (!existsSync(ROOMS_FILE)) {
+        console.log('[RoomManager] No rooms.json found, starting fresh');
+        return;
+    }
+
+    try {
+        const data = readFileSync(ROOMS_FILE, 'utf-8');
+        const parsed = JSON.parse(data);
+
+        // Load rooms
+        if (parsed.rooms) {
+            for (const [id, room] of Object.entries(parsed.rooms)) {
+                rooms.set(id, room);
+            }
+        }
+
+        // Load socket mappings
+        if (parsed.socketToRoom) {
+            for (const [socketId, roomId] of Object.entries(parsed.socketToRoom)) {
+                socketToRoom.set(socketId, roomId);
+            }
+        }
+
+        console.log(`[RoomManager] Loaded ${rooms.size} rooms from rooms.json`);
+    } catch (error) {
+        console.error('[RoomManager] Error loading rooms.json:', error);
+    }
+}
+
+/**
+ * Save rooms to JSON file
+ */
+function saveRooms() {
+    ensureDataDir();
+
+    const data = {
+        rooms: Object.fromEntries(rooms),
+        socketToRoom: Object.fromEntries(socketToRoom),
+        lastUpdated: new Date().toISOString(),
+    };
+
+    try {
+        writeFileSync(ROOMS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (error) {
+        console.error('[RoomManager] Error saving rooms.json:', error);
+    }
+}
+
+// Load rooms on startup
+loadRooms();
 
 /**
  * Generate a random room ID like BAH-XXXXXX
@@ -66,11 +149,12 @@ export function createRoom(hostSocketId, hostName) {
         ],
         maxPlayers: 6,
         minPlayers: 3,
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
     };
 
     rooms.set(roomId, room);
     socketToRoom.set(hostSocketId, roomId);
+    saveRooms();
 
     return room;
 }
@@ -107,6 +191,7 @@ export function joinRoom(roomId, socketId, playerName) {
     });
 
     socketToRoom.set(socketId, roomId);
+    saveRooms();
 
     return { success: true, room };
 }
@@ -125,6 +210,7 @@ export function leaveRoom(socketId) {
     const room = rooms.get(roomId);
     if (!room) {
         socketToRoom.delete(socketId);
+        saveRooms();
         return { wasHost: false, roomDeleted: false };
     }
 
@@ -137,6 +223,7 @@ export function leaveRoom(socketId) {
     // If room is empty, delete it
     if (room.players.length === 0) {
         rooms.delete(roomId);
+        saveRooms();
         return { wasHost, roomDeleted: true };
     }
 
@@ -145,6 +232,7 @@ export function leaveRoom(socketId) {
         room.hostId = room.players[0].id;
     }
 
+    saveRooms();
     return { room, wasHost, roomDeleted: false };
 }
 
@@ -180,6 +268,7 @@ export function updatePlayerStatus(socketId, status) {
     const player = room.players.find((p) => p.id === socketId);
     if (player) {
         player.status = status;
+        saveRooms();
     }
 
     return room;
@@ -214,6 +303,7 @@ export function selectCharacter(socketId, characterId) {
         if (characterId && player.status === 'joined') {
             player.status = 'selecting';
         }
+        saveRooms();
     }
 
     return { success: true, room };
@@ -241,6 +331,7 @@ export function toggleReady(socketId) {
     }
 
     player.status = player.status === 'ready' ? 'selecting' : 'ready';
+    saveRooms();
 
     return { success: true, room };
 }
@@ -281,6 +372,7 @@ export function updatePlayerName(socketId, name) {
     const player = room.players.find((p) => p.id === socketId);
     if (player) {
         player.name = name;
+        saveRooms();
     }
 
     return room;
@@ -292,4 +384,67 @@ export function updatePlayerName(socketId, name) {
  */
 export function getAllRooms() {
     return Array.from(rooms.values());
+}
+
+/**
+ * Clean up old/stale rooms (rooms with no players or older than 24 hours)
+ */
+export function cleanupStaleRooms() {
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+    let cleaned = 0;
+    for (const [roomId, room] of rooms.entries()) {
+        const createdAt = new Date(room.createdAt).getTime();
+        const isOld = now - createdAt > maxAge;
+        const isEmpty = room.players.length === 0;
+
+        if (isOld || isEmpty) {
+            // Clean up socket mappings
+            for (const player of room.players) {
+                socketToRoom.delete(player.id);
+            }
+            rooms.delete(roomId);
+            cleaned++;
+        }
+    }
+
+    if (cleaned > 0) {
+        console.log(`[RoomManager] Cleaned up ${cleaned} stale rooms`);
+        saveRooms();
+    }
+
+    return cleaned;
+}
+
+/**
+ * Reconnect a player to their room (for reconnection handling)
+ * @param {string} oldSocketId
+ * @param {string} newSocketId
+ * @returns {Room | undefined}
+ */
+export function reconnectPlayer(oldSocketId, newSocketId) {
+    const roomId = socketToRoom.get(oldSocketId);
+    if (!roomId) return undefined;
+
+    const room = rooms.get(roomId);
+    if (!room) return undefined;
+
+    const player = room.players.find((p) => p.id === oldSocketId);
+    if (!player) return undefined;
+
+    // Update player's socket ID
+    player.id = newSocketId;
+
+    // Update host if needed
+    if (room.hostId === oldSocketId) {
+        room.hostId = newSocketId;
+    }
+
+    // Update socket mapping
+    socketToRoom.delete(oldSocketId);
+    socketToRoom.set(newSocketId, roomId);
+
+    saveRooms();
+    return room;
 }
