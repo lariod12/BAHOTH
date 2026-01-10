@@ -17,6 +17,21 @@ function getRoute(hash) {
     return route.startsWith('/') ? route : `/${route}`;
 }
 
+/**
+ * Parse route and extract params
+ * @param {string} route
+ * @returns {{ path: string; params: Record<string, string> }}
+ */
+function parseRoute(route) {
+    // Match /room/:roomId pattern
+    const roomMatch = route.match(/^\/room\/([A-Z0-9-]+)$/i);
+    if (roomMatch) {
+        return { path: '/room/:roomId', params: { roomId: roomMatch[1] } };
+    }
+
+    return { path: route, params: {} };
+}
+
 function navigateTo(hash) {
     const normalized = normalizeHash(hash);
     if (window.location.hash !== normalized) {
@@ -26,33 +41,41 @@ function navigateTo(hash) {
 
 function renderRoute({ mountEl }) {
     const route = getRoute(window.location.hash);
+    const { path, params } = parseRoute(route);
 
-    if (route === '/' || route === '/home') {
+    if (path === '/' || path === '/home') {
         renderHomeView({ mountEl, onNavigate: navigateTo });
         return;
     }
 
-    if (route === '/room') {
-        renderRoomView({ mountEl, onNavigate: navigateTo });
+    // Room with specific ID: /room/BAH-XXXXXX
+    if (path === '/room/:roomId') {
+        renderRoomView({ mountEl, onNavigate: navigateTo, roomId: params.roomId });
         return;
     }
 
-    if (route === '/tutorial') {
+    // Room without ID (create new room)
+    if (path === '/room') {
+        renderRoomView({ mountEl, onNavigate: navigateTo, roomId: null });
+        return;
+    }
+
+    if (path === '/tutorial') {
         renderTutorialBooksView({ mountEl, onNavigate: navigateTo });
         return;
     }
 
-    if (route === '/tutorial/traitors-tome') {
+    if (path === '/tutorial/traitors-tome') {
         renderTraitorsTomeReferenceView({ mountEl, onNavigate: navigateTo });
         return;
     }
 
-    if (route === '/tutorial/survival') {
+    if (path === '/tutorial/survival') {
         renderTraitorsTomeReferenceView({ mountEl, onNavigate: navigateTo });
         return;
     }
 
-    if (route === '/tutorial/rulesbook') {
+    if (path === '/tutorial/rulesbook') {
         renderRulesBookReferenceView({ mountEl, onNavigate: navigateTo });
         return;
     }
@@ -65,5 +88,3 @@ export function initRouter({ mountEl }) {
     window.addEventListener('hashchange', () => renderRoute({ mountEl }));
     renderRoute({ mountEl });
 }
-
-

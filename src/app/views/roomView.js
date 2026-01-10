@@ -1,50 +1,164 @@
 import { CHARACTERS, CHARACTER_BY_ID } from '../data/charactersData.js';
+import * as socketClient from '../services/socketClient.js';
 
-const MOCK_ROOM_ID = 'BAH-123456';
-const MOCK_MIN_PLAYERS = 3;
-const MOCK_MAX_PLAYERS = 6;
+const MIN_PLAYERS = 3;
+const MAX_PLAYERS = 6;
+
+// Current room state
+let currentRoom = null;
+let mySocketId = null;
+let unsubscribeRoomState = null;
 
 /**
- * Get a short description for a character (first sentence of VI info, or fallback).
- * @param {import('../data/charactersData.js').CharacterDef} char
- * @returns {string}
+ * Get character name by ID (Vietnamese)
+ */
+function getCharacterName(charId) {
+    const char = CHARACTER_BY_ID[charId];
+    if (!char) return null;
+    return char.name.vi || char.name.nickname || char.name.en;
+}
+
+/**
+ * Get a short description for a character
  */
 function getCharacterShortDesc(char) {
     const info = char.profile?.vi?.info || char.profile?.en?.info || '';
-    // Take first sentence (up to first period followed by space or end)
     const firstSentence = info.split(/\.\s/)[0];
     if (firstSentence && firstSentence.length > 0) {
-        // Limit length for card display
         const maxLen = 60;
         if (firstSentence.length > maxLen) {
             return firstSentence.slice(0, maxLen).trim() + '...';
         }
         return firstSentence + '.';
     }
-    return 'Nhân vật trong Betrayal at House on the Hill.';
+    return 'Nhan vat trong Betrayal at House on the Hill.';
 }
 
 /**
- * Render a single character card.
- * @param {import('../data/charactersData.js').CharacterDef} char
- * @param {{ isSelected?: boolean; isTaken?: boolean }} options
- * @returns {string}
+ * Check if a character is taken by another player
  */
-function renderCharacterCard(char, { isSelected = false, isTaken = false } = {}) {
+function isCharacterTaken(charId, room, myId) {
+    if (!room) return false;
+    return room.players.some(p => p.id !== myId && p.characterId === charId);
+}
+
+/**
+ * Get my player from room
+ */
+function getMyPlayer(room, myId) {
+    if (!room) return null;
+    return room.players.find(p => p.id === myId);
+}
+
+/**
+ * Check if I am host
+ */
+function isHost(room, myId) {
+    return room?.hostId === myId;
+}
+
+/**
+ * Render player slot
+ */
+function renderPlayerSlot(player, room, myId) {
+    const isMe = player.id === myId;
+    const isPlayerHost = player.id === room.hostId;
+    const charName = player.characterId ? getCharacterName(player.characterId) : null;
+
+    let statusBadge = '';
+    let statusNote = '';
+
+    switch (player.status) {
+        case 'ready':
+            statusBadge = '<span class="badge badge--success">Ready</span>';
+            statusNote = charName || 'Character locked in';
+            break;
+        case 'selecting':
+            statusBadge = '<span class="badge badge--muted">Selecting</span>';
+            statusNote = charName || 'Choosing a character...';
+            break;
+        case 'joined':
+        default:
+            statusBadge = '<span class="badge badge--muted">Not Ready</span>';
+            statusNote = 'Joined the room';
+            break;
+    }
+
+    const hostBadge = isPlayerHost ? '<span class="badge badge--accent">HOST</span>' : statusBadge;
+    const displayName = isMe ? 'You' : player.name;
+
+    return `
+        <div class="player-slot ${isPlayerHost ? 'is-host' : ''}">
+            <div class="player-slot__top">
+                <span class="player-name">${displayName}</span>
+                ${hostBadge}
+            </div>
+            <div class="player-slot__status">
+                ${isPlayerHost ? statusBadge : ''}
+                <span class="player-note">${statusNote}</span>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render waiting slot
+ */
+function renderWaitingSlot(slotNum, totalPlayers) {
+    let note = 'Share the Room ID to invite';
+    if (slotNum === 1) note = 'Share the Room ID to invite';
+    else if (totalPlayers < MIN_PLAYERS) note = 'Min ' + MIN_PLAYERS + ' players required';
+    else note = 'Slots remain open';
+
+    return `
+        <div class="player-slot is-waiting">
+            <div class="player-slot__top">
+                <span class="player-name">Waiting for player...</span>
+                <span class="badge badge--muted">Slot ${slotNum}</span>
+            </div>
+            <div class="player-slot__status">
+                <span class="player-note">${note}</span>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render players list
+ */
+function renderPlayersList(room, myId) {
+    if (!room) return '';
+
+    const playerSlots = room.players.map(p => renderPlayerSlot(p, room, myId)).join('');
+    const waitingCount = MAX_PLAYERS - room.players.length;
+    const waitingSlots = Array.from({ length: waitingCount }, (_, i) =>
+        renderWaitingSlot(i + 1, room.players.length)
+    ).join('');
+
+    return playerSlots + waitingSlots;
+}
+
+/**
+ * Render character card
+ */
+function renderCharacterCard(char, room, myId) {
     const name = char.name.vi || char.name.nickname || char.name.en;
     const desc = getCharacterShortDesc(char);
+    const myPlayer = getMyPlayer(room, myId);
+    const isTaken = isCharacterTaken(char.id, room, myId);
+    const isSelected = myPlayer?.characterId === char.id;
 
     let stateClass = '';
     let badgeClass = 'badge--muted';
-    let badgeText = 'Có sẵn';
+    let badgeText = 'Co san';
 
     if (isTaken) {
         stateClass = 'is-taken';
-        badgeText = 'Đã chọn';
+        badgeText = 'Da chon';
     } else if (isSelected) {
         stateClass = 'is-selected';
         badgeClass = 'badge--accent';
-        badgeText = 'Đang chọn';
+        badgeText = 'Dang chon';
     }
 
     return `
@@ -55,29 +169,21 @@ function renderCharacterCard(char, { isSelected = false, isTaken = false } = {})
             </div>
             <p class="character-note">${desc}</p>
             <button class="character-info-btn" type="button" data-action="view-character" data-character-id="${char.id}">
-                Xem chi tiết
+                Xem chi tiet
             </button>
         </div>
     `.trim();
 }
 
 /**
- * Render all character cards.
- * For demo purposes, first character is selected, fourth is taken.
- * @returns {string}
+ * Render character grid
  */
-function renderCharacterCards() {
-    return CHARACTERS.map((char, index) => {
-        // Demo: index 0 = selected, index 3 = taken by another player
-        const isSelected = index === 0;
-        const isTaken = index === 3;
-        return renderCharacterCard(char, { isSelected, isTaken });
-    }).join('\n');
+function renderCharacterGrid(room, myId) {
+    return CHARACTERS.map(char => renderCharacterCard(char, room, myId)).join('\n');
 }
 
 /**
- * Render the character detail modal markup.
- * @returns {string}
+ * Render character modal
  */
 function renderCharacterModal() {
     return `
@@ -86,103 +192,96 @@ function renderCharacterModal() {
             <div class="character-modal__content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
                 <header class="character-modal__header">
                     <h2 class="character-modal__title" id="modal-title"></h2>
-                    <button class="character-modal__close" type="button" data-action="close-modal" aria-label="Đóng">
-                        &times;
-                    </button>
+                    <button class="character-modal__close" type="button" data-action="close-modal" aria-label="Dong">x</button>
                 </header>
-                <div class="character-modal__body" id="modal-body">
-                    <!-- Dynamic content inserted here -->
-                </div>
+                <div class="character-modal__body" id="modal-body"></div>
             </div>
         </div>
     `.trim();
 }
 
 /**
- * Render character detail content for modal.
- * @param {import('../data/charactersData.js').CharacterDef} char
- * @returns {string}
+ * Render character detail for modal
  */
 function renderCharacterDetail(char) {
     const bio = char.bio.vi;
     const profile = char.profile?.vi || char.profile?.en || {};
-
-    const hobbies = bio.hobbies?.join(', ') || 'Không rõ';
-    const fear = profile.fear || 'Không rõ';
+    const hobbies = bio.hobbies?.join(', ') || 'Khong ro';
+    const fear = profile.fear || 'Khong ro';
     const info = profile.info || '';
 
-    // Build traits display
-    const traitLabels = {
-        speed: 'Tốc độ',
-        might: 'Sức mạnh',
-        sanity: 'Tâm trí',
-        knowledge: 'Kiến thức',
-    };
+    const traitLabels = { speed: 'Toc do', might: 'Suc manh', sanity: 'Tam tri', knowledge: 'Kien thuc' };
 
     const traitsHtml = Object.entries(char.traits)
         .map(([key, trait]) => {
             const label = traitLabels[key] || key;
-            // Render track with start index highlighted in green
             const trackHtml = trait.track
-                .map((val, idx) => {
-                    if (idx === trait.startIndex) {
-                        return `<span class="trait-value trait-value--start">${val}</span>`;
-                    }
-                    return `<span class="trait-value">${val}</span>`;
-                })
+                .map((val, idx) => idx === trait.startIndex
+                    ? `<span class="trait-value trait-value--start">${val}</span>`
+                    : `<span class="trait-value">${val}</span>`
+                )
                 .join('<span class="trait-sep"> - </span>');
-            return `
-                <div class="trait-row">
-                    <span class="trait-label">${label}</span>
-                    <span class="trait-track">${trackHtml}</span>
-                </div>
-            `;
+            return `<div class="trait-row"><span class="trait-label">${label}</span><span class="trait-track">${trackHtml}</span></div>`;
         })
         .join('');
 
     return `
         <div class="character-detail">
             <div class="character-detail__bio">
-                <div class="detail-row">
-                    <span class="detail-label">Tuổi:</span>
-                    <span class="detail-value">${bio.age}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Chiều cao:</span>
-                    <span class="detail-value">${bio.height}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Cân nặng:</span>
-                    <span class="detail-value">${bio.weight}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Sinh nhật:</span>
-                    <span class="detail-value">${bio.birthday}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Sở thích:</span>
-                    <span class="detail-value">${hobbies}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Nỗi sợ:</span>
-                    <span class="detail-value">${fear}</span>
-                </div>
+                <div class="detail-row"><span class="detail-label">Tuoi:</span><span class="detail-value">${bio.age}</span></div>
+                <div class="detail-row"><span class="detail-label">Chieu cao:</span><span class="detail-value">${bio.height}</span></div>
+                <div class="detail-row"><span class="detail-label">Can nang:</span><span class="detail-value">${bio.weight}</span></div>
+                <div class="detail-row"><span class="detail-label">Sinh nhat:</span><span class="detail-value">${bio.birthday}</span></div>
+                <div class="detail-row"><span class="detail-label">So thich:</span><span class="detail-value">${hobbies}</span></div>
+                <div class="detail-row"><span class="detail-label">Noi so:</span><span class="detail-value">${fear}</span></div>
             </div>
-
             <div class="character-detail__traits">
-                <h3 class="detail-section-title">Chỉ số</h3>
+                <h3 class="detail-section-title">Chi so</h3>
                 ${traitsHtml}
             </div>
-
             <div class="character-detail__story">
-                <h3 class="detail-section-title">Tiểu sử</h3>
+                <h3 class="detail-section-title">Tieu su</h3>
                 <p class="detail-info">${info.replace(/\n\n/g, '</p><p class="detail-info">')}</p>
             </div>
         </div>
     `.trim();
 }
 
-function renderRoomMarkup({ roomId }) {
+/**
+ * Check if game can start
+ */
+function canStartGame(room) {
+    if (!room) return false;
+    if (room.players.length < MIN_PLAYERS) return false;
+    return room.players.every(p => p.status === 'ready');
+}
+
+/**
+ * Render room markup
+ */
+function renderRoomMarkup(room, myId) {
+    const roomId = room?.id || 'Loading...';
+    const playerCount = room?.players?.length || 0;
+    const myPlayer = getMyPlayer(room, myId);
+    const amHost = isHost(room, myId);
+    const canStart = canStartGame(room);
+
+    // Ready button for non-host players
+    const readyButton = !amHost && myPlayer?.characterId
+        ? `<button class="action-button ${myPlayer.status === 'ready' ? 'action-button--secondary' : 'action-button--primary'}" type="button" data-action="toggle-ready">
+            ${myPlayer.status === 'ready' ? 'Cancel Ready' : 'Ready'}
+           </button>`
+        : '';
+
+    // Start button for host
+    const startButton = amHost
+        ? `<button class="action-button action-button--primary room-start__button" type="button" data-action="start-room" ${!canStart ? 'disabled' : ''}>Start</button>`
+        : '';
+
+    const startHint = amHost
+        ? (canStart ? `All players ready (${playerCount}/${MAX_PLAYERS}). Ready to start!` : `Waiting for players... (${playerCount}/${MAX_PLAYERS})`)
+        : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
+
     return `
         <div class="welcome-container room-container">
             <div class="room-surface">
@@ -207,118 +306,30 @@ function renderRoomMarkup({ roomId }) {
                     <section class="room-panel room-panel--players" data-panel="players">
                         <div class="room-panel__header">
                             <p class="welcome-kicker">Players</p>
-                            <p class="room-panel__meta">4 / ${MOCK_MAX_PLAYERS}</p>
+                            <p class="room-panel__meta">${playerCount} / ${MAX_PLAYERS}</p>
                         </div>
-                        <div class="players-list">
-                            <div class="player-slot is-host">
-                                <div class="player-slot__top">
-                                    <span class="player-name">You</span>
-                                    <span class="badge badge--accent">HOST</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="badge badge--success">Ready</span>
-                                    <span class="player-note">Creator of this room</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Player 2</span>
-                                    <span class="badge badge--success">Ready</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Character locked in</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Player 3</span>
-                                    <span class="badge badge--muted">Selecting</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Choosing a character...</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Player 4</span>
-                                    <span class="badge badge--muted">Not Ready</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Joined the room</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot is-waiting">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Waiting for player...</span>
-                                    <span class="badge badge--muted">Slot 2</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Share the Room ID to invite</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot is-waiting">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Waiting for player...</span>
-                                    <span class="badge badge--muted">Slot 3</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Min ${MOCK_MIN_PLAYERS} players required</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot is-waiting">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Waiting for player...</span>
-                                    <span class="badge badge--muted">Slot 4</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Slots remain open</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot is-waiting">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Waiting for player...</span>
-                                    <span class="badge badge--muted">Slot 5</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Up to ${MOCK_MAX_PLAYERS} players</span>
-                                </div>
-                            </div>
-
-                            <div class="player-slot is-waiting">
-                                <div class="player-slot__top">
-                                    <span class="player-name">Waiting for player...</span>
-                                    <span class="badge badge--muted">Slot 6</span>
-                                </div>
-                                <div class="player-slot__status">
-                                    <span class="player-note">Invite link or Room ID</span>
-                                </div>
-                            </div>
+                        <div class="players-list" id="players-list">
+                            ${renderPlayersList(room, myId)}
                         </div>
-                        <p class="room-hint">Min ${MOCK_MIN_PLAYERS} players to start · Max ${MOCK_MAX_PLAYERS} players</p>
+                        <p class="room-hint">Min ${MIN_PLAYERS} players to start - Max ${MAX_PLAYERS} players</p>
                     </section>
 
                     <section class="room-panel room-panel--characters" data-panel="characters">
                         <div class="room-panel__header">
-                            <p class="welcome-kicker">Chọn nhân vật</p>
+                            <p class="welcome-kicker">Chon nhan vat</p>
                         </div>
-                        <div class="character-grid">
-                            ${renderCharacterCards()}
+                        <div class="character-grid" id="character-grid">
+                            ${renderCharacterGrid(room, myId)}
                         </div>
-                        <p class="room-hint">Nhấn vào nhân vật để chọn</p>
+                        <p class="room-hint">Nhan vao nhan vat de chon</p>
                     </section>
                 </div>
 
                 <footer class="room-footer">
                     <div class="room-start">
-                        <button class="action-button action-button--primary room-start__button" type="button" data-action="start-room">Start</button>
-                        <p class="room-start__hint">Minimum reached (4 / 6). Ready to start.</p>
+                        ${readyButton}
+                        ${startButton}
+                        <p class="room-start__hint">${startHint}</p>
                     </div>
                 </footer>
             </div>
@@ -327,66 +338,246 @@ function renderRoomMarkup({ roomId }) {
     `.trim();
 }
 
-export function renderRoomView({ mountEl, onNavigate }) {
-    const roomId = MOCK_ROOM_ID;
+/**
+ * Update room UI without full re-render
+ */
+function updateRoomUI(mountEl, room, myId) {
+    // Update players list
+    const playersList = mountEl.querySelector('#players-list');
+    if (playersList) {
+        playersList.innerHTML = renderPlayersList(room, myId);
+    }
 
-    mountEl.innerHTML = renderRoomMarkup({ roomId });
+    // Update character grid
+    const characterGrid = mountEl.querySelector('#character-grid');
+    if (characterGrid) {
+        characterGrid.innerHTML = renderCharacterGrid(room, myId);
+        attachCharacterCardListeners(mountEl, room, myId);
+    }
 
-    // Modal controls
+    // Update player count
+    const meta = mountEl.querySelector('.room-panel__meta');
+    if (meta) {
+        meta.textContent = `${room.players.length} / ${MAX_PLAYERS}`;
+    }
+
+    // Update footer buttons and hint
+    const footer = mountEl.querySelector('.room-footer .room-start');
+    if (footer) {
+        const myPlayer = getMyPlayer(room, myId);
+        const amHost = isHost(room, myId);
+        const canStart = canStartGame(room);
+
+        let footerHtml = '';
+
+        if (!amHost && myPlayer?.characterId) {
+            footerHtml += `<button class="action-button ${myPlayer.status === 'ready' ? 'action-button--secondary' : 'action-button--primary'}" type="button" data-action="toggle-ready">
+                ${myPlayer.status === 'ready' ? 'Cancel Ready' : 'Ready'}
+            </button>`;
+        }
+
+        if (amHost) {
+            footerHtml += `<button class="action-button action-button--primary room-start__button" type="button" data-action="start-room" ${!canStart ? 'disabled' : ''}>Start</button>`;
+        }
+
+        const hint = amHost
+            ? (canStart ? `All players ready (${room.players.length}/${MAX_PLAYERS}). Ready to start!` : `Waiting for players... (${room.players.length}/${MAX_PLAYERS})`)
+            : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
+
+        footerHtml += `<p class="room-start__hint">${hint}</p>`;
+
+        footer.innerHTML = footerHtml;
+        attachFooterListeners(mountEl);
+    }
+}
+
+/**
+ * Attach character card click listeners
+ */
+function attachCharacterCardListeners(mountEl, room, myId) {
+    const characterCards = mountEl.querySelectorAll('[data-character]');
+
+    for (const card of characterCards) {
+        if (card.classList.contains('is-taken')) continue;
+
+        card.addEventListener('click', async (e) => {
+            const target = e.target;
+            if (target.closest('[data-action="view-character"]')) return;
+
+            const charId = card.getAttribute('data-character');
+            if (!charId) return;
+
+            // Select character via socket
+            const result = await socketClient.selectCharacter(charId);
+            if (!result.success) {
+                console.error('Failed to select character:', result.error);
+            }
+        });
+    }
+
+    // View character detail buttons
+    const viewButtons = mountEl.querySelectorAll('[data-action="view-character"]');
+    for (const btn of viewButtons) {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const charId = btn.getAttribute('data-character-id');
+            if (charId) openCharacterModal(mountEl, charId);
+        });
+    }
+}
+
+/**
+ * Attach footer button listeners
+ */
+function attachFooterListeners(mountEl) {
+    const readyButton = mountEl.querySelector('[data-action="toggle-ready"]');
+    readyButton?.addEventListener('click', async () => {
+        const result = await socketClient.toggleReady();
+        if (!result.success) {
+            console.error('Failed to toggle ready:', result.error);
+        }
+    });
+
+    const startButton = mountEl.querySelector('[data-action="start-room"]');
+    startButton?.addEventListener('click', async () => {
+        const result = await socketClient.startGame();
+        if (!result.success) {
+            alert(result.error || 'Cannot start game');
+        }
+    });
+}
+
+/**
+ * Open character modal
+ */
+function openCharacterModal(mountEl, charId) {
+    const char = CHARACTER_BY_ID[charId];
     const modal = mountEl.querySelector('#character-modal');
     const modalTitle = mountEl.querySelector('#modal-title');
     const modalBody = mountEl.querySelector('#modal-body');
 
-    const openModal = (charId) => {
-        const char = CHARACTER_BY_ID[charId];
-        if (!char || !modal || !modalTitle || !modalBody) return;
+    if (!char || !modal || !modalTitle || !modalBody) return;
 
-        modalTitle.textContent = char.name.vi || char.name.nickname || char.name.en;
-        modalBody.innerHTML = renderCharacterDetail(char);
-        modal.setAttribute('aria-hidden', 'false');
-        modal.classList.add('is-open');
-        document.body.style.overflow = 'hidden';
-    };
+    modalTitle.textContent = char.name.vi || char.name.nickname || char.name.en;
+    modalBody.innerHTML = renderCharacterDetail(char);
+    modal.setAttribute('aria-hidden', 'false');
+    modal.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+}
 
-    const closeModal = () => {
-        if (!modal) return;
-        modal.setAttribute('aria-hidden', 'true');
-        modal.classList.remove('is-open');
-        document.body.style.overflow = '';
-    };
+/**
+ * Close character modal
+ */
+function closeCharacterModal(mountEl) {
+    const modal = mountEl.querySelector('#character-modal');
+    if (!modal) return;
+    modal.setAttribute('aria-hidden', 'true');
+    modal.classList.remove('is-open');
+    document.body.style.overflow = '';
+}
 
-    // Close modal on backdrop or close button click
-    mountEl.addEventListener('click', (e) => {
-        const target = /** @type {HTMLElement} */ (e.target);
-        if (target.closest('[data-action="close-modal"]')) {
-            closeModal();
+/**
+ * Main render function
+ */
+export async function renderRoomView({ mountEl, onNavigate, roomId }) {
+    // Connect to socket
+    socketClient.connect();
+    mySocketId = socketClient.getSocketId();
+
+    // If roomId provided, try to join that room
+    if (roomId) {
+        // Check if we're already in this room
+        const stateResult = await socketClient.getRoomState(roomId);
+        if (stateResult.success && stateResult.room) {
+            currentRoom = stateResult.room;
+            mySocketId = socketClient.getSocketId();
+
+            // Check if I'm already in the room
+            const myPlayer = currentRoom.players.find(p => p.id === mySocketId);
+            if (!myPlayer) {
+                // Need to join the room
+                const joinResult = await socketClient.joinRoom(roomId, 'Player');
+                if (!joinResult.success) {
+                    alert(joinResult.error || 'Failed to join room');
+                    onNavigate('#/');
+                    return;
+                }
+                currentRoom = joinResult.room;
+            }
+        } else {
+            // Room doesn't exist
+            alert('Room not found');
+            onNavigate('#/');
+            return;
         }
-    });
-
-    // Close modal on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal?.classList.contains('is-open')) {
-            closeModal();
-        }
-    });
-
-    // View character detail button
-    const viewButtons = mountEl.querySelectorAll('[data-action="view-character"]');
-    for (const btn of viewButtons) {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Don't trigger card selection
-            const charId = btn.getAttribute('data-character-id');
-            if (charId) openModal(charId);
-        });
     }
 
+    // Wait for socket ID
+    await new Promise(resolve => {
+        const checkId = () => {
+            mySocketId = socketClient.getSocketId();
+            if (mySocketId) {
+                resolve();
+            } else {
+                setTimeout(checkId, 50);
+            }
+        };
+        checkId();
+    });
+
+    // Render initial UI
+    mountEl.innerHTML = renderRoomMarkup(currentRoom, mySocketId);
+
+    // Subscribe to room state updates
+    unsubscribeRoomState = socketClient.onRoomState((room) => {
+        currentRoom = room;
+        mySocketId = socketClient.getSocketId();
+        updateRoomUI(mountEl, room, mySocketId);
+    });
+
+    // Set up event listeners
+    setupEventListeners(mountEl, onNavigate);
+
+    // Update status when switching to characters tab
+    const mobileTabs = mountEl.querySelectorAll('[data-tab]');
+    for (const tabButton of mobileTabs) {
+        tabButton.addEventListener('click', async () => {
+            const tab = tabButton.getAttribute('data-tab');
+            if (tab === 'characters') {
+                const myPlayer = getMyPlayer(currentRoom, mySocketId);
+                if (myPlayer && myPlayer.status === 'joined') {
+                    await socketClient.updateStatus('selecting');
+                }
+            }
+        });
+    }
+}
+
+/**
+ * Set up event listeners
+ */
+function setupEventListeners(mountEl, onNavigate) {
+    // Modal close
+    mountEl.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.closest('[data-action="close-modal"]')) {
+            closeCharacterModal(mountEl);
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeCharacterModal(mountEl);
+        }
+    });
+
+    // Tab switching
     const mobileTabs = Array.from(mountEl.querySelectorAll('[data-tab]'));
     const setMobileTab = (tab) => {
         const surface = mountEl.querySelector('.room-surface');
         if (surface) {
             surface.setAttribute('data-active-panel', tab);
         }
-
         for (const btn of mobileTabs) {
             const isActive = btn.getAttribute('data-tab') === tab;
             btn.classList.toggle('is-active', isActive);
@@ -397,65 +588,41 @@ export function renderRoomView({ mountEl, onNavigate }) {
     for (const tabButton of mobileTabs) {
         tabButton.addEventListener('click', () => {
             const tab = tabButton.getAttribute('data-tab');
-            if (!tab) return;
-            setMobileTab(tab);
+            if (tab) setMobileTab(tab);
         });
     }
-
     setMobileTab('players');
 
+    // Copy ID
     const copyButton = mountEl.querySelector('[data-action="copy-id"]');
     copyButton?.addEventListener('click', async () => {
+        const roomIdText = currentRoom?.id || '';
+        const fullUrl = window.location.origin + window.location.pathname + '#/room/' + roomIdText;
         try {
-            await navigator.clipboard.writeText(roomId);
+            await navigator.clipboard.writeText(fullUrl);
             copyButton.textContent = 'Copied';
             setTimeout(() => {
                 copyButton.textContent = 'Copy ID';
             }, 1800);
         } catch (error) {
             console.warn('Clipboard API unavailable', error);
-            alert(`Room ID: ${roomId}`);
+            prompt('Copy this link:', fullUrl);
         }
     });
 
+    // Leave room
     const leaveButton = mountEl.querySelector('[data-action="leave-room"]');
-    leaveButton?.addEventListener('click', () => {
+    leaveButton?.addEventListener('click', async () => {
+        await socketClient.leaveRoom();
+        if (unsubscribeRoomState) {
+            unsubscribeRoomState();
+            unsubscribeRoomState = null;
+        }
+        currentRoom = null;
         onNavigate('#/');
     });
 
-    const characterCards = Array.from(mountEl.querySelectorAll('[data-character]'));
-    const resetAvailableBadges = () => {
-        for (const card of characterCards) {
-            if (card.classList.contains('is-taken')) continue;
-            card.classList.remove('is-selected');
-            const badge = card.querySelector('.character-card__header .badge');
-            if (!badge) continue;
-            badge.textContent = 'Có sẵn';
-            badge.classList.remove('badge--accent');
-            badge.classList.add('badge--muted');
-        }
-    };
-
-    for (const card of characterCards) {
-        if (card.classList.contains('is-taken')) continue;
-        card.addEventListener('click', (e) => {
-            // Don't select if clicking the info button
-            const target = /** @type {HTMLElement} */ (e.target);
-            if (target.closest('[data-action="view-character"]')) return;
-
-            resetAvailableBadges();
-            card.classList.add('is-selected');
-            const badge = card.querySelector('.character-card__header .badge');
-            if (badge) {
-                badge.textContent = 'Đang chọn';
-                badge.classList.remove('badge--muted');
-                badge.classList.add('badge--accent');
-            }
-        });
-    }
-
-    const startButton = mountEl.querySelector('[data-action="start-room"]');
-    startButton?.addEventListener('click', () => {
-        alert('Game start (mock).');
-    });
+    // Initial character card listeners
+    attachCharacterCardListeners(mountEl, currentRoom, mySocketId);
+    attachFooterListeners(mountEl);
 }

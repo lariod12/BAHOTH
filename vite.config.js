@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { socketIOPlugin } from './server/vite-socket-plugin.js';
 
 export default defineConfig({
   root: 'src',
   base: './',
+  plugins: [socketIOPlugin()],
   server: {
     port: 5173,
     open: true,
@@ -21,4 +23,3 @@ export default defineConfig({
     }
   }
 });
-
