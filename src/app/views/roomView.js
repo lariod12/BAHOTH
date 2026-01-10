@@ -254,7 +254,14 @@ function renderCharacterDetail(char) {
 function canStartGame(room) {
     if (!room) return false;
     if (room.players.length < MIN_PLAYERS) return false;
-    return room.players.every(p => p.status === 'ready');
+
+    // All players must have selected a character
+    const allHaveCharacter = room.players.every(p => p.characterId);
+    if (!allHaveCharacter) return false;
+
+    // All non-host players must be ready
+    const nonHostPlayers = room.players.filter(p => p.id !== room.hostId);
+    return nonHostPlayers.every(p => p.status === 'ready');
 }
 
 /**
@@ -382,8 +389,9 @@ function updateRoomUI(mountEl, room, myId) {
             footerHtml += `<button class="action-button action-button--primary room-start__button" type="button" data-action="start-room" ${!canStart ? 'disabled' : ''}>Start</button>`;
         }
 
+        const maxPlayers = room.maxPlayers || MAX_PLAYERS;
         const hint = amHost
-            ? (canStart ? `All players ready (${room.players.length}/${MAX_PLAYERS}). Ready to start!` : `Waiting for players... (${room.players.length}/${MAX_PLAYERS})`)
+            ? (canStart ? `All players ready (${room.players.length}/${maxPlayers}). Ready to start!` : `Waiting for players... (${room.players.length}/${maxPlayers})`)
             : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
 
         footerHtml += `<p class="room-start__hint">${hint}</p>`;
@@ -622,6 +630,17 @@ function setupEventListeners(mountEl, onNavigate) {
         }
         currentRoom = null;
         onNavigate('#/');
+    });
+
+    // Subscribe to game start
+    const unsubscribeGameStart = socketClient.onGameStart(({ roomId }) => {
+        // Navigate to game view when game starts
+        unsubscribeGameStart();
+        if (unsubscribeRoomState) {
+            unsubscribeRoomState();
+            unsubscribeRoomState = null;
+        }
+        onNavigate(`#/game/${roomId}`);
     });
 
     // Initial character card listeners

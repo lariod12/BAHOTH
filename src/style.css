@@ -1412,3 +1412,418 @@ select.field__input option {
         font-size: 0.88rem;
     }
 }
+
+/* ============================================================
+   GAME SCREEN STYLES
+   ============================================================ */
+
+.game-container {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(160deg, #0d0f12 0%, #1a1e24 50%, #12151a 100%);
+    color: var(--fg);
+    position: relative;
+}
+
+/* Loading state */
+.game-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* Welcome message */
+.game-welcome {
+    text-align: center;
+    padding: 24px 16px 16px;
+}
+
+.game-welcome__title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #f5f5f5;
+    margin: 0 0 8px;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.game-welcome__subtitle {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0;
+}
+
+/* Turn order display */
+.turn-order {
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.25);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.turn-order__label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0 0 8px;
+}
+
+.turn-order__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.turn-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.turn-indicator.is-current {
+    background: rgba(212, 175, 55, 0.2);
+    border: 1px solid rgba(212, 175, 55, 0.4);
+}
+
+.turn-indicator.is-me {
+    font-weight: 600;
+}
+
+.turn-indicator__order {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.turn-indicator.is-current .turn-indicator__order {
+    background: rgba(212, 175, 55, 0.5);
+}
+
+.turn-indicator__name {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Game area placeholder */
+.game-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.game-placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.9rem;
+}
+
+/* Player bar (bottom HUD) */
+.player-bar {
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.4);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.player-bar.is-my-turn {
+    background: rgba(212, 175, 55, 0.15);
+    border-top-color: rgba(212, 175, 55, 0.3);
+}
+
+.player-bar__info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.player-bar__name {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.player-bar__moves {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.player-bar__moves strong {
+    color: #9fffd6;
+}
+
+/* Game controls */
+.game-controls {
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+}
+
+.movement-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.move-btn-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.move-btn {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    font-size: 1.4rem;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.move-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.move-btn:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.move-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.move-center {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    border-radius: 10px;
+}
+
+.moves-remaining {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #d4af37;
+}
+
+.dice-event-btn {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    font-size: 1.8rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.dice-event-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ============================================================
+   DICE ROLL OVERLAY
+   ============================================================ */
+
+.dice-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+}
+
+.dice-modal {
+    background: linear-gradient(165deg, #1f2428 0%, #14171a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.dice-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: center;
+    margin: 0 0 8px;
+}
+
+.dice-subtitle {
+    text-align: center;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0 0 20px;
+}
+
+.dice-players-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 10px;
+}
+
+.dice-player {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.dice-player.is-me {
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.dice-player.is-waiting {
+    opacity: 0.7;
+}
+
+.dice-player__name {
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.dice-result {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #9fffd6;
+    min-width: 32px;
+    text-align: center;
+}
+
+.dice-waiting {
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.4);
+    min-width: 32px;
+    text-align: center;
+}
+
+.dice-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.dice-instruction {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: center;
+    margin: 0;
+}
+
+.dice-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 200px;
+}
+
+.dice-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    font-size: 1rem;
+    color: var(--fg);
+    text-align: center;
+}
+
+.dice-input:focus {
+    outline: none;
+    border-color: rgba(212, 175, 55, 0.5);
+}
+
+.dice-or {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.dice-roll-btn {
+    padding: 14px 28px;
+    font-size: 1.1rem;
+}
+
+/* Responsive adjustments for game screen */
+@media (min-width: 768px) {
+    .game-welcome__title {
+        font-size: 2rem;
+    }
+
+    .game-controls {
+        padding: 24px;
+        gap: 48px;
+    }
+
+    .move-btn {
+        width: 64px;
+        height: 64px;
+        font-size: 1.6rem;
+    }
+
+    .move-center {
+        width: 64px;
+        height: 64px;
+    }
+
+    .dice-event-btn {
+        width: 72px;
+        height: 72px;
+        font-size: 2rem;
+    }
+
+    .dice-modal {
+        padding: 32px;
+    }
+}

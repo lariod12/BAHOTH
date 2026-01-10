@@ -198,12 +198,87 @@ export function socketIOPlugin() {
                         return;
                     }
 
+                    // Start the game and transition to rolling phase
+                    const result = roomManager.startGame(room.id);
+
+                    if (!result.success) {
+                        if (callback) {
+                            callback({ success: false, error: result.error });
+                        }
+                        return;
+                    }
+
                     if (callback) {
                         callback({ success: true });
                     }
 
-                    // Broadcast game start
+                    // Broadcast game start and game state
                     io.to(room.id).emit('room:game-start', { roomId: room.id });
+                    io.to(room.id).emit('game:state', result.room);
+                });
+
+                // Roll dice
+                socket.on('game:roll-dice', ({ value }, callback) => {
+                    const result = roomManager.rollDice(socket.id, value);
+
+                    if (!result.success) {
+                        if (callback) {
+                            callback({ success: false, error: result.error });
+                        }
+                        return;
+                    }
+
+                    if (callback) {
+                        callback({ success: true, hasTies: result.hasTies, allRolled: result.allRolled });
+                    }
+
+                    // Broadcast updated game state
+                    io.to(result.room.id).emit('game:state', result.room);
+                });
+
+                // Move (direction)
+                socket.on('game:move', ({ direction }, callback) => {
+                    const result = roomManager.useMove(socket.id, direction);
+
+                    if (!result.success) {
+                        if (callback) {
+                            callback({ success: false, error: result.error });
+                        }
+                        return;
+                    }
+
+                    if (callback) {
+                        callback({ success: true, turnEnded: result.turnEnded });
+                    }
+
+                    // Broadcast updated game state
+                    io.to(result.room.id).emit('game:state', result.room);
+                });
+
+                // Set player moves (called when turn starts to set speed-based moves)
+                socket.on('game:set-moves', ({ moves }, callback) => {
+                    const room = roomManager.setPlayerMoves(socket.id, moves);
+
+                    if (callback) {
+                        callback({ success: !!room });
+                    }
+
+                    if (room) {
+                        io.to(room.id).emit('game:state', room);
+                    }
+                });
+
+                // Get game state
+                socket.on('game:get-state', ({ roomId }, callback) => {
+                    const room = roomManager.getGameState(roomId);
+
+                    if (callback) {
+                        callback({ success: !!room, room });
+                    }
+
+                    if (room) {
+                        socket.emit('game:state', room);
+                    }
                 });
 
                 // Update player name

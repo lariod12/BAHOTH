@@ -13,6 +13,9 @@ const errorListeners = [];
 /** @type {((data: { roomId: string }) => void)[]} */
 const gameStartListeners = [];
 
+/** @type {((state: any) => void)[]} */
+const gameStateListeners = [];
+
 /**
  * Connect to Socket.IO server
  * @returns {import('socket.io-client').Socket}
@@ -56,6 +59,11 @@ export function connect() {
 
     socket.on('room:player-left', (data) => {
         console.log('[SocketClient] Player left:', data);
+    });
+
+    socket.on('game:state', (state) => {
+        console.log('[SocketClient] Game state update:', state);
+        gameStateListeners.forEach((fn) => fn(state));
     });
 
     return socket;
@@ -309,4 +317,91 @@ export function onGameStart(callback) {
             gameStartListeners.splice(index, 1);
         }
     };
+}
+
+/**
+ * Subscribe to game state updates
+ * @param {(state: any) => void} callback
+ * @returns {() => void} Unsubscribe function
+ */
+export function onGameState(callback) {
+    gameStateListeners.push(callback);
+    return () => {
+        const index = gameStateListeners.indexOf(callback);
+        if (index > -1) {
+            gameStateListeners.splice(index, 1);
+        }
+    };
+}
+
+/**
+ * Roll dice
+ * @param {number} value
+ * @returns {Promise<{ success: boolean; hasTies?: boolean; allRolled?: boolean; error?: string }>}
+ */
+export function rollDice(value) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        socket.emit('game:roll-dice', { value }, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Move in a direction
+ * @param {string} direction - 'up' | 'down' | 'left' | 'right'
+ * @returns {Promise<{ success: boolean; turnEnded?: boolean; error?: string }>}
+ */
+export function move(direction) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        socket.emit('game:move', { direction }, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Set player moves (for turn start)
+ * @param {number} moves
+ * @returns {Promise<{ success: boolean }>}
+ */
+export function setMoves(moves) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false });
+            return;
+        }
+
+        socket.emit('game:set-moves', { moves }, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Get game state
+ * @param {string} roomId
+ * @returns {Promise<{ success: boolean; room?: any }>}
+ */
+export function getGameState(roomId) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false });
+            return;
+        }
+
+        socket.emit('game:get-state', { roomId }, (response) => {
+            resolve(response);
+        });
+    });
 }

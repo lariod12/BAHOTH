@@ -1,5 +1,6 @@
 import { renderHomeView } from './views/homeView.js';
 import { renderRoomView } from './views/roomView.js';
+import { renderGameView } from './views/gameView.js';
 import { renderTutorialBooksView } from './views/tutorialBooksView.js';
 import { renderTraitorsTomeReferenceView } from './views/traitorsTomeReferenceView.js';
 import { renderRulesBookReferenceView } from './views/rulesBookReferenceView.js';
@@ -27,6 +28,12 @@ function parseRoute(route) {
     const roomMatch = route.match(/^\/room\/([A-Z0-9-]+)$/i);
     if (roomMatch) {
         return { path: '/room/:roomId', params: { roomId: roomMatch[1] } };
+    }
+
+    // Match /game/:roomId pattern
+    const gameMatch = route.match(/^\/game\/([A-Z0-9-]+)$/i);
+    if (gameMatch) {
+        return { path: '/game/:roomId', params: { roomId: gameMatch[1] } };
     }
 
     return { path: route, params: {} };
@@ -57,6 +64,12 @@ function renderRoute({ mountEl }) {
     // Room without ID (create new room)
     if (path === '/room') {
         renderRoomView({ mountEl, onNavigate: navigateTo, roomId: null });
+        return;
+    }
+
+    // Game with specific ID: /game/BAH-XXXXXX
+    if (path === '/game/:roomId') {
+        renderGameView({ mountEl, onNavigate: navigateTo, roomId: params.roomId });
         return;
     }
 

@@ -14,6 +14,7 @@ const ROOMS_FILE = join(DATA_DIR, 'rooms.json');
 
 /**
  * @typedef {'joined' | 'selecting' | 'ready'} PlayerStatus
+ * @typedef {'lobby' | 'rolling' | 'playing'} GamePhase
  *
  * @typedef {{
  *   id: string;
@@ -29,6 +30,12 @@ const ROOMS_FILE = join(DATA_DIR, 'rooms.json');
  *   maxPlayers: number;
  *   minPlayers: number;
  *   createdAt: string;
+ *   gamePhase: GamePhase;
+ *   diceRolls: Record<string, number>;
+ *   needsRoll: string[];
+ *   turnOrder: string[];
+ *   currentTurnIndex: number;
+ *   playerMoves: Record<string, number>;
  * }} Room
  *
  * @typedef {{
@@ -154,6 +161,13 @@ export function createRoom(hostSocketId, hostName, maxPlayers = 6) {
         maxPlayers: validMax,
         minPlayers: 3,
         createdAt: new Date().toISOString(),
+        // Game state
+        gamePhase: 'lobby',
+        diceRolls: {},
+        needsRoll: [],
+        turnOrder: [],
+        currentTurnIndex: 0,
+        playerMoves: {},
     };
 
     rooms.set(roomId, room);
@@ -355,8 +369,16 @@ export function canStartGame(roomId) {
         return { canStart: false, reason: `Need at least ${room.minPlayers} players` };
     }
 
-    const allReady = room.players.every((p) => p.status === 'ready');
-    if (!allReady) {
+    // All players must have selected a character
+    const allHaveCharacter = room.players.every((p) => p.characterId);
+    if (!allHaveCharacter) {
+        return { canStart: false, reason: 'Not all players have selected a character' };
+    }
+
+    // All non-host players must be ready
+    const nonHostPlayers = room.players.filter((p) => p.id !== room.hostId);
+    const allNonHostReady = nonHostPlayers.every((p) => p.status === 'ready');
+    if (!allNonHostReady) {
         return { canStart: false, reason: 'Not all players are ready' };
     }
 
@@ -451,4 +473,196 @@ export function reconnectPlayer(oldSocketId, newSocketId) {
 
     saveRooms();
     return room;
+}
+
+/**
+ * Start the game and transition to rolling phase
+ * @param {string} roomId
+ * @returns {{ success: boolean; room?: Room; error?: string }}
+ */
+export function startGame(roomId) {
+    const room = rooms.get(roomId);
+    if (!room) {
+        return { success: false, error: 'Room not found' };
+    }
+
+    if (room.gamePhase !== 'lobby') {
+        return { success: false, error: 'Game already started' };
+    }
+
+    // Transition to rolling phase
+    room.gamePhase = 'rolling';
+    room.diceRolls = {};
+    room.needsRoll = room.players.map((p) => p.id);
+    room.turnOrder = [];
+    room.currentTurnIndex = 0;
+    room.playerMoves = {};
+
+    saveRooms();
+    return { success: true, room };
+}
+
+/**
+ * Submit dice roll for a player
+ * @param {string} socketId
+ * @param {number} value
+ * @returns {{ success: boolean; room?: Room; allRolled?: boolean; hasTies?: boolean; error?: string }}
+ */
+export function rollDice(socketId, value) {
+    const room = getRoomBySocket(socketId);
+    if (!room) {
+        return { success: false, error: 'Not in a room' };
+    }
+
+    if (room.gamePhase !== 'rolling') {
+        return { success: false, error: 'Not in rolling phase' };
+    }
+
+    // Check if player needs to roll
+    if (!room.needsRoll.includes(socketId)) {
+        return { success: false, error: 'You do not need to roll' };
+    }
+
+    // Validate dice value (1-16)
+    const diceValue = Math.max(1, Math.min(16, Math.floor(value)));
+    room.diceRolls[socketId] = diceValue;
+
+    // Remove from needsRoll
+    room.needsRoll = room.needsRoll.filter((id) => id !== socketId);
+
+    // Check if all have rolled
+    const allRolled = room.needsRoll.length === 0;
+
+    if (allRolled) {
+        // Check for ties
+        const rolls = Object.entries(room.diceRolls);
+        const values = rolls.map(([, v]) => v);
+        const uniqueValues = new Set(values);
+
+        if (uniqueValues.size < values.length) {
+            // There are ties - find tied players
+            const valueCounts = {};
+            for (const v of values) {
+                valueCounts[v] = (valueCounts[v] || 0) + 1;
+            }
+
+            // Players with duplicate values need to re-roll
+            const tiedPlayers = rolls
+                .filter(([, v]) => valueCounts[v] > 1)
+                .map(([id]) => id);
+
+            // Clear their rolls
+            for (const id of tiedPlayers) {
+                delete room.diceRolls[id];
+            }
+            room.needsRoll = tiedPlayers;
+
+            saveRooms();
+            return { success: true, room, allRolled: false, hasTies: true };
+        }
+
+        // No ties - sort by descending order and start game
+        const sorted = rolls.sort(([, a], [, b]) => b - a);
+        room.turnOrder = sorted.map(([id]) => id);
+        room.currentTurnIndex = 0;
+        room.gamePhase = 'playing';
+
+        // Initialize player moves - the first player needs moves set
+        // We'll use a placeholder value (4) and let the client request proper speed-based value
+        room.playerMoves = {};
+        for (const p of room.players) {
+            room.playerMoves[p.id] = 0; // Will be set by client based on character speed
+        }
+
+        saveRooms();
+        return { success: true, room, allRolled: true, hasTies: false };
+    }
+
+    saveRooms();
+    return { success: true, room, allRolled: false, hasTies: false };
+}
+
+/**
+ * Initialize player moves for a turn
+ * @param {string} roomId
+ * @param {Record<string, number>} speedValues - Map of socketId to speed value
+ * @returns {Room | undefined}
+ */
+export function initializePlayerMoves(roomId, speedValues) {
+    const room = rooms.get(roomId);
+    if (!room) return undefined;
+
+    room.playerMoves = { ...speedValues };
+    saveRooms();
+    return room;
+}
+
+/**
+ * Use a move (deduct 1 from player's remaining moves)
+ * @param {string} socketId
+ * @param {string} direction
+ * @returns {{ success: boolean; room?: Room; turnEnded?: boolean; error?: string }}
+ */
+export function useMove(socketId, direction) {
+    const room = getRoomBySocket(socketId);
+    if (!room) {
+        return { success: false, error: 'Not in a room' };
+    }
+
+    if (room.gamePhase !== 'playing') {
+        return { success: false, error: 'Game not in playing phase' };
+    }
+
+    // Check if it's this player's turn
+    const currentPlayer = room.turnOrder[room.currentTurnIndex];
+    if (currentPlayer !== socketId) {
+        return { success: false, error: 'Not your turn' };
+    }
+
+    // Check remaining moves
+    const movesLeft = room.playerMoves[socketId] || 0;
+    if (movesLeft <= 0) {
+        return { success: false, error: 'No moves remaining' };
+    }
+
+    // Deduct move
+    room.playerMoves[socketId] = movesLeft - 1;
+
+    // Check if turn ended
+    const turnEnded = room.playerMoves[socketId] <= 0;
+
+    if (turnEnded) {
+        // Move to next player
+        room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+
+        // Reset moves for next player (will be set by client with speed value)
+        // For now, we don't reset here - the client should call initializePlayerMoves
+    }
+
+    saveRooms();
+    return { success: true, room, turnEnded };
+}
+
+/**
+ * Set player moves for next turn
+ * @param {string} socketId
+ * @param {number} moves
+ * @returns {Room | undefined}
+ */
+export function setPlayerMoves(socketId, moves) {
+    const room = getRoomBySocket(socketId);
+    if (!room) return undefined;
+
+    room.playerMoves[socketId] = moves;
+    saveRooms();
+    return room;
+}
+
+/**
+ * Get game state for a room
+ * @param {string} roomId
+ * @returns {Room | undefined}
+ */
+export function getGameState(roomId) {
+    return rooms.get(roomId);
 }
