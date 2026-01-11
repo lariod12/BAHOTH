@@ -313,7 +313,7 @@ export const ROOMS = [
     text: {},
   },
   {
-    name: { en: "Servants' Quarters", vi: 'Phòng ở người hầu (Servants' Quarters)' },
+    name: { en: "Servants' Quarters", vi: "Phòng ở người hầu (Servants' Quarters)" },
     floorsAllowed: ['upper'],
     doors: [{ side: 'left', kind: 'door' }, { side: 'right', kind: 'door' }, { side: 'bottom', kind: 'door' }],
     tokens: ['omen'],
