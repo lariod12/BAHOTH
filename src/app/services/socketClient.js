@@ -16,6 +16,9 @@ const gameStartListeners = [];
 /** @type {((state: any) => void)[]} */
 const gameStateListeners = [];
 
+/** @type {((data: { activePlayers: string[] }) => void)[]} */
+const playersActiveListeners = [];
+
 /**
  * Connect to Socket.IO server
  * @returns {import('socket.io-client').Socket}
@@ -64,6 +67,11 @@ export function connect() {
     socket.on('game:state', (state) => {
         console.log('[SocketClient] Game state update:', state);
         gameStateListeners.forEach((fn) => fn(state));
+    });
+
+    socket.on('game:players-active', (data) => {
+        console.log('[SocketClient] Players active update:', data);
+        playersActiveListeners.forEach((fn) => fn(data));
     });
 
     return socket;
@@ -404,4 +412,36 @@ export function getGameState(roomId) {
             resolve(response);
         });
     });
+}
+
+/**
+ * Set player active status
+ * @param {boolean} isActive
+ * @returns {Promise<{ success: boolean }>}
+ */
+export function setActive(isActive) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false });
+            return;
+        }
+        socket.emit('game:set-active', { isActive }, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Subscribe to players active status updates
+ * @param {(data: { activePlayers: string[] }) => void} callback
+ * @returns {() => void} Unsubscribe function
+ */
+export function onPlayersActive(callback) {
+    playersActiveListeners.push(callback);
+    return () => {
+        const index = playersActiveListeners.indexOf(callback);
+        if (index > -1) {
+            playersActiveListeners.splice(index, 1);
+        }
+    };
 }

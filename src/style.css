@@ -2328,6 +2328,27 @@ select.field__input option {
     color: #e0c080;
 }
 
+/* Disabled state for sidebar toggle */
+.sidebar-toggle:disabled,
+.sidebar-toggle.is-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.sidebar-toggle:disabled:hover,
+.sidebar-toggle.is-disabled:hover {
+    border-color: rgba(139, 90, 43, 0.4);
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-toggle:disabled .sidebar-toggle__icon,
+.sidebar-toggle.is-disabled .sidebar-toggle__icon {
+    color: #c9a55c;
+}
+
 /* ============================================================
    GAME INTRO OVERLAY
    ============================================================ */
@@ -2423,7 +2444,7 @@ select.field__input option {
     left: 0;
     top: 0;
     bottom: 0;
-    width: 140px;
+    width: 200px; /* Desktop >1024px: 200px */
     background: linear-gradient(180deg, rgba(20, 18, 22, 0.98) 0%, rgba(12, 10, 14, 0.99) 100%);
     border-right: 1px solid rgba(139, 90, 43, 0.3);
     display: flex;
@@ -2560,9 +2581,88 @@ select.field__input option {
     text-overflow: ellipsis;
 }
 
+.sidebar-player__room {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
 .sidebar-player__order {
     font-size: 0.55rem;
     color: rgba(255, 255, 255, 0.5);
+}
+
+/* Sidebar Player Header - wrapper for icon and info */
+.sidebar-player__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    cursor: pointer;
+}
+
+/* Sidebar Player Details - expand/collapse section */
+.sidebar-player__details {
+    width: 100%;
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+
+.sidebar-player__detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 0.55rem;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.sidebar-player__detail-row .detail-label {
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.sidebar-player__detail-row .detail-value {
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+}
+
+/* Expanded state */
+.sidebar-player.is-expanded {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.sidebar-player.is-expanded .sidebar-player__header {
+    width: 100%;
+}
+
+.sidebar-player.is-expanded .sidebar-player__details {
+    display: block;
+    opacity: 1;
+}
+
+/* Expand indicator */
+.sidebar-player::after {
+    content: '';
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid rgba(255, 255, 255, 0.4);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.sidebar-player.is-expanded::after {
+    transform: rotate(180deg);
 }
 
 /* ============================================================
@@ -2719,6 +2819,14 @@ select.field__input option {
 }
 
 /* Responsive sidebar and layout */
+/* Tablet: 768px - 1024px: 140px */
+@media (max-width: 1024px) {
+    .game-sidebar {
+        width: 140px;
+    }
+}
+
+/* Mobile: <768px: 120px */
 @media (max-width: 768px) {
     .game-sidebar {
         width: 120px;
@@ -2753,8 +2861,31 @@ select.field__input option {
         font-size: 0.6rem;
     }
 
+    .sidebar-player__room {
+        font-size: 0.5rem;
+    }
+
     .sidebar-player__order {
         font-size: 0.5rem;
+    }
+
+    .sidebar-player__header {
+        gap: 6px;
+    }
+
+    .sidebar-player__details {
+        padding-top: 6px;
+        margin-top: 6px;
+    }
+
+    .sidebar-player__detail-row {
+        font-size: 0.5rem;
+    }
+
+    .sidebar-player::after {
+        border-left: 3px solid transparent;
+        border-right: 3px solid transparent;
+        border-top: 3px solid rgba(255, 255, 255, 0.4);
     }
 
     .player-bar__avatar {
@@ -2801,9 +2932,7 @@ select.field__input option {
 }
 
 @media (max-width: 600px) {
-    .game-sidebar {
-        width: 100px;
-    }
+    /* Keep width 120px from 768px breakpoint */
 
     .sidebar-header {
         padding: 8px 6px;
@@ -2827,6 +2956,8 @@ select.field__input option {
     .sidebar-player {
         flex-direction: column;
         padding: 6px 4px;
+        gap: 4px;
+    }
 
     .sidebar-toggle {
         width: 32px;
@@ -2846,8 +2977,6 @@ select.field__input option {
     .game-intro__subtitle {
         font-size: 0.85rem;
     }
-        gap: 4px;
-    }
 
     .sidebar-player__icon {
         width: 22px;
@@ -2864,8 +2993,38 @@ select.field__input option {
         text-align: center;
     }
 
+    .sidebar-player__room {
+        font-size: 0.45rem;
+        text-align: center;
+    }
+
     .sidebar-player__order {
         display: none;
+    }
+
+    .sidebar-player__header {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .sidebar-player__details {
+        padding-top: 4px;
+        margin-top: 4px;
+    }
+
+    .sidebar-player__detail-row {
+        font-size: 0.45rem;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .sidebar-player::after {
+        display: none;
+    }
+
+    .sidebar-player.is-expanded {
+        align-items: center;
     }
 
     .player-bar {
@@ -2899,9 +3058,7 @@ select.field__input option {
 }
 
 @media (max-width: 400px) {
-    .game-sidebar {
-        width: 90px;
-    }
+    /* Keep width 120px from 768px breakpoint */
 
     .sidebar-player__icon {
         width: 20px;
@@ -2910,6 +3067,10 @@ select.field__input option {
 
     .sidebar-player__name {
         font-size: 0.45rem;
+    }
+
+    .sidebar-player__room {
+        font-size: 0.4rem;
     }
 
     .sidebar-toggle {

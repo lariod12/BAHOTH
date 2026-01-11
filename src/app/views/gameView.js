@@ -10,6 +10,12 @@ let unsubscribeGameState = null;
 let sidebarOpen = false;
 let introShown = false;
 let introTimeout = null;
+/** @type {Set<string>} Track expanded player IDs in sidebar */
+let expandedPlayers = new Set();
+/** @type {Set<string>} Track active player IDs */
+let activePlayers = new Set();
+/** @type {(() => void) | null} Unsubscribe from players active updates */
+let unsubscribePlayersActive = null;
 
 /**
  * Get character's Speed value at startIndex
@@ -133,16 +139,39 @@ function renderDiceRollOverlay(gameState, myId) {
 
 /**
  * Render sidebar toggle button
+ * @param {boolean} disabled - Whether toggle should be disabled
  */
-function renderSidebarToggle() {
+function renderSidebarToggle(disabled = false) {
+    const disabledAttr = disabled ? 'disabled' : '';
+    const disabledClass = disabled ? 'is-disabled' : '';
+    
     return `
-        <button class="sidebar-toggle" type="button" data-action="toggle-sidebar" title="Toggle Players">
+        <button class="sidebar-toggle ${disabledClass}" 
+                type="button" 
+                data-action="toggle-sidebar" 
+                title="Toggle Players"
+                ${disabledAttr}>
             <svg class="sidebar-toggle__icon" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="6" r="4"/>
                 <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
             </svg>
         </button>
     `;
+}
+
+/**
+ * Group players by room/position
+ * @param {any[]} players - Array of players
+ * @param {Object} playerPositions - Map of player ID to position
+ * @returns {any[]} Players sorted/grouped by room
+ */
+function groupPlayersByRoom(players, playerPositions) {
+    // Sort players by their position/room name
+    return [...players].sort((a, b) => {
+        const posA = playerPositions[a.id] || 'Unknown';
+        const posB = playerPositions[b.id] || 'Unknown';
+        return posA.localeCompare(posB);
+    });
 }
 
 /**
@@ -175,23 +204,39 @@ function renderSidebar(gameState, myId) {
         `;
     }
 
-    const playersHtml = otherPlayers.map(player => {
+    // Group players by room before rendering
+    const groupedPlayers = groupPlayersByRoom(otherPlayers, playerPositions);
+
+    const playersHtml = groupedPlayers.map(player => {
         const charName = getCharacterName(player.characterId);
-        const position = playerPositions[player.id] || 'unknown';
+        const position = playerPositions[player.id] || 'Unknown';
         const isCurrentTurn = player.id === currentTurnPlayer;
         const turnIndex = turnOrder.indexOf(player.id);
+        const isExpanded = expandedPlayers.has(player.id);
+        const expandedClass = isExpanded ? 'is-expanded' : '';
 
         return `
-            <div class="sidebar-player ${isCurrentTurn ? 'is-current-turn' : ''}">
-                <div class="sidebar-player__icon">
-                    <svg class="pawn-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="6" r="4"/>
-                        <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
-                    </svg>
+            <div class="sidebar-player ${isCurrentTurn ? 'is-current-turn' : ''} ${expandedClass}"
+                 data-action="expand-player" 
+                 data-player-id="${player.id}">
+                <div class="sidebar-player__header">
+                    <div class="sidebar-player__icon">
+                        <svg class="pawn-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="6" r="4"/>
+                            <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
+                        </svg>
+                    </div>
+                    <div class="sidebar-player__info">
+                        <span class="sidebar-player__name">${charName}</span>
+                        <span class="sidebar-player__room">${position}</span>
+                        <span class="sidebar-player__order">#${turnIndex + 1}</span>
+                    </div>
                 </div>
-                <div class="sidebar-player__info">
-                    <span class="sidebar-player__name">${charName}</span>
-                    <span class="sidebar-player__order">#${turnIndex + 1}</span>
+                <div class="sidebar-player__details" style="display: ${isExpanded ? 'block' : 'none'}">
+                    <div class="sidebar-player__detail-row">
+                        <span class="detail-label">Position:</span>
+                        <span class="detail-value">${position}</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -374,10 +419,13 @@ function renderGameScreen(gameState, myId) {
         const players = gameState.players || [];
         const playerNames = buildPlayerNamesMap(players, getCharacterName);
         const myPosition = playerPositions[myId];
+        
+        // Check if it's my turn to disable sidebar toggle
+        const myTurn = isMyTurn(gameState, myId);
 
         content = `
             ${renderGameIntro()}
-            ${renderSidebarToggle()}
+            ${renderSidebarToggle(myTurn)}
             <div class="game-layout">
                 ${renderSidebar(gameState, myId)}
                 <div class="game-main">
@@ -441,6 +489,51 @@ function closeSidebar(mountEl) {
 }
 
 /**
+ * Toggle player expand/collapse in sidebar
+ * @param {string} playerId - Player ID to toggle
+ */
+function togglePlayerExpand(playerId) {
+    if (expandedPlayers.has(playerId)) {
+        expandedPlayers.delete(playerId);
+    } else {
+        expandedPlayers.add(playerId);
+    }
+}
+
+/**
+ * Setup visibility change listener for active tracking
+ * Emits active status when tab visibility changes
+ */
+function setupVisibilityTracking() {
+    document.addEventListener('visibilitychange', () => {
+        const isVisible = document.visibilityState === 'visible';
+        socketClient.setActive(isVisible);
+    });
+    
+    // Initial emit if visible
+    if (document.visibilityState === 'visible') {
+        socketClient.setActive(true);
+    }
+}
+
+/**
+ * Check if all players are active and hide intro
+ * @param {string[]} activePlayerIds - List of active player IDs
+ * @param {Object[]} allPlayers - All players in game
+ * @param {HTMLElement} mountEl - Mount element for re-render
+ */
+function checkAllPlayersActive(activePlayerIds, allPlayers, mountEl) {
+    // Update local activePlayers set
+    activePlayers = new Set(activePlayerIds);
+    
+    // Check if all players are active
+    const allActive = allPlayers.every(p => activePlayerIds.includes(p.id));
+    if (allActive && !introShown) {
+        hideIntro(mountEl);
+    }
+}
+
+/**
  * Attach event listeners
  */
 function attachEventListeners(mountEl, roomId) {
@@ -457,6 +550,11 @@ function attachEventListeners(mountEl, roomId) {
 
         // Toggle sidebar
         if (action === 'toggle-sidebar') {
+            // Don't toggle if button is disabled
+            const toggleBtn = target.closest('.sidebar-toggle');
+            if (toggleBtn?.hasAttribute('disabled')) {
+                return;
+            }
             toggleSidebar(mountEl);
             return;
         }
@@ -464,6 +562,17 @@ function attachEventListeners(mountEl, roomId) {
         // Close sidebar
         if (action === 'close-sidebar') {
             closeSidebar(mountEl);
+            return;
+        }
+
+        // Expand/collapse player in sidebar
+        if (action === 'expand-player') {
+            const playerEl = target.closest('[data-player-id]');
+            const playerId = playerEl?.dataset.playerId;
+            if (playerId) {
+                togglePlayerExpand(playerId);
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
             return;
         }
 
@@ -536,12 +645,7 @@ async function updateGameUI(mountEl, gameState, myId) {
             }
         }
 
-        // Start intro timer if not shown yet
-        if (!introShown && !introTimeout) {
-            introTimeout = setTimeout(() => {
-                hideIntro(mountEl);
-            }, 5000);
-        }
+        // Note: Intro is now controlled by checkAllPlayersActive, not by timeout
     }
 
     const html = renderGameScreen(gameState, myId);
@@ -567,6 +671,16 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         updateGameUI(mountEl, currentGameState, mySocketId);
     });
 
+    // Subscribe to players active updates for intro logic
+    unsubscribePlayersActive = socketClient.onPlayersActive((data) => {
+        const activePlayerIds = data.activePlayers || [];
+        const allPlayers = currentGameState?.players || [];
+        checkAllPlayersActive(activePlayerIds, allPlayers, mountEl);
+    });
+
+    // Setup visibility tracking for active status
+    setupVisibilityTracking();
+
     // Request game state
     socketClient.getGameState(roomId);
 
@@ -579,6 +693,10 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
             unsubscribeGameState();
             unsubscribeGameState = null;
         }
+        if (unsubscribePlayersActive) {
+            unsubscribePlayersActive();
+            unsubscribePlayersActive = null;
+        }
         if (introTimeout) {
             clearTimeout(introTimeout);
             introTimeout = null;
@@ -587,5 +705,7 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         sidebarOpen = false;
         introShown = false;
         movesInitializedForTurn = -1;
+        expandedPlayers.clear();
+        activePlayers.clear();
     }, { once: true });
 }
