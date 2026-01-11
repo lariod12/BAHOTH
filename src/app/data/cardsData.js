@@ -1365,6 +1365,27 @@ export const EVENTS = [
       },
     ],
   },
+
+  {
+    id: 'tieng_vay_goi',
+    type: 'event',
+    name: { vi: 'Tiếng vẫy gọi' },
+    text: {
+      vi:
+        'Bên ngoài. Mày phải ra ngoài. Bay ra ngoài để được tự do!\n' +
+        'Mỗi người chơi ở trong Khu vườn, Nghĩa địa, Tòa tháp, Ban công (Gardens, Graveyard, Tower, Balcony) hoặc trong căn phòng có cửa sổ nối với bên ngoài ngôi nhà phải đổ xúc xắc Sanity:\n' +
+        '3+  Bạn tỉnh dậy kịp lúc.\n' +
+        '0-2  Bạn nhảy ra Sân (Patio) (nếu chưa khám phá ra Sân (Patio), tìm nó ở trong chồng lát phòng và đặt vào chỗ bất kì trong ngôi nhà). Đặt nhân vật của bạn ở đó và chịu 1 xúc xắc sát thương vật lí.',
+    },
+    affectsAllPlayers: true,
+    affectedRooms: ['gardens', 'graveyard', 'tower', 'balcony'],
+    affectedRoomCondition: 'hasOutdoorWindow',
+    rollStat: 'sanity',
+    rollResults: [
+      { range: '3+', effect: 'nothing' },
+      { range: '0-2', effect: 'teleportToRoom', room: 'patio', createIfNotExists: true, then: { effect: 'physicalDamage', dice: 1 } },
+    ],
+  },
 ];
 
 export const OMENS = [
