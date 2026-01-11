@@ -38,28 +38,30 @@ const MAPS_FILE = join(DATA_DIR, 'maps.json');
 const maps = new Map();
 
 // Starting rooms configuration (based on game rules)
+// Layout: Entrance Hall (bottom) -> Foyer (middle) -> Grand Staircase (top)
+// Vertical line from south to north
 const STARTING_ROOMS = {
     'entrance-hall': {
         id: 'entrance-hall',
         name: 'Entrance Hall',
         x: 0,
         y: 0,
-        doors: ['north', 'east', 'west'],
+        doors: ['north'],
         floor: 'ground',
     },
     'foyer': {
         id: 'foyer',
         name: 'Foyer',
-        x: 1,
-        y: 0,
-        doors: ['west', 'north'],
+        x: 0,
+        y: 1,
+        doors: ['south', 'north'],
         floor: 'ground',
     },
     'grand-staircase': {
         id: 'grand-staircase',
         name: 'Grand Staircase',
         x: 0,
-        y: 1,
+        y: 2,
         doors: ['south', 'east', 'west'],
         floor: 'ground',
     },
@@ -188,11 +190,12 @@ export function initializeMap(gameId) {
         state.connections[id] = {};
     }
 
-    // Set up initial connections between starting rooms
-    state.connections['entrance-hall']['east'] = 'foyer';
-    state.connections['entrance-hall']['north'] = 'grand-staircase';
-    state.connections['foyer']['west'] = 'entrance-hall';
-    state.connections['grand-staircase']['south'] = 'entrance-hall';
+    // Set up initial connections between starting rooms (vertical line)
+    // Entrance Hall <-> Foyer <-> Grand Staircase
+    state.connections['entrance-hall']['north'] = 'foyer';
+    state.connections['foyer']['south'] = 'entrance-hall';
+    state.connections['foyer']['north'] = 'grand-staircase';
+    state.connections['grand-staircase']['south'] = 'foyer';
 
     maps.set(gameId, state);
     saveMaps();

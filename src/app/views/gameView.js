@@ -37,7 +37,7 @@ function createDebugGameState() {
         status: 'ready'
     }));
 
-    // Create mock map with entrance hall and some adjacent rooms
+    // Create mock map with starting rooms: Entrance Hall -> Foyer -> Grand Staircase (vertical line)
     const mockMap = {
         revealedRooms: {
             'entrance-hall': {
@@ -45,7 +45,7 @@ function createDebugGameState() {
                 name: 'Entrance Hall',
                 x: 0,
                 y: 0,
-                doors: ['north', 'east', 'west'],
+                doors: ['north'],
                 floor: 'ground'
             },
             'foyer': {
@@ -53,31 +53,22 @@ function createDebugGameState() {
                 name: 'Foyer',
                 x: 0,
                 y: 1,
-                doors: ['south', 'east'],
+                doors: ['south', 'north'],
                 floor: 'ground'
             },
             'grand-staircase': {
                 id: 'grand-staircase',
                 name: 'Grand Staircase',
-                x: 1,
-                y: 0,
-                doors: ['west', 'north'],
-                floor: 'ground'
-            },
-            'dining-room': {
-                id: 'dining-room',
-                name: 'Dining Room',
-                x: -1,
-                y: 0,
-                doors: ['east', 'south'],
+                x: 0,
+                y: 2,
+                doors: ['south', 'east', 'west'],
                 floor: 'ground'
             }
         },
         connections: {
-            'entrance-hall': { north: 'foyer', east: 'grand-staircase', west: 'dining-room' },
-            'foyer': { south: 'entrance-hall' },
-            'grand-staircase': { west: 'entrance-hall' },
-            'dining-room': { east: 'entrance-hall' }
+            'entrance-hall': { north: 'foyer' },
+            'foyer': { south: 'entrance-hall', north: 'grand-staircase' },
+            'grand-staircase': { south: 'foyer' }
         }
     };
 
