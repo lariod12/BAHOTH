@@ -459,6 +459,7 @@ function renderTurnOrder(gameState, myId) {
     const turnOrder = gameState.turnOrder || [];
     const currentIndex = gameState.currentTurnIndex ?? 0;
     const players = gameState.players || [];
+    const playerPositions = gameState.playerState?.playerPositions || {};
     
     // Get current player info for collapsed view
     const currentPlayerId = turnOrder[currentIndex];
@@ -473,6 +474,8 @@ function renderTurnOrder(gameState, myId) {
         const isMe = socketId === myId;
         const isCurrent = idx === currentIndex;
 
+        const position = playerPositions[socketId] || 'Unknown';
+
         // In debug mode, make turn indicators clickable to switch player
         const clickableAttr = isDebugMode ? `data-action="debug-switch-player" data-player-id="${socketId}"` : '';
         const clickableClass = isDebugMode ? 'is-clickable' : '';
@@ -480,7 +483,10 @@ function renderTurnOrder(gameState, myId) {
         return `
             <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass}" ${clickableAttr}>
                 <span class="turn-indicator__order">${idx + 1}</span>
-                <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}</span>
+                <div class="turn-indicator__info">
+                    <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}</span>
+                    <span class="turn-indicator__room">${position}</span>
+                </div>
             </div>
         `;
     }).filter(Boolean).join('');

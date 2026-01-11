@@ -1646,6 +1646,17 @@ select.field__input option {
     transition: all 0.2s ease;
 }
 
+.turn-indicator__info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.turn-indicator__room {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
 .turn-indicator.is-current {
     background: rgba(212, 175, 55, 0.2);
     border: 1px solid rgba(212, 175, 55, 0.4);
