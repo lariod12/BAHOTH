@@ -1147,6 +1147,13 @@ select.field__input option {
     font-weight: 600;
 }
 
+.trait-value--current {
+    color: #3498db;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .trait-sep {
     color: rgba(255, 255, 255, 0.3);
 }
@@ -2804,6 +2811,33 @@ select.field__input option {
 
 .sidebar-card--item .sidebar-card__count {
     color: #27ae60;
+}
+
+/* View detail button in sidebar */
+.sidebar-detail-btn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.sidebar-detail-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 1);
+}
+
+.sidebar-detail-btn:active {
+    transform: translateY(1px);
 }
 
 .game-sidebar.is-my-turn {

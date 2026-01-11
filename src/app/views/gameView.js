@@ -424,6 +424,110 @@ function renderCharacterStats(characterData) {
 }
 
 /**
+ * Render character modal (reused from roomView)
+ */
+function renderCharacterModal() {
+    return `
+        <div class="character-modal" id="character-modal" aria-hidden="true">
+            <div class="character-modal__backdrop" data-action="close-modal"></div>
+            <div class="character-modal__content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+                <header class="character-modal__header">
+                    <h2 class="character-modal__title" id="modal-title"></h2>
+                    <button class="character-modal__close" type="button" data-action="close-modal" aria-label="Dong">x</button>
+                </header>
+                <div class="character-modal__body" id="modal-body"></div>
+            </div>
+        </div>
+    `.trim();
+}
+
+/**
+ * Render character detail for modal
+ * @param {Object} char - Character definition
+ * @param {Object} currentStats - Current stat indices (optional, for showing current values)
+ */
+function renderCharacterDetail(char, currentStats = null) {
+    const bio = char.bio.vi;
+    const profile = char.profile?.vi || char.profile?.en || {};
+    const hobbies = bio.hobbies?.join(', ') || 'Khong ro';
+    const fear = profile.fear || 'Khong ro';
+    const info = profile.info || '';
+
+    const traitLabels = { speed: 'Toc do', might: 'Suc manh', sanity: 'Tam tri', knowledge: 'Kien thuc' };
+
+    const traitsHtml = Object.entries(char.traits)
+        .map(([key, trait]) => {
+            const label = traitLabels[key] || key;
+            const currentIndex = currentStats ? currentStats[key] : trait.startIndex;
+            const trackHtml = trait.track
+                .map((val, idx) => {
+                    const isStart = idx === trait.startIndex;
+                    const isCurrent = idx === currentIndex;
+                    let classes = 'trait-value';
+                    if (isStart) classes += ' trait-value--start';
+                    if (isCurrent && !isStart) classes += ' trait-value--current';
+                    return `<span class="${classes}">${val}</span>`;
+                })
+                .join('<span class="trait-sep"> - </span>');
+            return `<div class="trait-row"><span class="trait-label">${label}</span><span class="trait-track">${trackHtml}</span></div>`;
+        })
+        .join('');
+
+    return `
+        <div class="character-detail">
+            <div class="character-detail__bio">
+                <div class="detail-row"><span class="detail-label">Tuoi:</span><span class="detail-value">${bio.age}</span></div>
+                <div class="detail-row"><span class="detail-label">Chieu cao:</span><span class="detail-value">${bio.height}</span></div>
+                <div class="detail-row"><span class="detail-label">Can nang:</span><span class="detail-value">${bio.weight}</span></div>
+                <div class="detail-row"><span class="detail-label">Sinh nhat:</span><span class="detail-value">${bio.birthday}</span></div>
+                <div class="detail-row"><span class="detail-label">So thich:</span><span class="detail-value">${hobbies}</span></div>
+                <div class="detail-row"><span class="detail-label">Noi so:</span><span class="detail-value">${fear}</span></div>
+            </div>
+            <div class="character-detail__traits">
+                <h3 class="detail-section-title">Chi so</h3>
+                ${traitsHtml}
+            </div>
+            <div class="character-detail__story">
+                <h3 class="detail-section-title">Tieu su</h3>
+                <p class="detail-info">${info.replace(/\n\n/g, '</p><p class="detail-info">')}</p>
+            </div>
+        </div>
+    `.trim();
+}
+
+/**
+ * Open character modal
+ * @param {HTMLElement} mountEl
+ * @param {string} charId
+ * @param {Object} currentStats - Current stat indices (optional)
+ */
+function openCharacterModal(mountEl, charId, currentStats = null) {
+    const char = CHARACTER_BY_ID[charId];
+    const modal = mountEl.querySelector('#character-modal');
+    const modalTitle = mountEl.querySelector('#modal-title');
+    const modalBody = mountEl.querySelector('#modal-body');
+
+    if (!char || !modal || !modalTitle || !modalBody) return;
+
+    modalTitle.textContent = char.name.vi || char.name.nickname || char.name.en;
+    modalBody.innerHTML = renderCharacterDetail(char, currentStats);
+    modal.setAttribute('aria-hidden', 'false');
+    modal.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+}
+
+/**
+ * Close character modal
+ */
+function closeCharacterModal(mountEl) {
+    const modal = mountEl.querySelector('#character-modal');
+    if (!modal) return;
+    modal.setAttribute('aria-hidden', 'true');
+    modal.classList.remove('is-open');
+    document.body.style.overflow = '';
+}
+
+/**
  * Render sidebar with current player info (replaces player-bar)
  */
 function renderSidebar(gameState, myId) {
@@ -480,6 +584,9 @@ function renderSidebar(gameState, myId) {
                         <span class="sidebar-card__label">Item</span>
                     </div>
                 </div>
+                <button class="sidebar-detail-btn" type="button" data-action="view-character-detail" data-character-id="${me.characterId}">
+                    Xem chi tiet nhan vat
+                </button>
             </div>
         </aside>
     `;
@@ -694,6 +801,7 @@ function renderGameScreen(gameState, myId) {
     return `
         <div class="game-container">
             ${content}
+            ${renderCharacterModal()}
         </div>
     `;
 }
@@ -869,6 +977,24 @@ function attachDebugEventListeners(mountEl) {
             }
             return;
         }
+
+        // View character detail
+        if (action === 'view-character-detail') {
+            const charId = actionEl?.dataset.characterId;
+            if (charId && currentGameState) {
+                // Get current stats for this character
+                const characterData = currentGameState.playerState?.characterData?.[mySocketId] || currentGameState.characterData?.[mySocketId];
+                const currentStats = characterData?.stats || null;
+                openCharacterModal(mountEl, charId, currentStats);
+            }
+            return;
+        }
+
+        // Close modal
+        if (action === 'close-modal') {
+            closeCharacterModal(mountEl);
+            return;
+        }
     });
 
     // Enter key for dice input
@@ -962,6 +1088,25 @@ function attachEventListeners(mountEl, roomId) {
         // Dice event (disabled for now)
         if (action === 'dice-event') {
             // Placeholder for future events
+            return;
+        }
+
+        // View character detail
+        if (action === 'view-character-detail') {
+            const actionEl = target.closest('[data-action]');
+            const charId = actionEl?.dataset.characterId;
+            if (charId && currentGameState) {
+                // Get current stats for this character
+                const characterData = currentGameState.playerState?.characterData?.[mySocketId] || currentGameState.characterData?.[mySocketId];
+                const currentStats = characterData?.stats || null;
+                openCharacterModal(mountEl, charId, currentStats);
+            }
+            return;
+        }
+
+        // Close modal
+        if (action === 'close-modal') {
+            closeCharacterModal(mountEl);
             return;
         }
     });
