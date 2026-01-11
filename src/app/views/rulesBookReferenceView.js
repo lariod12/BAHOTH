@@ -1,6 +1,6 @@
 import { TRANSLATION_SECTIONS } from '../data/rulesBookVietnameseEnglishTableData.js';
 import { marked } from 'marked';
-import rulesContent from '../../../rules.md?raw';
+import rulesContent from '../../../boardgame_rules.md?raw';
 
 // Custom renderer to add IDs to headings for TOC navigation
 const renderer = {
