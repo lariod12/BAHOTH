@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "clear-data": "node -e \"const fs=require('fs');const path='server/data';fs.readdirSync(path).forEach(f=>fs.writeFileSync(path+'/'+f,'[]'))\" && echo Data cleared!"
   },
   "devDependencies": {
     "vite": "^5.0.0"
