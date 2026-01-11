@@ -426,12 +426,6 @@ function renderPlayerBar(gameState, myId) {
     return `
         <div class="player-bar ${myTurn ? 'is-my-turn' : ''}">
             <div class="player-bar__info">
-                <div class="player-bar__avatar">
-                    <svg class="pawn-icon pawn-icon--large" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="6" r="4"/>
-                        <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
-                    </svg>
-                </div>
                 <div class="player-bar__details">
                     <span class="player-bar__name">${charName}</span>
                     <span class="player-bar__moves">Luot di: <strong>${movesLeft}</strong></span>
