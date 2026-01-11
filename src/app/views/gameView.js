@@ -231,18 +231,13 @@ function renderDiceRollOverlay(gameState, myId) {
 
 /**
  * Render sidebar toggle button
- * @param {boolean} disabled - Whether toggle should be disabled
  */
-function renderSidebarToggle(disabled = false) {
-    const disabledAttr = disabled ? 'disabled' : '';
-    const disabledClass = disabled ? 'is-disabled' : '';
-    
+function renderSidebarToggle() {
     return `
-        <button class="sidebar-toggle ${disabledClass}" 
+        <button class="sidebar-toggle" 
                 type="button" 
                 data-action="toggle-sidebar" 
-                title="Toggle Players"
-                ${disabledAttr}>
+                title="Toggle Players">
             <svg class="sidebar-toggle__icon" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="6" r="4"/>
                 <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
@@ -516,12 +511,9 @@ function renderGameScreen(gameState, myId) {
         const playerNames = buildPlayerNamesMap(players, getCharacterName);
         const myPosition = playerPositions[myId];
         
-        // Check if it's my turn to disable sidebar toggle
-        const myTurn = isMyTurn(gameState, myId);
-
         content = `
             ${renderGameIntro()}
-            ${renderSidebarToggle(myTurn)}
+            ${renderSidebarToggle()}
             <div class="game-layout">
                 ${renderSidebar(gameState, myId)}
                 <div class="game-main">
