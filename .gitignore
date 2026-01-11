@@ -1,3 +1,6 @@
+# Dot folders (hidden folders)
+.*/
+
 # Dependencies
 node_modules/
 npm-debug.log*
