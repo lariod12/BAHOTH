@@ -701,7 +701,8 @@ function attachDebugEventListeners(mountEl) {
                 const playerIdx = currentGameState.players.findIndex(p => p.id === playerId);
                 if (playerIdx !== -1) {
                     debugCurrentPlayerIndex = playerIdx;
-                    mySocketId = getDebugPlayerId();
+                    // Set mySocketId to the actual player ID from game state
+                    mySocketId = currentGameState.players[playerIdx].id;
                     updateGameUI(mountEl, currentGameState, mySocketId);
                 }
             }
@@ -965,14 +966,21 @@ function mapDirectionToDoor(direction) {
 function handleDebugMove(mountEl, direction) {
     if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
 
-    const playerId = getDebugPlayerId();
+    // Use mySocketId which is set to current player's actual ID
+    const playerId = mySocketId;
     const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
     
     // Only allow move if it's this player's turn
-    if (playerId !== currentTurnPlayer) return;
+    if (playerId !== currentTurnPlayer) {
+        console.log(`Not ${playerId}'s turn, current turn: ${currentTurnPlayer}`);
+        return;
+    }
     
     const moves = currentGameState.playerMoves[playerId] || 0;
-    if (moves <= 0) return;
+    if (moves <= 0) {
+        console.log(`No moves left for ${playerId}`);
+        return;
+    }
     
     // Get current position and map data
     const currentRoomId = currentGameState.playerState.playerPositions[playerId];
@@ -1011,14 +1019,15 @@ function handleDebugMove(mountEl, direction) {
             currentGameState.playerMoves[nextPlayerId] = speed;
         }
         
-        // Auto switch to next player
+        // Auto switch to next player and update mySocketId
         const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
         if (nextIdx !== -1) {
             debugCurrentPlayerIndex = nextIdx;
+            mySocketId = nextPlayerId;
         }
     }
     
-    updateGameUI(mountEl, currentGameState, getDebugPlayerId());
+    updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**
