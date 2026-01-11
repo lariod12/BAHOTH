@@ -10,6 +10,7 @@ let unsubscribeGameState = null;
 let sidebarOpen = false;
 let introShown = false;
 let introTimeout = null;
+let turnOrderExpanded = false; // Turn order collapsed by default
 /** @type {Set<string>} Track expanded player IDs in sidebar */
 let expandedPlayers = new Set();
 /** @type {Set<string>} Track active player IDs */
@@ -450,7 +451,7 @@ function renderPlayerBar(gameState, myId) {
 }
 
 /**
- * Render turn order indicator
+ * Render turn order indicator (collapsible)
  */
 function renderTurnOrder(gameState, myId) {
     if (!gameState || gameState.gamePhase !== 'playing') return '';
@@ -458,6 +459,12 @@ function renderTurnOrder(gameState, myId) {
     const turnOrder = gameState.turnOrder || [];
     const currentIndex = gameState.currentTurnIndex ?? 0;
     const players = gameState.players || [];
+    
+    // Get current player info for collapsed view
+    const currentPlayerId = turnOrder[currentIndex];
+    const currentPlayer = players.find(p => p.id === currentPlayerId);
+    const currentCharName = currentPlayer ? getCharacterName(currentPlayer.characterId) : 'Unknown';
+    const isCurrentMe = currentPlayerId === myId;
 
     const orderedPlayers = turnOrder.map((socketId, idx) => {
         const player = players.find(p => p.id === socketId);
@@ -478,9 +485,18 @@ function renderTurnOrder(gameState, myId) {
         `;
     }).filter(Boolean).join('');
 
+    const expandedClass = turnOrderExpanded ? 'is-expanded' : '';
+    const chevronIcon = turnOrderExpanded ? '▲' : '▼';
+
     return `
-        <div class="turn-order">
-            <p class="turn-order__label">Thu tu luot di:</p>
+        <div class="turn-order ${expandedClass}">
+            <div class="turn-order__header" data-action="toggle-turn-order">
+                <span class="turn-order__current">
+                    <span class="turn-order__current-label">Luot:</span>
+                    <span class="turn-order__current-name">${currentCharName}${isCurrentMe ? ' (You)' : ''}</span>
+                </span>
+                <span class="turn-order__chevron">${chevronIcon}</span>
+            </div>
             <div class="turn-order__list">${orderedPlayers}</div>
         </div>
     `;
@@ -688,6 +704,13 @@ function attachDebugEventListeners(mountEl) {
         const actionEl = target.closest('[data-action]');
         const action = actionEl?.dataset.action;
 
+        // Toggle turn order expand/collapse
+        if (action === 'toggle-turn-order') {
+            turnOrderExpanded = !turnOrderExpanded;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
         // Debug switch player (click on turn order)
         if (action === 'debug-switch-player') {
             const playerId = actionEl?.dataset.playerId;
@@ -781,6 +804,13 @@ function attachEventListeners(mountEl, roomId) {
     mountEl.addEventListener('click', async (e) => {
         const target = /** @type {HTMLElement} */ (e.target);
         const action = target.dataset.action || target.closest('[data-action]')?.dataset.action;
+
+        // Toggle turn order expand/collapse
+        if (action === 'toggle-turn-order') {
+            turnOrderExpanded = !turnOrderExpanded;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
 
         // Skip intro
         if (action === 'skip-intro') {
@@ -1126,6 +1156,7 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         // Reset state for next game
         sidebarOpen = false;
         introShown = false;
+        turnOrderExpanded = false;
         movesInitializedForTurn = -1;
         expandedPlayers.clear();
         activePlayers.clear();

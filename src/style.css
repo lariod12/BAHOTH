@@ -1576,18 +1576,63 @@ select.field__input option {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.turn-order__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.turn-order__current {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+}
+
+.turn-order__current-label {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.turn-order__current-name {
+    color: rgba(212, 175, 55, 0.9);
+    font-weight: 600;
+}
+
+.turn-order__chevron {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.7rem;
+    transition: transform 0.2s ease;
+}
+
+.turn-order.is-expanded .turn-order__chevron {
+    transform: rotate(180deg);
+}
+
+.turn-order__list {
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.turn-order.is-expanded .turn-order__list {
+    display: flex;
+}
+
 .turn-order__label {
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: rgba(255, 255, 255, 0.5);
     margin: 0 0 8px;
-}
-
-.turn-order__list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
 }
 
 .turn-indicator {
