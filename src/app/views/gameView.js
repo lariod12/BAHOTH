@@ -326,81 +326,58 @@ function groupPlayersByRoom(players, playerPositions) {
 }
 
 /**
- * Render sidebar with other players
+ * Render sidebar with current player info (replaces player-bar)
  */
 function renderSidebar(gameState, myId) {
     if (!gameState) return '';
 
-    const players = gameState.players || [];
-    const playerState = gameState.playerState || {};
-    const playerPositions = playerState.playerPositions || {};
-    const turnOrder = gameState.turnOrder || [];
-    const currentIndex = gameState.currentTurnIndex ?? 0;
-    const currentTurnPlayer = turnOrder[currentIndex];
+    const me = gameState.players?.find(p => p.id === myId);
+    if (!me) return '';
 
-    // Filter out current player
-    const otherPlayers = players.filter(p => p.id !== myId);
+    const charName = getCharacterName(me.characterId);
+    const movesLeft = gameState.playerMoves?.[myId] ?? 0;
+    const myTurn = isMyTurn(gameState, myId);
+    const playerPositions = gameState.playerState?.playerPositions || {};
+    const myPosition = playerPositions[myId] || 'Unknown';
+
+    // TODO: Get actual cards from game state when implemented
+    const omenCards = [];
+    const eventCards = [];
+    const itemCards = [];
 
     const openClass = sidebarOpen ? 'is-open' : '';
 
-    if (otherPlayers.length === 0) {
-        return `
-            <aside class="game-sidebar ${openClass}">
-                <div class="sidebar-header">
-                    <span class="sidebar-title">Players</span>
-                    <button class="sidebar-close" type="button" data-action="close-sidebar">&times;</button>
-                </div>
-                <div class="sidebar-empty">No other players</div>
-            </aside>
-        `;
-    }
-
-    // Group players by room before rendering
-    const groupedPlayers = groupPlayersByRoom(otherPlayers, playerPositions);
-
-    const playersHtml = groupedPlayers.map(player => {
-        const charName = getCharacterName(player.characterId);
-        const position = playerPositions[player.id] || 'Unknown';
-        const isCurrentTurn = player.id === currentTurnPlayer;
-        const turnIndex = turnOrder.indexOf(player.id);
-        const isExpanded = expandedPlayers.has(player.id);
-        const expandedClass = isExpanded ? 'is-expanded' : '';
-
-        return `
-            <div class="sidebar-player ${isCurrentTurn ? 'is-current-turn' : ''} ${expandedClass}"
-                 data-action="expand-player" 
-                 data-player-id="${player.id}">
-                <div class="sidebar-player__header">
-                    <div class="sidebar-player__icon">
-                        <svg class="pawn-icon" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="6" r="4"/>
-                            <path d="M12 12c-3 0-6 2-6 5v3h12v-3c0-3-3-5-6-5z"/>
-                        </svg>
-                    </div>
-                    <div class="sidebar-player__info">
-                        <span class="sidebar-player__name">${charName}</span>
-                        <span class="sidebar-player__room">${position}</span>
-                        <span class="sidebar-player__order">#${turnIndex + 1}</span>
-                    </div>
-                </div>
-                <div class="sidebar-player__details" style="display: ${isExpanded ? 'block' : 'none'}">
-                    <div class="sidebar-player__detail-row">
-                        <span class="detail-label">Position:</span>
-                        <span class="detail-value">${position}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-
     return `
-        <aside class="game-sidebar ${openClass}">
+        <aside class="game-sidebar ${openClass} ${myTurn ? 'is-my-turn' : ''}">
             <div class="sidebar-header">
-                <span class="sidebar-title">Players</span>
+                <span class="sidebar-title">${charName}</span>
                 <button class="sidebar-close" type="button" data-action="close-sidebar">&times;</button>
             </div>
-            <div class="sidebar-players">
-                ${playersHtml}
+            <div class="sidebar-content">
+                <div class="sidebar-stats">
+                    <div class="sidebar-stat">
+                        <span class="sidebar-stat__label">Vi tri</span>
+                        <span class="sidebar-stat__value">${myPosition}</span>
+                    </div>
+                    <div class="sidebar-stat sidebar-stat--highlight">
+                        <span class="sidebar-stat__label">Luot di</span>
+                        <span class="sidebar-stat__value">${movesLeft}</span>
+                    </div>
+                </div>
+                <div class="sidebar-cards">
+                    <div class="sidebar-card sidebar-card--omen">
+                        <span class="sidebar-card__count">${omenCards.length}</span>
+                        <span class="sidebar-card__label">Omen</span>
+                    </div>
+                    <div class="sidebar-card sidebar-card--event">
+                        <span class="sidebar-card__count">${eventCards.length}</span>
+                        <span class="sidebar-card__label">Event</span>
+                    </div>
+                    <div class="sidebar-card sidebar-card--item">
+                        <span class="sidebar-card__count">${itemCards.length}</span>
+                        <span class="sidebar-card__label">Item</span>
+                    </div>
+                </div>
             </div>
         </aside>
     `;
@@ -602,7 +579,6 @@ function renderGameScreen(gameState, myId) {
                     </div>
                 </div>
             </div>
-            ${renderPlayerBar(gameState, myId)}
             ${renderGameControls(gameState, myId)}
         `;
     } else {
