@@ -11,6 +11,10 @@ export const ITEMS = [
         'Khi đổ xúc xắc với chỉ số bất kì, bạn có thể chọn một số từ 0 đến 8 và sử dụng đó làm kết quả đổ xúc xắc.\n' +
         'Hủy bỏ lá bài này sau khi sử dụng.',
     },
+    usable: true,
+    useOnRoll: true,
+    effect: { setRollResult: { min: 0, max: 8 } },
+    consumable: true,
   },
 
   {
@@ -22,7 +26,19 @@ export const ITEMS = [
         'Nó vang lên một giai điệu mê hoặc.\n' +
         'Một lần mỗi lượt, bạn có thể mở hoặc đóng hộp nhạc này.\n' +
         'Khi mở, tất cả người chơi (kể cả người sử dụng) và quái vật cùng phòng có chỉ số Sanity đều phải đổ xúc xắc Sanity được 4+. Nếu thất bại, người đó sẽ bị thôi miên và mất lượt.\n' +
-        'Nếu người sử dụng bị thôi miên thì sẽ đánh rơi hộp nhạc. Nếu bị rơi, hộp nhạc vẫn sẽ giữ nguyên tình trạng đóng/ mở trước đó.',
+        'Nếu người sử dụng bị thôi miên thì sẽ đánh rơi hộp nhạc. Nếu bị rơi, hộp nhạc vẫn sẽ giữ nguyên tình trạng đóng/mở trước đó.',
+    },
+    usable: true,
+    usePerTurn: 1,
+    toggleable: true,
+    whenOpen: {
+      affectsAllInRoom: true,
+      includesUser: true,
+      includesMonsters: true,
+      rollStat: 'sanity',
+      threshold: 4,
+      onFail: { effect: 'hypnotize', loseTurn: true },
+      onUserFail: { effect: 'dropItem' },
     },
   },
 
@@ -37,6 +53,13 @@ export const ITEMS = [
         '6+  Bạn mở thành công, rút 2 lá Item mới và hủy bỏ lá bài này.\n' +
         '0-5  Bạn không mở được.',
     },
+    usable: true,
+    usePerTurn: 1,
+    rollStat: 'knowledge',
+    rollResults: [
+      { range: '6+', effect: 'drawItem', amount: 2, discard: true },
+      { range: '0-5', effect: 'nothing' },
+    ],
   },
 
   {
@@ -49,6 +72,10 @@ export const ITEMS = [
         'Trước khi đổ xúc xắc với bất kì chỉ số nào, bạn có thể cộng thêm 4 điểm vào kết quả.\n' +
         'Hủy bỏ lá bài này sau khi sử dụng.',
     },
+    usable: true,
+    useBeforeRoll: true,
+    effect: { addToResult: 4 },
+    consumable: true,
   },
 
   {
@@ -61,6 +88,9 @@ export const ITEMS = [
         'Giảm 1 sát thương vật lí bạn gánh chịu.\n' +
         'Item này không thể bị cướp.',
     },
+    passive: true,
+    damageReduction: { physical: 1 },
+    cannotSteal: true,
   },
 
   {
@@ -113,6 +143,16 @@ export const ITEMS = [
         '5+  Dịch chuyển bất kì số lượng người chơi chính diện về gần bạn 1 bước.\n' +
         '0-4  Toàn bộ quái vật di chuyển về gần bạn 1 bước.',
     },
+    onGain: { effect: 'gainStat', stat: 'sanity', amount: 1 },
+    onLose: { effect: 'loseStat', stat: 'sanity', amount: 1 },
+    usable: true,
+    usePerTurn: 1,
+    useAfterHaunt: true,
+    rollStat: 'sanity',
+    rollResults: [
+      { range: '5+', effect: 'moveHeroesTowardsYou', steps: 1 },
+      { range: '0-4', effect: 'moveMonstersTowardsYou', steps: 1 },
+    ],
   },
 
   {
@@ -125,6 +165,10 @@ export const ITEMS = [
         'Nếu bạn hoặc người cùng phòng có chỉ số Knowledge ở dưới mức khởi điểm thì hãy tăng lên bằng mức khởi điểm.\n' +
         'Hủy bỏ lá bài này sau khi sử dụng.',
     },
+    usable: true,
+    canTargetAllyInRoom: true,
+    effect: 'restoreKnowledgeToStarting',
+    consumable: true,
   },
 
   {
@@ -137,11 +181,16 @@ export const ITEMS = [
         'Sau khi đổ xúc xắc vì bất cứ lí do gì, bạn có thể sử dụng hòn đá để đổ lại (1 lần) số lượng xúc xắc tuỳ ý.\n' +
         'Hủy bỏ lá bài này sau khi sử dụng.',
     },
+    usable: true,
+    useAfterRoll: true,
+    effect: 'rerollAnyDice',
+    consumable: true,
   },
 
   {
     id: 'dao_gam_hut_mau',
     type: 'item',
+    subtype: 'weapon',
     name: { vi: 'Dao găm hút máu' },
     text: {
       vi:
@@ -150,6 +199,17 @@ export const ITEMS = [
         'Bạn không thể sử dụng vũ khí khác cùng lúc với vũ khí này.\n' +
         'Item này không thể trao đổi hay đánh rơi. Nếu nó bị cướp, bạn chịu 2 xúc xắc sát thương vật lí.',
     },
+    weapon: true,
+    combatBonus: {
+      stat: 'might',
+      extraDice: 3,
+      maxDice: 8,
+      cost: { loseStat: { speed: 1 } },
+    },
+    exclusiveWeapon: true,
+    cannotTrade: true,
+    cannotDrop: true,
+    onStolen: { effect: 'physicalDamage', dice: 2 },
   },
 
   {
@@ -162,6 +222,219 @@ export const ITEMS = [
         'Nếu bạn đang ở cùng phòng với một người khác, sử dụng lá bài này để trộm 1 Item mà người đó đang sở hữu.\n' +
         'Hủy bỏ lá bài này sau khi sử dụng.',
     },
+    usable: true,
+    requiresTargetInRoom: true,
+    effect: 'stealItem',
+    consumable: true,
+  },
+
+  {
+    id: 'cay_riu',
+    type: 'item',
+    subtype: 'weapon',
+    name: { vi: 'Cây rìu' },
+    text: {
+      vi:
+        'Một vũ khí cực kì sắc bén.\n' +
+        'Bạn được đổ nhiều hơn 1 viên xúc xắc khi tấn công bằng Might với Cây rìu này.\n' +
+        'Bạn không thể sử dụng cùng lúc vũ khí khác khi đang dùng Cây rìu.',
+    },
+    weapon: true,
+    combatBonus: {
+      stat: 'might',
+      extraDice: 1,
+    },
+    exclusiveWeapon: true,
+  },
+
+  {
+    id: 'buc_tuong_ma_am',
+    type: 'item',
+    name: { vi: 'Bức tượng ma ám' },
+    text: {
+      vi:
+        'Có thể nó đã chọn bạn vì lí do nào đó.\n' +
+        'Một lần mỗi lượt, trước khi đổ xúc xắc, bạn có thể chà sát vào bức tượng này để được đổ nhiều hơn 2 viên xúc xắc (tối đa 8 viên). Nhưng bạn phải trả giá bằng việc mất 1 Sanity mỗi lần sử dụng.',
+    },
+    usable: true,
+    usePerTurn: 1,
+    useBeforeRoll: true,
+    effect: {
+      extraDice: 2,
+      maxDice: 8,
+      cost: { loseStat: { sanity: 1 } },
+    },
+  },
+
+  {
+    id: 'dao_gam_hien_te',
+    type: 'item',
+    subtype: 'weapon',
+    name: { vi: 'Dao găm hiến tế' },
+    text: {
+      vi:
+        'Một con dao găm dính đầy máu và được khắc những kí tự bí ẩn.\n' +
+        'Bạn được đổ nhiều hơn 3 viên xúc xắc (tối đa 8 viên) khi chiến đấu bằng Might. Nhưng trước khi sử dụng bạn phải đổ xúc xắc Knowledge.\n' +
+        '6+  Không có gì xảy ra cả.\n' +
+        '3-5  Chịu 1 sát thương tinh thần.\n' +
+        '0-2  Con dao cứa vào tay bạn, chịu 1 sát thương vật lí và bạn không thể dùng vũ khí này.\n' +
+        'Bạn không thể dùng vũ khí khác cùng lúc với vũ khí này.',
+    },
+    weapon: true,
+    combatBonus: {
+      stat: 'might',
+      extraDice: 3,
+      maxDice: 8,
+    },
+    useRequiresRoll: {
+      stat: 'knowledge',
+      results: [
+        { range: '6+', effect: 'nothing' },
+        { range: '3-5', effect: 'mentalDamage', amount: 1 },
+        { range: '0-2', effect: 'physicalDamage', amount: 1, cannotUse: true },
+      ],
+    },
+    exclusiveWeapon: true,
+  },
+
+  {
+    id: 'ngon_nen',
+    type: 'item',
+    name: { vi: 'Ngọn nến' },
+    text: {
+      vi:
+        'Nó khiến tà ma tránh xa. Ít nhất là bạn hi vọng thế.\n' +
+        'Nếu bạn rút 1 lá Event và bị yêu cầu đổ xúc xắc, bạn được đổ nhiều hơn 1 viên (tối đa 8 viên).\n' +
+        'Nếu bạn có đủ bộ 3 lá bài: Cái chuông, Quyển sách và Ngọn nến; thì bạn được tăng 2 nấc mỗi chỉ số. Nếu bạn làm mất 1 trong 3 lá bài trên thì bạn bị giảm 2 nấc mỗi chỉ số.',
+    },
+    passive: true,
+    eventRollBonus: { extraDice: 1, maxDice: 8 },
+    setBonus: {
+      requiredItems: ['chiec_chuong', 'quyen_sach', 'ngon_nen'],
+      onComplete: { effect: 'gainAllStats', amount: 2 },
+      onBreak: { effect: 'loseAllStats', amount: 2 },
+    },
+  },
+
+  {
+    id: 'day_chuyen_ho_menh',
+    type: 'item',
+    name: { vi: 'Dây chuyền hộ mệnh' },
+    text: {
+      vi:
+        'Một mặt dây chuyền cổ bằng bạc, có đính nhiều viên đá quý và được khắc vài dòng chữ tâm linh.\n' +
+        'Tăng 1 nấc ở tất cả chỉ số của bạn.\n' +
+        'Mất 3 nấc ở tất cả chỉ số nếu bạn làm mất Dây chuyền hộ mệnh.',
+    },
+    onGain: { effect: 'gainAllStats', amount: 1 },
+    onLose: { effect: 'loseAllStats', amount: 3 },
+  },
+
+  {
+    id: 'tui_cuu_thuong',
+    type: 'item',
+    name: { vi: 'Túi cứu thương' },
+    text: {
+      vi:
+        'Túi của bác sĩ, chứa nhiều thứ có thể cứu mạng người.\n' +
+        'Một lần mỗi lượt, bạn có thể đổ xúc xắc Knowledge để sử dụng túi cứu thương cho chính mình hoặc đồng đội cùng phòng:\n' +
+        '8+  Tăng 3 nấc chỉ số vật lí.\n' +
+        '6-7  Tăng 2 nấc chỉ số vật lí.\n' +
+        '4-5  Tăng 1 nấc chỉ số vật lí.\n' +
+        '0-3  Bạn không đủ trình độ để dùng túi cứu thương.\n' +
+        'Lưu ý: bạn không thể tăng chỉ số vượt quá mức khởi điểm.',
+    },
+    usable: true,
+    usePerTurn: 1,
+    rollStat: 'knowledge',
+    canTargetAllyInRoom: true,
+    rollResults: [
+      { range: '8+', effect: 'healPhysical', amount: 3, maxToStarting: true },
+      { range: '6-7', effect: 'healPhysical', amount: 2, maxToStarting: true },
+      { range: '4-5', effect: 'healPhysical', amount: 1, maxToStarting: true },
+      { range: '0-3', effect: 'nothing' },
+    ],
+  },
+
+  {
+    id: 'sung_ngan',
+    type: 'item',
+    subtype: 'weapon',
+    name: { vi: 'Súng ngắn' },
+    text: {
+      vi:
+        'Một vũ khí lạc hậu nhưng đầy uy lực.\n' +
+        'Bạn có thể dùng Súng ngắn để tấn công người khác (bằng cách đổ xúc xắc Speed, nhưng được đổ nhiều hơn 1 viên, tối đa 8 viên). Người bị tấn công cũng phải đổ xúc xắc Speed để né đạn (chịu sát thương vật lí nếu trúng đạn). Nếu đối phương né được, bạn không bị gì.\n' +
+        'Vũ khí này có thể tấn công từ xa, miễn là bạn và đối phương đứng trên cùng một "đường thẳng tầm nhìn".\n' +
+        'Bạn không thể sử dụng cùng lúc vũ khí khác khi đang dùng Súng ngắn.',
+    },
+    weapon: true,
+    ranged: true,
+    requiresLineOfSight: true,
+    combatBonus: {
+      stat: 'speed',
+      extraDice: 1,
+      maxDice: 8,
+    },
+    defenderStat: 'speed',
+    exclusiveWeapon: true,
+  },
+
+  {
+    id: 'thuoc_giam_dau',
+    type: 'item',
+    name: { vi: 'Thuốc giảm đau' },
+    text: {
+      vi:
+        'Một chất kem, được đựng trong cái bát, bôi lên vết thương để giảm đau.\n' +
+        'Bạn có thể sử dụng Thuốc bôi giảm đau lên bản thân hoặc đồng đội cùng phòng. Nếu chỉ số Might hoặc Speed của người chơi ở dưới mức khởi điểm, thì tăng lên (1 hoặc cả 2 chỉ số trên) bằng với mức khởi điểm.\n' +
+        'Hủy bỏ lá bài này sau khi sử dụng.',
+    },
+    usable: true,
+    canTargetAllyInRoom: true,
+    effect: 'restorePhysicalToStarting',
+    consumable: true,
+  },
+
+  {
+    id: 'chan_tho',
+    type: 'item',
+    name: { vi: 'Chân thỏ' },
+    text: {
+      vi:
+        'Một con thỏ không may mắn.\n' +
+        'Một lần mỗi lượt, bạn có thể đổ lại 1 viên xúc xắc.\n' +
+        'Bạn bắt buộc phải chấp nhận kết quả đó.',
+    },
+    usable: true,
+    usePerTurn: 1,
+    effect: 'rerollOneDie',
+    mustAcceptResult: true,
+  },
+
+  {
+    id: 'phao_no',
+    type: 'item',
+    name: { vi: 'Pháo nổ' },
+    text: {
+      vi:
+        'Bùmmmm...!\n' +
+        'Bạn có thể ném Pháo nổ sang phòng liền kề (thông qua cửa ra vào).\n' +
+        'Tất cả người chơi và quái vật ở căn phòng bị quăng Pháo nổ phải đổ xúc xắc Speed.\n' +
+        '5+  Né được vụ nổ. Không bị sát thương.\n' +
+        '0-4  Bùmmmm. Chịu 4 sát thương vật lí.\n' +
+        'Hủy bỏ lá bài này sau khi sử dụng.',
+    },
+    usable: true,
+    ranged: true,
+    targetAdjacentRoom: true,
+    affectsAllInTargetRoom: true,
+    rollStat: 'speed',
+    rollResults: [
+      { range: '5+', effect: 'nothing' },
+      { range: '0-4', effect: 'physicalDamage', amount: 4 },
+    ],
+    consumable: true,
   },
 ];
 
