@@ -892,7 +892,22 @@ function handleDebugDiceRoll(mountEl, value) {
 }
 
 /**
- * Handle debug mode move
+ * Map direction to door direction for movement
+ * @param {string} direction - UI direction (up/down/left/right)
+ * @returns {string} - Door direction (north/south/west/east)
+ */
+function mapDirectionToDoor(direction) {
+    const mapping = {
+        'up': 'north',
+        'down': 'south',
+        'left': 'west',
+        'right': 'east'
+    };
+    return mapping[direction] || direction;
+}
+
+/**
+ * Handle debug mode move - uses same logic as main game (map connections)
  * @param {HTMLElement} mountEl
  * @param {string} direction
  */
@@ -908,12 +923,29 @@ function handleDebugMove(mountEl, direction) {
     const moves = currentGameState.playerMoves[playerId] || 0;
     if (moves <= 0) return;
     
+    // Get current position and map data
+    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
+    const mapConnections = currentGameState.map?.connections || {};
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    
+    // Convert UI direction to door direction
+    const doorDirection = mapDirectionToDoor(direction);
+    
+    // Check if there's a connection in that direction
+    const roomConnections = mapConnections[currentRoomId] || {};
+    const targetRoomId = roomConnections[doorDirection];
+    
+    if (!targetRoomId) {
+        // No connection in that direction - don't move
+        console.log(`No door to ${doorDirection} from ${currentRoomId}`);
+        return;
+    }
+    
+    // Move to target room
+    currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+    
     // Decrease moves
     currentGameState.playerMoves[playerId] = moves - 1;
-    
-    // Update position (simplified - just show direction moved)
-    const currentPos = currentGameState.playerState.playerPositions[playerId] || 'Entrance Hall';
-    currentGameState.playerState.playerPositions[playerId] = `${currentPos} (moved ${direction})`;
     
     // Check if turn ended
     if (currentGameState.playerMoves[playerId] <= 0) {
@@ -947,17 +979,45 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
     isDebugMode = debugMode;
     debugCurrentPlayerIndex = 0;
     
+    // Reset state for fresh game
+    sidebarOpen = false;
+    introShown = false;
+    movesInitializedForTurn = -1;
+    expandedPlayers.clear();
+    activePlayers.clear();
+    
     if (debugMode) {
         // Initialize debug game state
         currentGameState = createDebugGameState();
         mySocketId = getDebugPlayerId();
-        introShown = true; // Skip intro in debug mode
+        
+        // Show intro same as main game (will auto-hide after 5s or on click)
+        introShown = false;
         
         // Initial render
         mountEl.innerHTML = renderGameScreen(currentGameState, mySocketId);
         
+        // Auto-hide intro after 5 seconds (same as main game behavior)
+        introTimeout = setTimeout(() => {
+            hideIntro(mountEl);
+        }, 5000);
+        
         // Attach debug event listeners
         attachDebugEventListeners(mountEl);
+        
+        // Cleanup on navigate away
+        window.addEventListener('hashchange', () => {
+            if (introTimeout) {
+                clearTimeout(introTimeout);
+                introTimeout = null;
+            }
+            // Reset state for next game
+            sidebarOpen = false;
+            introShown = false;
+            movesInitializedForTurn = -1;
+            expandedPlayers.clear();
+            activePlayers.clear();
+        }, { once: true });
         
         return;
     }
