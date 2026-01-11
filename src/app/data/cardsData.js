@@ -1093,3 +1093,267 @@ export const EVENTS = [
     ],
   },
 ];
+
+export const OMENS = [
+  {
+    id: 'met_can',
+    type: 'omen',
+    name: { vi: 'Mết cắn' },
+    text: {
+      vi:
+        'Một tiếng gầm gừ trong bóng tối, nặng mùi của cái chết và sự đau đớn.\n' +
+        'Khi rút được lá bài này, một con gì đó đã cắn bạn. Người chơi ở bên tay phải bạn phải đổ 4 viên xúc xắc để tính sát thương gây ra lên bạn. Bạn phòng thủ bằng cách đổ xúc xắc Might.\n' +
+        'Lá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp.',
+    },
+    onDraw: {
+      effect: 'attack',
+      attackerDice: 4,
+      attackerIsRightPlayer: true,
+      defenderStat: 'might',
+    },
+    cannotDrop: true,
+    cannotTrade: true,
+    cannotSteal: true,
+  },
+
+  {
+    id: 'mat_na',
+    type: 'omen',
+    name: { vi: 'Mặt nạ' },
+    text: {
+      vi:
+        'Một chiếc mặt nạ tuyệt vời để ẩn giấu suy nghĩ.\n' +
+        'Một lần trong lượt, bạn có thể đổ xúc xắc Sanity để sử dụng mặt nạ:\n' +
+        '4+  Bạn đeo hoặc tháo Mặt nạ.\n' +
+        'Nếu bạn đeo Mặt nạ, tăng 2 Knowledge và giảm 2 Sanity.\n' +
+        'Nếu bạn tháo Mặt nạ, giảm 2 Knowledge và tăng 2 Sanity.\n' +
+        '0-3  Bạn không thể sử dụng Mặt nạ.',
+    },
+    usable: true,
+    usePerTurn: 1,
+    rollStat: 'sanity',
+    rollResults: [
+      {
+        range: '4+',
+        effect: 'toggle',
+        onEquip: { gainStats: { knowledge: 2 }, loseStats: { sanity: 2 } },
+        onUnequip: { loseStats: { knowledge: 2 }, gainStats: { sanity: 2 } },
+      },
+      { range: '0-3', effect: 'nothing' },
+    ],
+  },
+
+  {
+    id: 'chiec_nhan',
+    type: 'omen',
+    name: { vi: 'Chiếc nhẫn' },
+    text: {
+      vi:
+        'Một chiếc nhẫn bị đập nát với dòng chữ khó hiểu.\n' +
+        'Nếu tấn công đối thủ có chỉ số Sanity, bạn có thể dùng Sanity thay vì Might (đối thủ cũng phải phòng thủ bằng Sanity và bị sát thương tinh thần thay cho sát thương vật lí).',
+    },
+    passive: true,
+    combatModifier: {
+      canUseSanityInsteadOfMight: true,
+      condition: 'enemyHasSanity',
+      defenderUsesSanity: true,
+      damageType: 'mental',
+    },
+  },
+
+  {
+    id: 'quyen_sach',
+    type: 'omen',
+    name: { vi: 'Quyển sách' },
+    text: {
+      vi:
+        'Một quyển nhật kí hay bản ghi chú? Chữ viết cổ hay kí hiệu hiện đại?\n' +
+        'Tăng 2 Knowledge.\n' +
+        'Giảm 2 Knowledge nếu bạn mất Quyển sách.',
+    },
+    onGain: { effect: 'gainStat', stat: 'knowledge', amount: 2 },
+    onLose: { effect: 'loseStat', stat: 'knowledge', amount: 2 },
+  },
+
+  {
+    id: 'co_gai',
+    type: 'omen',
+    subtype: 'companion',
+    name: { vi: 'Cô gái' },
+    text: {
+      vi:
+        '(Bạn đồng hành)\n' +
+        'Một cô gái sao? Đây là cái bẫy? Bỏ cô ta một mình hay cứu giúp?\n' +
+        'Bạn tìm thấy một cô gái, bạn cho cô ta đi theo mình.\n' +
+        'Tăng 1 Sanity và 1 Knowledge.\n' +
+        'Giảm 1 Sanity và 1 Knowledge nếu bạn mất dấu cô gái.\n' +
+        'Lá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp.',
+    },
+    onGain: { effect: 'gainStats', stats: { sanity: 1, knowledge: 1 } },
+    onLose: { effect: 'loseStats', stats: { sanity: 1, knowledge: 1 } },
+    cannotDrop: true,
+    cannotTrade: true,
+    cannotSteal: true,
+  },
+
+  {
+    id: 'qua_cau_pha_le',
+    type: 'omen',
+    name: { vi: 'Quả cầu pha lê' },
+    text: {
+      vi:
+        'Những cảnh tượng mờ ám hiện lên bên trong.\n' +
+        'Một lần một lượt sau khi lời nguyền xuất hiện, bạn có thể đổ xúc xắc Knowledge để nhìn vào Quả cầu pha lê:\n' +
+        '4+  Bạn nhìn thấy sự thật. Chọn một lá bất kì trong xấp bài Event hoặc Item, xào lại sắp bài và đặt lá bạn chọn lên đầu.\n' +
+        '1-3  Bạn bị lóa mắt. Mất 1 Sanity.\n' +
+        '0  Bạn nhìn thấy cảnh tượng ở địa ngục, bạn sợ hãi và mất 2 Sanity.',
+    },
+    usable: true,
+    usePerTurn: 1,
+    useAfterHaunt: true,
+    rollStat: 'knowledge',
+    rollResults: [
+      { range: '4+', effect: 'searchDeck', decks: ['event', 'item'], placeOnTop: true },
+      { range: '1-3', effect: 'loseStat', stat: 'sanity', amount: 1 },
+      { range: '0', effect: 'loseStat', stat: 'sanity', amount: 2 },
+    ],
+  },
+
+  {
+    id: 'con_cho',
+    type: 'omen',
+    subtype: 'companion',
+    name: { vi: 'Con chó' },
+    text: {
+      vi:
+        '(Bạn đồng hành)\n' +
+        'Con chó ghẻ này có vẻ thân thiện. Ít nhất là bạn nghĩ thế.\n' +
+        'Tăng 1 Might và 1 Sanity.\n' +
+        'Mất 1 Might và 1 Sanity nếu bạn mất dấu Con chó.\n' +
+        'Lấy một miếng token để tượng trưng cho Con chó. Đặt nó cùng phòng với bạn.\n' +
+        'Một lần trong lượt, Con chó có thể di chuyển tối đa 6 bước đến các căn phòng đã khám phá, sử dụng cửa, cầu thang và sau đó tự động quay trở lại. Nó có thể nhặt, mang và bỏ lại vật phẩm trước khi quay lại.\n' +
+        'Con chó không bị làm chậm bởi đối thủ. Nó không thể dùng cửa bí mật, đi vào căn phòng có hiệu ứng đổ xúc xắc và mang vật phẩm có hiệu ứng làm chậm.\n' +
+        'Lá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp.',
+    },
+    onGain: { effect: 'gainStats', stats: { might: 1, sanity: 1 } },
+    onLose: { effect: 'loseStats', stats: { might: 1, sanity: 1 } },
+    companion: {
+      token: 'dog',
+      movePerTurn: 6,
+      canPickupItems: true,
+      cannotBeSlowed: true,
+      cannotUseSecretDoors: true,
+      cannotEnterRollRooms: true,
+      cannotCarrySlowItems: true,
+    },
+    cannotDrop: true,
+    cannotTrade: true,
+    cannotSteal: true,
+  },
+
+  {
+    id: 'dau_lau',
+    type: 'omen',
+    name: { vi: 'Đầu lâu' },
+    text: {
+      vi:
+        'Một cái đầu lâu bị nứt vỡ và thiếu mất vài cái răng.\n' +
+        'Nếu nhận sát thương tinh thần, bạn có thể chuyển toàn bộ sang sát thương vật lí.',
+    },
+    passive: true,
+    damageConversion: {
+      from: 'mental',
+      to: 'physical',
+      optional: true,
+    },
+  },
+
+  {
+    id: 'tam_me_day',
+    type: 'omen',
+    name: { vi: 'Tấm mề đay' },
+    text: {
+      vi:
+        'Một tấm mề đay được khắc hình ngôi sao năm cánh.\n' +
+        'Bạn được miễn nhiễm với mọi hiệu ứng của Căn phòng hình sao, Nhà mồ và Nghĩa địa (Pentagram Chamber, Crypt và Graveyard).',
+    },
+    passive: true,
+    immunity: ['pentagram_chamber', 'crypt', 'graveyard'],
+  },
+
+  {
+    id: 'ngon_giao',
+    type: 'omen',
+    subtype: 'weapon',
+    name: { vi: 'Ngọn giáo' },
+    text: {
+      vi:
+        '(Vũ khí)\n' +
+        'Một thứ vũ khí tăng sức mạnh.\n' +
+        'Bạn được đổ nhiều hơn 2 viên xúc xắc (tối đa 8 viên) khi tấn công bằng Might với vũ khí này.\n' +
+        'Bạn không thể sử dụng vũ khí khác cùng lúc với Ngọn giáo.',
+    },
+    weapon: true,
+    combatBonus: {
+      stat: 'might',
+      extraDice: 2,
+      maxDice: 8,
+    },
+    exclusiveWeapon: true,
+  },
+
+  {
+    id: 'thanh_gia',
+    type: 'omen',
+    name: { vi: 'Thánh giá' },
+    text: {
+      vi:
+        'Biểu tượng của cái thiện trong thế giới hỗn độn.\n' +
+        'Tăng 2 Sanity.\n' +
+        'Giảm 2 Sanity nếu bạn mất Thánh giá.',
+    },
+    onGain: { effect: 'gainStat', stat: 'sanity', amount: 2 },
+    onLose: { effect: 'loseStat', stat: 'sanity', amount: 2 },
+  },
+
+  {
+    id: 'ten_dien',
+    type: 'omen',
+    subtype: 'companion',
+    name: { vi: 'Tên điên' },
+    text: {
+      vi:
+        '(Bạn đồng hành)\n' +
+        'Một tên điên nói nhảng nói cuội, miệng sùi bọt mép.\n' +
+        'Tăng 2 Might và mất 1 Sanity.\n' +
+        'Mất 2 Might và tăng 1 Sanity nếu bạn mất dấu kẻ điên.\n' +
+        'Lá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp.',
+    },
+    onGain: { effect: 'modifyStats', gainStats: { might: 2 }, loseStats: { sanity: 1 } },
+    onLose: { effect: 'modifyStats', loseStats: { might: 2 }, gainStats: { sanity: 1 } },
+    cannotDrop: true,
+    cannotTrade: true,
+    cannotSteal: true,
+  },
+
+  {
+    id: 'ban_cau_co',
+    type: 'omen',
+    name: { vi: 'Bàn cầu cơ' },
+    text: {
+      vi:
+        'Một tấm bảng với những kí tự và con số kêu gọi cái chết.\n' +
+        'Trước khi di chuyển trong lượt, bạn có thể nhìn trước lát phòng định rút.\n' +
+        'Vì bàn cầu cơ thu hút ma quỷ, nên nếu bạn sử dụng Bàn cầu cơ sau khi lời nguyền xuất hiện, các quái vật có thể được đi nhiều hơn 1 bước về gần bạn hơn (nếu bạn là kẻ phản bội, không có gì xảy ra).',
+    },
+    usable: true,
+    useBeforeMove: true,
+    effect: 'peekRoomTile',
+    afterHauntPenalty: {
+      condition: 'notTraitor',
+      effect: 'monstersMove',
+      extraSteps: 1,
+      towards: 'user',
+    },
+  },
+];
