@@ -1570,6 +1570,7 @@ select.field__input option {
 
 /* Turn order display */
 .turn-order {
+    position: relative;
     padding: 12px 16px;
     background: rgba(0, 0, 0, 0.25);
     border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -1618,9 +1619,14 @@ select.field__input option {
     display: none;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.92);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    z-index: 10;
 }
 
 .turn-order.is-expanded .turn-order__list {
