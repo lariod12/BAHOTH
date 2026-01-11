@@ -63,15 +63,41 @@ function createMockMap() {
 }
 
 /**
+ * Create character data with initial stats from character definition
+ * @param {string} playerId
+ * @param {string} characterId
+ * @returns {Object}
+ */
+function createCharacterData(playerId, characterId) {
+    const char = CHARACTER_BY_ID[characterId];
+    if (!char) return null;
+    return {
+        characterId,
+        stats: {
+            speed: char.traits.speed.startIndex,
+            might: char.traits.might.startIndex,
+            sanity: char.traits.sanity.startIndex,
+            knowledge: char.traits.knowledge.startIndex,
+        },
+        isDead: false,
+    };
+}
+
+/**
  * Create game state from passed player data (from debug room)
  * @param {Array} players - Players array from room
  * @returns {any}
  */
 function createGameStateFromPlayers(players) {
-    // Create player positions - all start at entrance hall
+    // Create player positions and character data - all start at entrance hall
     const playerPositions = {};
+    const characterData = {};
     players.forEach(p => {
         playerPositions[p.id] = 'entrance-hall';
+        const charData = createCharacterData(p.id, p.characterId);
+        if (charData) {
+            characterData[p.id] = charData;
+        }
     });
 
     return {
@@ -89,8 +115,10 @@ function createGameStateFromPlayers(players) {
         currentTurnIndex: 0,
         playerMoves: {},
         playerState: {
-            playerPositions
+            playerPositions,
+            characterData
         },
+        characterData,
         map: createMockMap()
     };
 }
@@ -127,10 +155,15 @@ function createDebugGameState() {
         status: 'ready'
     }));
 
-    // Create player positions
+    // Create player positions and character data
     const playerPositions = {};
+    const characterData = {};
     players.forEach(p => {
         playerPositions[p.id] = 'entrance-hall';
+        const charData = createCharacterData(p.id, p.characterId);
+        if (charData) {
+            characterData[p.id] = charData;
+        }
     });
 
     return {
@@ -143,8 +176,10 @@ function createDebugGameState() {
         currentTurnIndex: 0,
         playerMoves: {},
         playerState: {
-            playerPositions
+            playerPositions,
+            characterData
         },
+        characterData,
         map: createMockMap()
     };
 }
@@ -167,6 +202,38 @@ function getCharacterSpeed(characterId) {
     if (!char) return 4; // default
     const speedTrait = char.traits.speed;
     return speedTrait.track[speedTrait.startIndex];
+}
+
+/**
+ * Get stat value from character's trait track at given index
+ * @param {string} characterId
+ * @param {'speed' | 'might' | 'sanity' | 'knowledge'} trait
+ * @param {number} currentIndex
+ * @returns {number}
+ */
+function getStatValue(characterId, trait, currentIndex) {
+    const char = CHARACTER_BY_ID[characterId];
+    if (!char) return 0;
+    const traitData = char.traits[trait];
+    if (!traitData) return 0;
+    const idx = Math.max(0, Math.min(7, currentIndex));
+    return traitData.track[idx];
+}
+
+/**
+ * Get all stat values for a player from characterData
+ * @param {Object} characterData - Player's character data with stats indices
+ * @returns {{ speed: number; might: number; sanity: number; knowledge: number } | null}
+ */
+function getAllStatValues(characterData) {
+    if (!characterData || !characterData.characterId || !characterData.stats) return null;
+    const { characterId, stats } = characterData;
+    return {
+        speed: getStatValue(characterId, 'speed', stats.speed),
+        might: getStatValue(characterId, 'might', stats.might),
+        sanity: getStatValue(characterId, 'sanity', stats.sanity),
+        knowledge: getStatValue(characterId, 'knowledge', stats.knowledge),
+    };
 }
 
 /**
@@ -326,6 +393,37 @@ function groupPlayersByRoom(players, playerPositions) {
 }
 
 /**
+ * Render character stats section (4 traits: Speed, Might, Sanity, Knowledge)
+ * @param {Object} characterData - Player's character data with stats indices
+ * @returns {string} HTML string
+ */
+function renderCharacterStats(characterData) {
+    const statValues = getAllStatValues(characterData);
+    if (!statValues) return '';
+
+    return `
+        <div class="sidebar-traits">
+            <div class="sidebar-trait sidebar-trait--speed">
+                <span class="sidebar-trait__label">Speed</span>
+                <span class="sidebar-trait__value">${statValues.speed}</span>
+            </div>
+            <div class="sidebar-trait sidebar-trait--might">
+                <span class="sidebar-trait__label">Might</span>
+                <span class="sidebar-trait__value">${statValues.might}</span>
+            </div>
+            <div class="sidebar-trait sidebar-trait--sanity">
+                <span class="sidebar-trait__label">Sanity</span>
+                <span class="sidebar-trait__value">${statValues.sanity}</span>
+            </div>
+            <div class="sidebar-trait sidebar-trait--knowledge">
+                <span class="sidebar-trait__label">Knowledge</span>
+                <span class="sidebar-trait__value">${statValues.knowledge}</span>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render sidebar with current player info (replaces player-bar)
  */
 function renderSidebar(gameState, myId) {
@@ -339,6 +437,9 @@ function renderSidebar(gameState, myId) {
     const myTurn = isMyTurn(gameState, myId);
     const playerPositions = gameState.playerState?.playerPositions || {};
     const myPosition = playerPositions[myId] || 'Unknown';
+
+    // Get character stats from game state
+    const characterData = gameState.playerState?.characterData?.[myId] || gameState.characterData?.[myId];
 
     // TODO: Get actual cards from game state when implemented
     const omenCards = [];
@@ -364,6 +465,7 @@ function renderSidebar(gameState, myId) {
                         <span class="sidebar-stat__value">${movesLeft}</span>
                     </div>
                 </div>
+                ${renderCharacterStats(characterData)}
                 <div class="sidebar-cards">
                     <div class="sidebar-card sidebar-card--omen">
                         <span class="sidebar-card__count">${omenCards.length}</span>

@@ -4,6 +4,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { CHARACTER_BY_ID, TRAIT_KEYS } from './data/characterTraits.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -13,10 +14,24 @@ const PLAYERS_FILE = join(DATA_DIR, 'players.json');
 
 /**
  * @typedef {{
+ *   speed: number;
+ *   might: number;
+ *   sanity: number;
+ *   knowledge: number;
+ * }} CharacterStatIndices - currentIndex for each trait (0-7)
+ *
+ * @typedef {{
+ *   characterId: string;
+ *   stats: CharacterStatIndices;
+ *   isDead: boolean;
+ * }} PlayerCharacterData
+ *
+ * @typedef {{
  *   turnOrder: string[];
  *   currentTurnIndex: number;
  *   playerMoves: Record<string, number>;
  *   playerPositions: Record<string, string>;
+ *   characterData: Record<string, PlayerCharacterData>;
  * }} PlayerState
  *
  * @typedef {{
@@ -88,22 +103,43 @@ loadPlayers();
 /**
  * Initialize player state when game starts
  * @param {string} roomId
- * @param {string[]} playerIds - All player socket IDs
+ * @param {Array<{id: string, characterId: string}>} players - Players with their character IDs
  * @param {string} startingRoom - Starting room ID (e.g., 'entrance-hall')
  * @returns {PlayerState}
  */
-export function initializeGame(roomId, playerIds, startingRoom = 'entrance-hall') {
+export function initializeGame(roomId, players, startingRoom = 'entrance-hall') {
     const state = {
         turnOrder: [],
         currentTurnIndex: 0,
         playerMoves: {},
         playerPositions: {},
+        characterData: {},
     };
 
-    // Set all players to starting position
-    for (const playerId of playerIds) {
+    // Set all players to starting position and initialize character stats
+    for (const player of players) {
+        const playerId = typeof player === 'string' ? player : player.id;
+        const characterId = typeof player === 'string' ? null : player.characterId;
+
         state.playerMoves[playerId] = 0;
         state.playerPositions[playerId] = startingRoom;
+
+        // Initialize character stats if characterId provided
+        if (characterId) {
+            const character = CHARACTER_BY_ID[characterId];
+            if (character) {
+                state.characterData[playerId] = {
+                    characterId,
+                    stats: {
+                        speed: character.traits.speed.startIndex,
+                        might: character.traits.might.startIndex,
+                        sanity: character.traits.sanity.startIndex,
+                        knowledge: character.traits.knowledge.startIndex,
+                    },
+                    isDead: false,
+                };
+            }
+        }
     }
 
     games.set(roomId, state);
@@ -296,5 +332,146 @@ export function getFullPlayerState(roomId) {
         currentTurnIndex: state.currentTurnIndex,
         playerMoves: { ...state.playerMoves },
         playerPositions: { ...state.playerPositions },
+        characterData: state.characterData ? { ...state.characterData } : {},
+    };
+}
+
+// ============================================
+// Character Stats Functions
+// ============================================
+
+/**
+ * Initialize character stats for a player based on their selected character
+ * @param {string} roomId
+ * @param {string} playerId
+ * @param {string} characterId
+ * @returns {PlayerCharacterData | undefined}
+ */
+export function initializeCharacterStats(roomId, playerId, characterId) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    const character = CHARACTER_BY_ID[characterId];
+    if (!character) {
+        console.warn(`[PlayerManager] Unknown characterId: ${characterId}`);
+        return undefined;
+    }
+
+    // Initialize characterData if not exists
+    if (!state.characterData) {
+        state.characterData = {};
+    }
+
+    // Create stats with startIndex for each trait
+    const stats = {
+        speed: character.traits.speed.startIndex,
+        might: character.traits.might.startIndex,
+        sanity: character.traits.sanity.startIndex,
+        knowledge: character.traits.knowledge.startIndex,
+    };
+
+    const playerCharData = {
+        characterId,
+        stats,
+        isDead: false,
+    };
+
+    state.characterData[playerId] = playerCharData;
+    savePlayers();
+
+    return playerCharData;
+}
+
+/**
+ * Get character stats for a player
+ * @param {string} roomId
+ * @param {string} playerId
+ * @returns {PlayerCharacterData | undefined}
+ */
+export function getCharacterStats(roomId, playerId) {
+    const state = games.get(roomId);
+    if (!state || !state.characterData) return undefined;
+
+    return state.characterData[playerId];
+}
+
+/**
+ * Update a character stat by delta (positive or negative)
+ * @param {string} roomId
+ * @param {string} playerId
+ * @param {'speed' | 'might' | 'sanity' | 'knowledge'} trait
+ * @param {number} delta
+ * @returns {{ success: boolean; newIndex: number; newValue: number; isDead: boolean } | undefined}
+ */
+export function updateCharacterStat(roomId, playerId, trait, delta) {
+    const state = games.get(roomId);
+    if (!state || !state.characterData) return undefined;
+
+    const playerData = state.characterData[playerId];
+    if (!playerData) return undefined;
+
+    if (!TRAIT_KEYS.includes(trait)) {
+        console.warn(`[PlayerManager] Invalid trait: ${trait}`);
+        return undefined;
+    }
+
+    const currentIndex = playerData.stats[trait];
+    // Clamp new index between 0 and 7
+    const newIndex = Math.max(0, Math.min(7, currentIndex + delta));
+    playerData.stats[trait] = newIndex;
+
+    // Check death condition: any stat at index 0 means death
+    if (newIndex === 0) {
+        playerData.isDead = true;
+    }
+
+    savePlayers();
+
+    // Get actual value for the new index
+    const newValue = getStatValue(playerData.characterId, trait, newIndex);
+
+    return {
+        success: true,
+        newIndex,
+        newValue,
+        isDead: playerData.isDead,
+    };
+}
+
+/**
+ * Get actual stat value from character's trait track at given index
+ * @param {string} characterId
+ * @param {'speed' | 'might' | 'sanity' | 'knowledge'} trait
+ * @param {number} currentIndex
+ * @returns {number}
+ */
+export function getStatValue(characterId, trait, currentIndex) {
+    const character = CHARACTER_BY_ID[characterId];
+    if (!character) return 0;
+
+    const traitData = character.traits[trait];
+    if (!traitData) return 0;
+
+    // Clamp index to valid range
+    const idx = Math.max(0, Math.min(7, currentIndex));
+    return traitData.track[idx];
+}
+
+/**
+ * Get all stat values for a player (computed from indices)
+ * @param {string} roomId
+ * @param {string} playerId
+ * @returns {{ speed: number; might: number; sanity: number; knowledge: number } | undefined}
+ */
+export function getAllStatValues(roomId, playerId) {
+    const playerData = getCharacterStats(roomId, playerId);
+    if (!playerData) return undefined;
+
+    const { characterId, stats } = playerData;
+    return {
+        speed: getStatValue(characterId, 'speed', stats.speed),
+        might: getStatValue(characterId, 'might', stats.might),
+        sanity: getStatValue(characterId, 'sanity', stats.sanity),
+        knowledge: getStatValue(characterId, 'knowledge', stats.knowledge),
     };
 }

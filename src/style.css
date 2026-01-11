@@ -2705,6 +2705,66 @@ select.field__input option {
     color: rgba(201, 165, 92, 0.95);
 }
 
+/* Character Traits (4 stats: Speed, Might, Sanity, Knowledge) */
+.sidebar-traits {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.sidebar-trait {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+}
+
+.sidebar-trait__label {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+}
+
+.sidebar-trait__value {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+/* Trait color coding */
+.sidebar-trait--speed {
+    border-color: rgba(52, 152, 219, 0.3);
+}
+.sidebar-trait--speed .sidebar-trait__value {
+    color: #3498db;
+}
+
+.sidebar-trait--might {
+    border-color: rgba(231, 76, 60, 0.3);
+}
+.sidebar-trait--might .sidebar-trait__value {
+    color: #e74c3c;
+}
+
+.sidebar-trait--sanity {
+    border-color: rgba(155, 89, 182, 0.3);
+}
+.sidebar-trait--sanity .sidebar-trait__value {
+    color: #9b59b6;
+}
+
+.sidebar-trait--knowledge {
+    border-color: rgba(39, 174, 96, 0.3);
+}
+.sidebar-trait--knowledge .sidebar-trait__value {
+    color: #27ae60;
+}
+
 .sidebar-cards {
     display: flex;
     flex-direction: column;
