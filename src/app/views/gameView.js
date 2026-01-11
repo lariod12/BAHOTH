@@ -22,23 +22,11 @@ let isDebugMode = false;
 let debugCurrentPlayerIndex = 0; // Which of the 3 local players is "active"
 
 /**
- * Create mock game state for debug mode with 3 local players
- * @returns {any}
+ * Create mock map for debug mode
+ * @returns {Object}
  */
-function createDebugGameState() {
-    // Pick 3 random characters
-    const shuffled = [...CHARACTERS].sort(() => Math.random() - 0.5);
-    const selectedChars = shuffled.slice(0, 3);
-    
-    const players = selectedChars.map((char, idx) => ({
-        id: `debug-player-${idx}`,
-        name: `Player ${idx + 1}`,
-        characterId: char.id,
-        status: 'ready'
-    }));
-
-    // Create mock map with starting rooms: Entrance Hall -> Foyer -> Grand Staircase (vertical line)
-    const mockMap = {
+function createMockMap() {
+    return {
         revealedRooms: {
             'entrance-hall': {
                 id: 'entrance-hall',
@@ -71,10 +59,82 @@ function createDebugGameState() {
             'grand-staircase': { south: 'foyer' }
         }
     };
+}
+
+/**
+ * Create game state from passed player data (from debug room)
+ * @param {Array} players - Players array from room
+ * @returns {any}
+ */
+function createGameStateFromPlayers(players) {
+    // Create player positions - all start at entrance hall
+    const playerPositions = {};
+    players.forEach(p => {
+        playerPositions[p.id] = 'entrance-hall';
+    });
 
     return {
         roomId: 'DEBUG-MODE',
-        gamePhase: 'rolling', // Start with rolling phase
+        gamePhase: 'rolling',
+        players: players.map(p => ({
+            id: p.id,
+            name: p.name,
+            characterId: p.characterId,
+            status: 'ready'
+        })),
+        diceRolls: {},
+        needsRoll: players.map(p => p.id),
+        turnOrder: [],
+        currentTurnIndex: 0,
+        playerMoves: {},
+        playerState: {
+            playerPositions
+        },
+        map: createMockMap()
+    };
+}
+
+/**
+ * Create mock game state for debug mode
+ * Checks sessionStorage for passed data from debug room first
+ * Falls back to random characters if no data passed
+ * @returns {any}
+ */
+function createDebugGameState() {
+    // Check for passed data from debug room
+    const savedData = sessionStorage.getItem('debugGameData');
+    if (savedData) {
+        try {
+            const { players } = JSON.parse(savedData);
+            sessionStorage.removeItem('debugGameData'); // Clear after use
+            if (players && players.length >= 3) {
+                return createGameStateFromPlayers(players);
+            }
+        } catch (e) {
+            console.error('Failed to parse debug game data:', e);
+        }
+    }
+
+    // Fallback: generate random players (legacy behavior)
+    const shuffled = [...CHARACTERS].sort(() => Math.random() - 0.5);
+    const selectedChars = shuffled.slice(0, 3);
+    
+    const players = selectedChars.map((char, idx) => ({
+        id: `debug-player-${idx}`,
+        name: `Player ${idx + 1}`,
+        characterId: char.id,
+        status: 'ready'
+    }));
+
+    // Create player positions
+    const playerPositions = {};
+    players.forEach(p => {
+        playerPositions[p.id] = 'entrance-hall';
+    });
+
+    return {
+        roomId: 'DEBUG-MODE',
+        gamePhase: 'rolling',
         players,
         diceRolls: {},
         needsRoll: players.map(p => p.id),
@@ -82,13 +142,9 @@ function createDebugGameState() {
         currentTurnIndex: 0,
         playerMoves: {},
         playerState: {
-            playerPositions: {
-                'debug-player-0': 'entrance-hall',
-                'debug-player-1': 'entrance-hall',
-                'debug-player-2': 'entrance-hall'
-            }
+            playerPositions
         },
-        map: mockMap
+        map: createMockMap()
     };
 }
 
@@ -155,12 +211,23 @@ function renderDiceRollOverlay(gameState, myId) {
     const players = gameState.players || [];
     const diceRolls = gameState.diceRolls || {};
     const needsRoll = gameState.needsRoll || [];
-    const iNeedToRoll = needsRoll.includes(myId);
+    
+    // In debug mode, check if current debug player needs to roll
+    // Otherwise check if myId needs to roll
+    const iNeedToRoll = isDebugMode 
+        ? needsRoll.length > 0  // In debug mode, show controls if anyone needs to roll
+        : needsRoll.includes(myId);
+
+    // Get current player who needs to roll (for debug mode display)
+    const currentRollingPlayer = needsRoll.length > 0 
+        ? players.find(p => p.id === needsRoll[0])
+        : null;
 
     const playersRollsHtml = players.map(p => {
         const charName = getCharacterName(p.characterId);
         const roll = diceRolls[p.id];
         const isMe = p.id === myId;
+        const isCurrentRoller = isDebugMode && p.id === needsRoll[0];
         const waiting = needsRoll.includes(p.id);
 
         let rollDisplay = '';
@@ -173,16 +240,21 @@ function renderDiceRollOverlay(gameState, myId) {
         }
 
         return `
-            <div class="dice-player ${isMe ? 'is-me' : ''} ${waiting ? 'is-waiting' : ''}">
-                <span class="dice-player__name">${charName}${isMe ? ' (You)' : ''}</span>
+            <div class="dice-player ${isMe ? 'is-me' : ''} ${waiting ? 'is-waiting' : ''} ${isCurrentRoller ? 'is-current-roller' : ''}">
+                <span class="dice-player__name">${charName}${isMe ? ' (You)' : ''}${isCurrentRoller ? ' - Dang tung' : ''}</span>
                 ${rollDisplay}
             </div>
         `;
     }).join('');
 
+    // In debug mode, show which player is rolling
+    const rollingPlayerName = currentRollingPlayer 
+        ? getCharacterName(currentRollingPlayer.characterId)
+        : '';
+
     const rollControls = iNeedToRoll ? `
         <div class="dice-controls">
-            <p class="dice-instruction">Tung xi ngau de quyet dinh thu tu di</p>
+            <p class="dice-instruction">${isDebugMode && rollingPlayerName ? `${rollingPlayerName} dang tung xi ngau` : 'Tung xi ngau de quyet dinh thu tu di'}</p>
             <div class="dice-input-group">
                 <input type="number" class="dice-input" id="dice-manual-input" min="1" max="16" placeholder="1-16" />
                 <button class="action-button action-button--secondary" type="button" data-action="roll-manual">Nhap</button>
@@ -832,8 +904,10 @@ async function updateGameUI(mountEl, gameState, myId) {
  */
 function handleDebugDiceRoll(mountEl, value) {
     if (!currentGameState || currentGameState.gamePhase !== 'rolling') return;
+    if (currentGameState.needsRoll.length === 0) return;
 
-    const playerId = getDebugPlayerId();
+    // Roll for the first player who needs to roll
+    const playerId = currentGameState.needsRoll[0];
     
     // Record the roll
     currentGameState.diceRolls[playerId] = value;
@@ -861,17 +935,11 @@ function handleDebugDiceRoll(mountEl, value) {
         const firstIdx = currentGameState.players.findIndex(p => p.id === currentGameState.turnOrder[0]);
         if (firstIdx !== -1) {
             debugCurrentPlayerIndex = firstIdx;
-        }
-    } else {
-        // Auto switch to next player who needs to roll
-        const nextNeedRoll = currentGameState.needsRoll[0];
-        const nextIdx = currentGameState.players.findIndex(p => p.id === nextNeedRoll);
-        if (nextIdx !== -1) {
-            debugCurrentPlayerIndex = nextIdx;
+            mySocketId = currentGameState.players[firstIdx].id;
         }
     }
     
-    updateGameUI(mountEl, currentGameState, getDebugPlayerId());
+    updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**
@@ -972,7 +1040,10 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
     if (debugMode) {
         // Initialize debug game state
         currentGameState = createDebugGameState();
-        mySocketId = getDebugPlayerId();
+        
+        // Set mySocketId to first player (will control all players in debug mode)
+        debugCurrentPlayerIndex = 0;
+        mySocketId = currentGameState.players[0]?.id || 'debug-player-0';
         
         // Show intro same as main game (will auto-hide after 5s or on click)
         introShown = false;

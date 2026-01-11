@@ -395,6 +395,63 @@ export function socketIOPlugin() {
                     }
                 });
 
+                // ============================================
+                // Debug Mode Events
+                // ============================================
+
+                // Create debug room with auto-generated players
+                socket.on('create-debug-room', ({ playerCount }, callback) => {
+                    const room = roomManager.createDebugRoom(socket.id, playerCount || 3);
+                    socket.join(room.id);
+                    console.log(`[Socket.IO] Debug room created: ${room.id} by ${socket.id} (players: ${room.players.length})`);
+
+                    if (callback) {
+                        callback({ success: true, room });
+                    }
+
+                    // Emit debug room state
+                    io.to(room.id).emit('debug-room-state', room);
+                    io.to(room.id).emit('room:state', room);
+                });
+
+                // Select character for a player in debug mode
+                socket.on('debug-select-character', ({ playerId, characterId }, callback) => {
+                    const room = roomManager.getRoomBySocket(socket.id);
+
+                    if (!room) {
+                        if (callback) {
+                            callback({ success: false, error: 'Not in a room' });
+                        }
+                        return;
+                    }
+
+                    if (!room.isDebug) {
+                        if (callback) {
+                            callback({ success: false, error: 'Not a debug room' });
+                        }
+                        return;
+                    }
+
+                    const result = roomManager.debugSelectCharacter(room.id, playerId, characterId);
+
+                    if (!result.success) {
+                        if (callback) {
+                            callback({ success: false, error: result.error });
+                        }
+                        return;
+                    }
+
+                    console.log(`[Socket.IO] Debug character selected: ${characterId} for player ${playerId} in room ${room.id}`);
+
+                    if (callback) {
+                        callback({ success: true, room: result.room });
+                    }
+
+                    // Emit updated debug room state
+                    io.to(room.id).emit('debug-room-state', result.room);
+                    io.to(room.id).emit('room:state', result.room);
+                });
+
                 // Get current room state
                 socket.on('room:get-state', ({ roomId }, callback) => {
                     const room = roomManager.getRoom(roomId);

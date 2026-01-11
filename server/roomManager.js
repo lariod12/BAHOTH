@@ -21,6 +21,7 @@ const ROOMS_FILE = join(DATA_DIR, 'rooms.json');
  *   name: string;
  *   status: PlayerStatus;
  *   characterId: string | null;
+ *   isAutoPlayer?: boolean;
  * }} Player
  *
  * @typedef {{
@@ -36,6 +37,9 @@ const ROOMS_FILE = join(DATA_DIR, 'rooms.json');
  *   turnOrder: string[];
  *   currentTurnIndex: number;
  *   playerMoves: Record<string, number>;
+ *   isDebug?: boolean;
+ *   selectionTurnOrder?: string[];
+ *   currentSelectionTurn?: number;
  * }} Room
  *
  * @typedef {{
@@ -50,6 +54,26 @@ const rooms = new Map();
 
 /** @type {Map<string, string>} */
 const socketToRoom = new Map();
+
+// Default player names for debug mode
+const DEFAULT_PLAYER_NAMES = [
+    'Player 1', 'Player 2', 'Player 3',
+    'Player 4', 'Player 5', 'Player 6'
+];
+
+/**
+ * Shuffle array using Fisher-Yates algorithm
+ * @param {any[]} array
+ * @returns {any[]}
+ */
+function shuffleArray(array) {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
 
 /**
  * Ensure data directory exists
@@ -168,6 +192,66 @@ export function createRoom(hostSocketId, hostName, maxPlayers = 6) {
         turnOrder: [],
         currentTurnIndex: 0,
         playerMoves: {},
+    };
+
+    rooms.set(roomId, room);
+    socketToRoom.set(hostSocketId, roomId);
+    saveRooms();
+
+    return room;
+}
+
+/**
+ * Create a debug room with auto-generated players
+ * @param {string} hostSocketId
+ * @param {number} playerCount
+ * @returns {Room}
+ */
+export function createDebugRoom(hostSocketId, playerCount) {
+    const validCount = Math.max(3, Math.min(6, playerCount));
+
+    let roomId = generateRoomId();
+    while (rooms.has(roomId)) {
+        roomId = generateRoomId();
+    }
+
+    // Create players array with host first
+    const players = [];
+    for (let i = 0; i < validCount; i++) {
+        const isHost = i === 0;
+        const playerId = isHost ? hostSocketId : `debug-player-${roomId}-${i}`;
+        players.push({
+            id: playerId,
+            name: DEFAULT_PLAYER_NAMES[i],
+            status: 'joined',
+            characterId: null,
+            isAutoPlayer: !isHost
+        });
+    }
+
+    // Generate selection turn order (random order for non-host, host last)
+    const nonHostPlayerIds = players.filter(p => p.isAutoPlayer).map(p => p.id);
+    const shuffledNonHost = shuffleArray(nonHostPlayerIds);
+    const selectionTurnOrder = [...shuffledNonHost, hostSocketId];
+
+    const room = {
+        id: roomId,
+        hostId: hostSocketId,
+        players,
+        maxPlayers: validCount,
+        minPlayers: 3,
+        createdAt: new Date().toISOString(),
+        gamePhase: 'lobby',
+        // Debug mode specific
+        isDebug: true,
+        selectionTurnOrder,
+        currentSelectionTurn: 0,
+        // Standard game state
+        diceRolls: {},
+        needsRoll: [],
+        turnOrder: [],
+        currentTurnIndex: 0,
+        playerMoves: {}
     };
 
     rooms.set(roomId, room);
@@ -665,4 +749,74 @@ export function setPlayerMoves(socketId, moves) {
  */
 export function getGameState(roomId) {
     return rooms.get(roomId);
+}
+
+// ============================================
+// Debug Mode Functions
+// ============================================
+
+/**
+ * Get current selection turn player in debug mode
+ * @param {string} roomId
+ * @returns {string | null}
+ */
+export function getCurrentSelectionPlayer(roomId) {
+    const room = rooms.get(roomId);
+    if (!room || !room.isDebug) return null;
+
+    const turnIndex = room.currentSelectionTurn;
+    if (turnIndex >= room.selectionTurnOrder.length) return null;
+
+    return room.selectionTurnOrder[turnIndex];
+}
+
+/**
+ * Select character for debug player and advance turn
+ * @param {string} roomId
+ * @param {string} playerId
+ * @param {string} characterId
+ * @returns {{ success: boolean; room?: Room; error?: string }}
+ */
+export function debugSelectCharacter(roomId, playerId, characterId) {
+    const room = rooms.get(roomId);
+    if (!room || !room.isDebug) {
+        return { success: false, error: 'Not a debug room' };
+    }
+
+    // Check if it's this player's turn
+    const currentPlayer = getCurrentSelectionPlayer(roomId);
+    if (currentPlayer !== playerId) {
+        return { success: false, error: "Not this player's turn" };
+    }
+
+    // Check if character is taken
+    const isTaken = room.players.some(p => p.characterId === characterId);
+    if (isTaken) {
+        return { success: false, error: 'Character already taken' };
+    }
+
+    // Assign character
+    const player = room.players.find(p => p.id === playerId);
+    if (player) {
+        player.characterId = characterId;
+        player.status = 'ready';
+    }
+
+    // Advance turn
+    room.currentSelectionTurn++;
+
+    saveRooms();
+    return { success: true, room };
+}
+
+/**
+ * Check if all debug players have selected characters
+ * @param {string} roomId
+ * @returns {boolean}
+ */
+export function isDebugSelectionComplete(roomId) {
+    const room = rooms.get(roomId);
+    if (!room || !room.isDebug) return false;
+
+    return room.players.every(p => p.characterId !== null);
 }

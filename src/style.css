@@ -192,6 +192,116 @@ body:not(:has(.room-container)) {
     gap: 12px;
 }
 
+/* Debug Mode Section */
+.debug-mode-section {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.debug-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.debug-toggle input[type="checkbox"] {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.debug-toggle input[type="checkbox"]:checked {
+    background: rgba(255, 200, 100, 0.85);
+    border-color: rgba(255, 200, 100, 0.85);
+}
+
+.debug-toggle input[type="checkbox"]:checked::after {
+    content: '';
+    display: block;
+    width: 5px;
+    height: 9px;
+    border: solid #000;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translate(-1px, -1px);
+    margin: 2px auto;
+}
+
+.debug-toggle input[type="checkbox"]:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+}
+
+.debug-toggle__label {
+    user-select: none;
+}
+
+.debug-options {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: opacity 200ms ease, max-height 200ms ease;
+}
+
+.debug-options.is-visible {
+    opacity: 1;
+    max-height: 50px;
+}
+
+.debug-options__label {
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.85rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+}
+
+.debug-options__select {
+    appearance: none;
+    padding: 8px 28px 8px 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.9rem;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23fff' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.debug-options__select:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.debug-options__select:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+}
+
+.debug-options__select option {
+    background: #1a1a1a;
+    color: var(--fg);
+}
+
 .page-actions {
     display: flex;
     flex-direction: column;
@@ -3127,5 +3237,243 @@ select.field__input option {
     .map-pawn__icon {
         width: 14px;
         height: 14px;
+    }
+}
+
+
+/* ============================================================
+   DEBUG MODE STYLES
+   ============================================================ */
+
+/* Debug badge in room header */
+.badge--debug {
+    background: rgba(255, 200, 100, 0.2);
+    color: #ffc864;
+    border-color: rgba(255, 200, 100, 0.4);
+    margin-left: 8px;
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    vertical-align: middle;
+}
+
+/* Turn indicator for debug mode character selection */
+.turn-indicator {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(255, 200, 100, 0.1);
+    border: 1px solid rgba(255, 200, 100, 0.25);
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.turn-indicator--complete {
+    background: rgba(117, 255, 196, 0.1);
+    border-color: rgba(117, 255, 196, 0.25);
+    color: #9fffd6;
+}
+
+.turn-indicator__label {
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.turn-indicator__player {
+    font-size: 1rem;
+    font-weight: 650;
+    color: #ffc864;
+}
+
+/* Debug mode player slot - current turn highlight */
+.player-slot.is-selecting {
+    border-color: rgba(255, 200, 100, 0.5);
+    background: linear-gradient(135deg, rgba(255, 200, 100, 0.12), rgba(0, 0, 0, 0.2));
+    box-shadow: 0 0 12px rgba(255, 200, 100, 0.15);
+}
+
+/* Debug mode character card - clickable state */
+.character-card.is-debug-selectable {
+    border-color: rgba(255, 200, 100, 0.4);
+    cursor: pointer;
+}
+
+.character-card.is-debug-selectable:hover {
+    border-color: rgba(255, 200, 100, 0.7);
+    box-shadow: 0 12px 36px rgba(255, 200, 100, 0.2);
+}
+
+/* Badge for selecting status */
+.badge--selecting {
+    background: rgba(255, 200, 100, 0.2);
+    color: #ffc864;
+    border-color: rgba(255, 200, 100, 0.4);
+    animation: selectingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes selectingPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Responsive adjustments for debug mode */
+@media (max-width: 640px) {
+    .badge--debug {
+        font-size: 0.6rem;
+        padding: 3px 6px;
+    }
+
+    .turn-indicator {
+        margin-top: 8px;
+        padding: 8px 10px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    .turn-indicator__label {
+        font-size: 0.75rem;
+    }
+
+    .turn-indicator__player {
+        font-size: 0.9rem;
+    }
+}
+
+/* Additional debug mode enhancements */
+
+/* Animation for player slot currently selecting */
+.player-slot.is-selecting::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, 
+        rgba(255, 200, 100, 0.3), 
+        rgba(255, 200, 100, 0.1), 
+        rgba(255, 200, 100, 0.3)
+    );
+    background-size: 200% 100%;
+    animation: selectingGlow 2s ease-in-out infinite;
+    z-index: -1;
+}
+
+.player-slot.is-selecting {
+    position: relative;
+}
+
+@keyframes selectingGlow {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Turn indicator transition */
+.turn-indicator {
+    transition: background 200ms ease, border-color 200ms ease;
+}
+
+.turn-indicator__player {
+    transition: color 200ms ease;
+}
+
+/* Debug mode character grid hint */
+.room-panel--characters .room-hint {
+    transition: color 200ms ease;
+}
+
+/* Debug selectable character card active state */
+.character-card.is-debug-selectable:active {
+    transform: scale(0.98);
+    box-shadow: 0 6px 20px rgba(255, 200, 100, 0.25);
+}
+
+/* Mobile responsive for debug options */
+@media (max-width: 480px) {
+    .debug-mode-section {
+        margin-top: 20px;
+        gap: 10px;
+    }
+
+    .debug-toggle {
+        font-size: 0.8rem;
+        gap: 8px;
+    }
+
+    .debug-toggle input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+    }
+
+    .debug-options {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .debug-options__select {
+        padding: 6px 24px 6px 10px;
+        font-size: 0.85rem;
+    }
+
+    /* Player slot selecting state on mobile */
+    .player-slot.is-selecting {
+        padding: 10px;
+    }
+
+    /* Character card debug selectable on mobile */
+    .character-card.is-debug-selectable {
+        min-height: 100px;
+    }
+}
+
+/* Tablet responsive adjustments */
+@media (max-width: 768px) {
+    .turn-indicator {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .badge--debug {
+        display: inline-block;
+        margin-left: 6px;
+    }
+}
+
+/* High contrast mode support for debug elements */
+@media (prefers-contrast: high) {
+    .badge--debug {
+        background: rgba(255, 200, 100, 0.4);
+        border-width: 2px;
+    }
+
+    .turn-indicator {
+        border-width: 2px;
+    }
+
+    .player-slot.is-selecting {
+        border-width: 2px;
+    }
+
+    .character-card.is-debug-selectable {
+        border-width: 2px;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .badge--selecting {
+        animation: none;
+    }
+
+    .player-slot.is-selecting::before {
+        animation: none;
+        background: rgba(255, 200, 100, 0.2);
+    }
+
+    .turn-indicator,
+    .turn-indicator__player {
+        transition: none;
     }
 }

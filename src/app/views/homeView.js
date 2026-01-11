@@ -1,5 +1,9 @@
 import * as socketClient from '../services/socketClient.js';
 
+// Debug mode state
+let isDebugMode = false;
+let debugPlayerCount = 3;
+
 function renderHomeMarkup() {
     return `
         <div class="welcome-container">
@@ -11,6 +15,21 @@ function renderHomeMarkup() {
                     <button class="action-button action-button--primary" data-action="create-room">Create Room</button>
                     <button class="action-button action-button--secondary" data-action="join-room">Join Room</button>
                     <button class="action-button action-button--secondary" data-action="tutorial">Tutorial</button>
+                </div>
+                <div class="debug-mode-section">
+                    <label class="debug-toggle">
+                        <input type="checkbox" id="debug-mode-toggle" />
+                        <span class="debug-toggle__label">Debug Mode</span>
+                    </label>
+                    <div class="debug-options" id="debug-options">
+                        <label class="debug-options__label">Players:</label>
+                        <select class="debug-options__select" id="debug-player-count">
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
@@ -97,6 +116,30 @@ export function renderHomeView({ mountEl, onNavigate }) {
     const roomStatusText = mountEl.querySelector('#room-status-text');
     const submitJoinBtn = /** @type {HTMLButtonElement} */ (mountEl.querySelector('#submit-join-btn'));
 
+    // Debug mode elements
+    const debugModeToggle = /** @type {HTMLInputElement} */ (mountEl.querySelector('#debug-mode-toggle'));
+    const debugOptions = mountEl.querySelector('#debug-options');
+    const debugPlayerCountSelect = /** @type {HTMLSelectElement} */ (mountEl.querySelector('#debug-player-count'));
+
+    // Debug mode toggle handler
+    const updateDebugOptionsVisibility = () => {
+        if (debugOptions) {
+            debugOptions.classList.toggle('is-visible', isDebugMode);
+        }
+    };
+
+    debugModeToggle?.addEventListener('change', () => {
+        isDebugMode = debugModeToggle.checked;
+        updateDebugOptionsVisibility();
+    });
+
+    debugPlayerCountSelect?.addEventListener('change', () => {
+        debugPlayerCount = parseInt(debugPlayerCountSelect.value, 10);
+    });
+
+    // Initialize debug options visibility
+    updateDebugOptionsVisibility();
+
     // Track room check state
     let checkedRoomId = null;
     let isRoomFull = false;
@@ -182,8 +225,18 @@ export function renderHomeView({ mountEl, onNavigate }) {
     const joinRoomButton = mountEl.querySelector('[data-action="join-room"]');
     const tutorialButton = mountEl.querySelector('[data-action="tutorial"]');
 
-    createRoomButton?.addEventListener('click', () => {
-        openCreateModal();
+    createRoomButton?.addEventListener('click', async () => {
+        if (isDebugMode) {
+            // Create debug room directly without modal
+            const result = await socketClient.createDebugRoom(debugPlayerCount);
+            if (result.success && result.room) {
+                onNavigate(`#/room/${result.room.id}`);
+            } else {
+                console.error('Failed to create debug room:', result.error);
+            }
+        } else {
+            openCreateModal();
+        }
     });
 
     joinRoomButton?.addEventListener('click', () => {
