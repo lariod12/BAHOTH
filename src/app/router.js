@@ -30,6 +30,11 @@ function parseRoute(route) {
         return { path: '/room/:roomId', params: { roomId: roomMatch[1] } };
     }
 
+    // Match /game/debug first (before generic :roomId)
+    if (route === '/game/debug') {
+        return { path: '/game/debug', params: {} };
+    }
+
     // Match /game/:roomId pattern
     const gameMatch = route.match(/^\/game\/([A-Z0-9-]+)$/i);
     if (gameMatch) {
@@ -70,6 +75,12 @@ function renderRoute({ mountEl }) {
     // Game with specific ID: /game/BAH-XXXXXX
     if (path === '/game/:roomId') {
         renderGameView({ mountEl, onNavigate: navigateTo, roomId: params.roomId });
+        return;
+    }
+
+    // Debug mode: /game/debug - 3 players on same machine
+    if (path === '/game/debug') {
+        renderGameView({ mountEl, onNavigate: navigateTo, roomId: null, debugMode: true });
         return;
     }
 

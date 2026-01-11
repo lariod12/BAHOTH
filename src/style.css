@@ -1520,6 +1520,20 @@ select.field__input option {
     color: rgba(255, 255, 255, 0.85);
 }
 
+/* Clickable turn indicator (debug mode) */
+.turn-indicator.is-clickable {
+    cursor: pointer;
+}
+
+.turn-indicator.is-clickable:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.turn-indicator.is-clickable.is-current:hover {
+    background: rgba(212, 175, 55, 0.3);
+}
+
 /* Game area placeholder */
 .game-area {
     flex: 1;

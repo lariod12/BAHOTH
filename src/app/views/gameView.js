@@ -1,5 +1,5 @@
 // Game View - Dice rolling phase and main gameplay
-import { CHARACTER_BY_ID } from '../data/charactersData.js';
+import { CHARACTER_BY_ID, CHARACTERS } from '../data/charactersData.js';
 import * as socketClient from '../services/socketClient.js';
 import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
 
@@ -16,6 +16,98 @@ let expandedPlayers = new Set();
 let activePlayers = new Set();
 /** @type {(() => void) | null} Unsubscribe from players active updates */
 let unsubscribePlayersActive = null;
+
+// Debug mode state
+let isDebugMode = false;
+let debugCurrentPlayerIndex = 0; // Which of the 3 local players is "active"
+
+/**
+ * Create mock game state for debug mode with 3 local players
+ * @returns {any}
+ */
+function createDebugGameState() {
+    // Pick 3 random characters
+    const shuffled = [...CHARACTERS].sort(() => Math.random() - 0.5);
+    const selectedChars = shuffled.slice(0, 3);
+    
+    const players = selectedChars.map((char, idx) => ({
+        id: `debug-player-${idx}`,
+        name: `Player ${idx + 1}`,
+        characterId: char.id,
+        status: 'ready'
+    }));
+
+    // Create mock map with entrance hall and some adjacent rooms
+    const mockMap = {
+        revealedRooms: {
+            'entrance-hall': {
+                id: 'entrance-hall',
+                name: 'Entrance Hall',
+                x: 0,
+                y: 0,
+                doors: ['north', 'east', 'west'],
+                floor: 'ground'
+            },
+            'foyer': {
+                id: 'foyer',
+                name: 'Foyer',
+                x: 0,
+                y: 1,
+                doors: ['south', 'east'],
+                floor: 'ground'
+            },
+            'grand-staircase': {
+                id: 'grand-staircase',
+                name: 'Grand Staircase',
+                x: 1,
+                y: 0,
+                doors: ['west', 'north'],
+                floor: 'ground'
+            },
+            'dining-room': {
+                id: 'dining-room',
+                name: 'Dining Room',
+                x: -1,
+                y: 0,
+                doors: ['east', 'south'],
+                floor: 'ground'
+            }
+        },
+        connections: {
+            'entrance-hall': { north: 'foyer', east: 'grand-staircase', west: 'dining-room' },
+            'foyer': { south: 'entrance-hall' },
+            'grand-staircase': { west: 'entrance-hall' },
+            'dining-room': { east: 'entrance-hall' }
+        }
+    };
+
+    return {
+        roomId: 'DEBUG-MODE',
+        gamePhase: 'rolling', // Start with rolling phase
+        players,
+        diceRolls: {},
+        needsRoll: players.map(p => p.id),
+        turnOrder: [],
+        currentTurnIndex: 0,
+        playerMoves: {},
+        playerState: {
+            playerPositions: {
+                'debug-player-0': 'entrance-hall',
+                'debug-player-1': 'entrance-hall',
+                'debug-player-2': 'entrance-hall'
+            }
+        },
+        map: mockMap
+    };
+}
+
+/**
+ * Get current debug player ID
+ * @returns {string}
+ */
+function getDebugPlayerId() {
+    return `debug-player-${debugCurrentPlayerIndex}`;
+}
 
 /**
  * Get character's Speed value at startIndex
@@ -322,8 +414,12 @@ function renderTurnOrder(gameState, myId) {
         const isMe = socketId === myId;
         const isCurrent = idx === currentIndex;
 
+        // In debug mode, make turn indicators clickable to switch player
+        const clickableAttr = isDebugMode ? `data-action="debug-switch-player" data-player-id="${socketId}"` : '';
+        const clickableClass = isDebugMode ? 'is-clickable' : '';
+
         return `
-            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''}">
+            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass}" ${clickableAttr}>
                 <span class="turn-indicator__order">${idx + 1}</span>
                 <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}</span>
             </div>
@@ -534,6 +630,100 @@ function checkAllPlayersActive(activePlayerIds, allPlayers, mountEl) {
 }
 
 /**
+ * Attach debug mode event listeners
+ * @param {HTMLElement} mountEl
+ */
+function attachDebugEventListeners(mountEl) {
+    mountEl.addEventListener('click', (e) => {
+        const target = /** @type {HTMLElement} */ (e.target);
+        const actionEl = target.closest('[data-action]');
+        const action = actionEl?.dataset.action;
+
+        // Debug switch player (click on turn order)
+        if (action === 'debug-switch-player') {
+            const playerId = actionEl?.dataset.playerId;
+            if (playerId && currentGameState) {
+                const playerIdx = currentGameState.players.findIndex(p => p.id === playerId);
+                if (playerIdx !== -1) {
+                    debugCurrentPlayerIndex = playerIdx;
+                    mySocketId = getDebugPlayerId();
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+            }
+            return;
+        }
+
+        // Skip intro
+        if (action === 'skip-intro') {
+            hideIntro(mountEl);
+            return;
+        }
+
+        // Toggle sidebar
+        if (action === 'toggle-sidebar') {
+            const toggleBtn = target.closest('.sidebar-toggle');
+            if (toggleBtn?.hasAttribute('disabled')) return;
+            toggleSidebar(mountEl);
+            return;
+        }
+
+        // Close sidebar
+        if (action === 'close-sidebar') {
+            closeSidebar(mountEl);
+            return;
+        }
+
+        // Expand player in sidebar
+        if (action === 'expand-player') {
+            const playerEl = target.closest('[data-player-id]');
+            const playerId = playerEl?.dataset.playerId;
+            if (playerId) {
+                togglePlayerExpand(playerId);
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Roll manual (debug)
+        if (action === 'roll-manual') {
+            const input = /** @type {HTMLInputElement} */ (mountEl.querySelector('#dice-manual-input'));
+            const value = parseInt(input?.value || '0', 10);
+            if (value >= 1 && value <= 16) {
+                handleDebugDiceRoll(mountEl, value);
+            } else {
+                alert('Vui long nhap so tu 1 den 16');
+            }
+            return;
+        }
+
+        // Roll random (debug)
+        if (action === 'roll-random') {
+            const randomValue = Math.floor(Math.random() * 16) + 1;
+            handleDebugDiceRoll(mountEl, randomValue);
+            return;
+        }
+
+        // Move (debug)
+        if (action === 'move') {
+            const moveTarget = target.closest('[data-direction]');
+            const direction = moveTarget?.dataset.direction;
+            if (direction) {
+                handleDebugMove(mountEl, direction);
+            }
+            return;
+        }
+    });
+
+    // Enter key for dice input
+    mountEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.id === 'dice-manual-input') {
+            const btn = mountEl.querySelector('[data-action="roll-manual"]');
+            btn?.click();
+        }
+    });
+}
+
+/**
  * Attach event listeners
  */
 function attachEventListeners(mountEl, roomId) {
@@ -653,11 +843,126 @@ async function updateGameUI(mountEl, gameState, myId) {
 }
 
 /**
- * Render game view
- * @param {{ mountEl: HTMLElement; onNavigate: (hash: string) => void; roomId: string }} options
+ * Handle debug mode dice roll
+ * @param {HTMLElement} mountEl
+ * @param {number} value
  */
-export function renderGameView({ mountEl, onNavigate, roomId }) {
-    // Connect socket
+function handleDebugDiceRoll(mountEl, value) {
+    if (!currentGameState || currentGameState.gamePhase !== 'rolling') return;
+
+    const playerId = getDebugPlayerId();
+    
+    // Record the roll
+    currentGameState.diceRolls[playerId] = value;
+    
+    // Remove from needsRoll
+    currentGameState.needsRoll = currentGameState.needsRoll.filter(id => id !== playerId);
+    
+    // Check if all rolled
+    if (currentGameState.needsRoll.length === 0) {
+        // Determine turn order by dice rolls (highest first)
+        const rolls = currentGameState.diceRolls;
+        const sorted = Object.entries(rolls).sort((a, b) => b[1] - a[1]);
+        currentGameState.turnOrder = sorted.map(([id]) => id);
+        currentGameState.currentTurnIndex = 0;
+        currentGameState.gamePhase = 'playing';
+        
+        // Set initial moves for first player
+        const firstPlayer = currentGameState.players.find(p => p.id === currentGameState.turnOrder[0]);
+        if (firstPlayer) {
+            const speed = getCharacterSpeed(firstPlayer.characterId);
+            currentGameState.playerMoves[firstPlayer.id] = speed;
+        }
+        
+        // Auto switch to first player in turn order
+        const firstIdx = currentGameState.players.findIndex(p => p.id === currentGameState.turnOrder[0]);
+        if (firstIdx !== -1) {
+            debugCurrentPlayerIndex = firstIdx;
+        }
+    } else {
+        // Auto switch to next player who needs to roll
+        const nextNeedRoll = currentGameState.needsRoll[0];
+        const nextIdx = currentGameState.players.findIndex(p => p.id === nextNeedRoll);
+        if (nextIdx !== -1) {
+            debugCurrentPlayerIndex = nextIdx;
+        }
+    }
+    
+    updateGameUI(mountEl, currentGameState, getDebugPlayerId());
+}
+
+/**
+ * Handle debug mode move
+ * @param {HTMLElement} mountEl
+ * @param {string} direction
+ */
+function handleDebugMove(mountEl, direction) {
+    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
+
+    const playerId = getDebugPlayerId();
+    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+    
+    // Only allow move if it's this player's turn
+    if (playerId !== currentTurnPlayer) return;
+    
+    const moves = currentGameState.playerMoves[playerId] || 0;
+    if (moves <= 0) return;
+    
+    // Decrease moves
+    currentGameState.playerMoves[playerId] = moves - 1;
+    
+    // Update position (simplified - just show direction moved)
+    const currentPos = currentGameState.playerState.playerPositions[playerId] || 'Entrance Hall';
+    currentGameState.playerState.playerPositions[playerId] = `${currentPos} (moved ${direction})`;
+    
+    // Check if turn ended
+    if (currentGameState.playerMoves[playerId] <= 0) {
+        // Move to next player
+        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+        
+        // Set moves for next player
+        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const speed = getCharacterSpeed(nextPlayer.characterId);
+            currentGameState.playerMoves[nextPlayerId] = speed;
+        }
+        
+        // Auto switch to next player
+        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+        if (nextIdx !== -1) {
+            debugCurrentPlayerIndex = nextIdx;
+        }
+    }
+    
+    updateGameUI(mountEl, currentGameState, getDebugPlayerId());
+}
+
+/**
+ * Render game view
+ * @param {{ mountEl: HTMLElement; onNavigate: (hash: string) => void; roomId: string | null; debugMode?: boolean }} options
+ */
+export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false }) {
+    // Set debug mode flag
+    isDebugMode = debugMode;
+    debugCurrentPlayerIndex = 0;
+    
+    if (debugMode) {
+        // Initialize debug game state
+        currentGameState = createDebugGameState();
+        mySocketId = getDebugPlayerId();
+        introShown = true; // Skip intro in debug mode
+        
+        // Initial render
+        mountEl.innerHTML = renderGameScreen(currentGameState, mySocketId);
+        
+        // Attach debug event listeners
+        attachDebugEventListeners(mountEl);
+        
+        return;
+    }
+    
+    // Normal mode - connect socket
     socketClient.connect();
     mySocketId = socketClient.getSocketId();
 
