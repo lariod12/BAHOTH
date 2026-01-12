@@ -522,7 +522,9 @@ export const ROOMS = [
       { side: 'bottom', kind: 'door' },
     ],
     tokens: [],
-    text: {},
-    notes: ['Starting tile (Upper).'],
+    text: { en: 'Stairs to Grand Staircase', vi: 'Cầu thang xuống Cầu thang lớn' },
+    notes: ['Starting tile (Upper). Connects to Grand Staircase.'],
+    isStartingRoom: true,
+    stairsTo: 'grand-staircase',
   },
 ];

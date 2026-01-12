@@ -38,8 +38,7 @@ const MAPS_FILE = join(DATA_DIR, 'maps.json');
 const maps = new Map();
 
 // Starting rooms configuration (based on game rules)
-// Layout: Entrance Hall (bottom) -> Foyer (middle) -> Grand Staircase (top)
-// Vertical line from south to north
+// Layout: Entrance Hall (bottom) -> Foyer (middle) -> Grand Staircase (top) -> Upper Landing (upper floor)
 // NOTE: Door positions must match src/app/data/mapsData.js ROOMS definitions
 const STARTING_ROOMS = {
     'entrance-hall': {
@@ -63,8 +62,18 @@ const STARTING_ROOMS = {
         name: 'Grand Staircase',
         x: 0,
         y: 2,
-        doors: ['south', 'north'], // bottom door + stairs up to Upper Landing
+        doors: ['south'], // only bottom door (stairs to upper is special connection)
         floor: 'ground',
+        stairsTo: 'upper-landing', // special staircase connection
+    },
+    'upper-landing': {
+        id: 'upper-landing',
+        name: 'Upper Landing',
+        x: 0,
+        y: 0, // separate coordinate system for upper floor
+        doors: ['north', 'south', 'west', 'east'], // all 4 doors
+        floor: 'upper',
+        stairsTo: 'grand-staircase', // special staircase connection back down
     },
 };
 

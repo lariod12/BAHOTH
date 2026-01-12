@@ -61,6 +61,7 @@ function createMockMap() {
     const entranceHallDef = getRoomByName('Entrance Hall');
     const foyerDef = getRoomByName('Foyer');
     const grandStaircaseDef = getRoomByName('Grand Staircase');
+    const upperLandingDef = getRoomByName('Upper Landing');
 
     return {
         revealedRooms: {
@@ -69,7 +70,7 @@ function createMockMap() {
                 name: 'Entrance Hall',
                 x: 0,
                 y: 0,
-                doors: entranceHallDef ? extractDoors(entranceHallDef) : ['north'],
+                doors: entranceHallDef ? extractDoors(entranceHallDef) : ['north', 'west', 'east'],
                 floor: 'ground'
             },
             'foyer': {
@@ -77,7 +78,7 @@ function createMockMap() {
                 name: 'Foyer',
                 x: 0,
                 y: 1,
-                doors: foyerDef ? extractDoors(foyerDef) : ['south', 'north'],
+                doors: foyerDef ? extractDoors(foyerDef) : ['north', 'south', 'west', 'east'],
                 floor: 'ground'
             },
             'grand-staircase': {
@@ -85,14 +86,30 @@ function createMockMap() {
                 name: 'Grand Staircase',
                 x: 0,
                 y: 2,
-                doors: grandStaircaseDef ? extractDoors(grandStaircaseDef) : ['south', 'west', 'east'],
-                floor: 'ground'
+                doors: grandStaircaseDef ? extractDoors(grandStaircaseDef) : ['south'],
+                floor: 'ground',
+                stairsTo: 'upper-landing'
+            },
+            'upper-landing': {
+                id: 'upper-landing',
+                name: 'Upper Landing',
+                x: 0,
+                y: 0, // separate coordinate for upper floor
+                doors: upperLandingDef ? extractDoors(upperLandingDef) : ['north', 'south', 'west', 'east'],
+                floor: 'upper',
+                stairsTo: 'grand-staircase'
             }
         },
         connections: {
             'entrance-hall': { north: 'foyer' },
             'foyer': { south: 'entrance-hall', north: 'grand-staircase' },
-            'grand-staircase': { south: 'foyer' }
+            'grand-staircase': { south: 'foyer' },
+            'upper-landing': {}
+        },
+        // Special staircase connections (not regular doors)
+        staircaseConnections: {
+            'grand-staircase': 'upper-landing',
+            'upper-landing': 'grand-staircase'
         }
     };
 }
@@ -755,7 +772,47 @@ function renderTurnOrder(gameState, myId) {
 }
 
 /**
- * Render game controls (movement arrows + dice)
+ * Check if player can use stairs from current room
+ * @param {Object} gameState
+ * @param {string} myId
+ * @returns {{ canGoUp: boolean; canGoDown: boolean; targetRoom: string | null }}
+ */
+function getStairsAvailability(gameState, myId) {
+    const playerPositions = gameState?.playerState?.playerPositions || {};
+    const currentRoomId = playerPositions[myId];
+    const revealedRooms = gameState?.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[currentRoomId];
+    const staircaseConnections = gameState?.map?.staircaseConnections || {};
+
+    if (!currentRoom || !staircaseConnections[currentRoomId]) {
+        return { canGoUp: false, canGoDown: false, targetRoom: null };
+    }
+
+    const targetRoomId = staircaseConnections[currentRoomId];
+    const targetRoom = revealedRooms[targetRoomId];
+
+    if (!targetRoom) {
+        return { canGoUp: false, canGoDown: false, targetRoom: null };
+    }
+
+    // Determine direction based on floor
+    const currentFloor = currentRoom.floor;
+    const targetFloor = targetRoom.floor;
+
+    // ground -> upper = up, upper -> ground = down
+    // ground -> basement = down, basement -> ground = up
+    const floorOrder = { basement: 0, ground: 1, upper: 2 };
+    const goingUp = floorOrder[targetFloor] > floorOrder[currentFloor];
+
+    return {
+        canGoUp: goingUp,
+        canGoDown: !goingUp,
+        targetRoom: targetRoomId
+    };
+}
+
+/**
+ * Render game controls (movement arrows + dice + stairs)
  */
 function renderGameControls(gameState, myId) {
     if (!gameState || gameState.gamePhase !== 'playing') return '';
@@ -763,6 +820,11 @@ function renderGameControls(gameState, myId) {
     const myTurn = isMyTurn(gameState, myId);
     const movesLeft = gameState.playerMoves?.[myId] ?? 0;
     const canMove = myTurn && movesLeft > 0;
+
+    // Check stairs availability
+    const stairs = getStairsAvailability(gameState, myId);
+    const showUpBtn = stairs.canGoUp && canMove;
+    const showDownBtn = stairs.canGoDown && canMove;
 
     return `
         <div class="game-controls">
@@ -795,6 +857,20 @@ function renderGameControls(gameState, myId) {
                     <circle cx="34" cy="34" r="3.5" fill="currentColor"/>
                 </svg>
             </button>
+            <div class="stairs-controls">
+                ${showUpBtn ? `
+                    <button class="stairs-btn stairs-btn--up" type="button" data-action="use-stairs" data-target="${stairs.targetRoom}" title="Leo len tang tren">
+                        <span class="stairs-btn__arrow">▲</span>
+                        <span class="stairs-btn__label">UP</span>
+                    </button>
+                ` : ''}
+                ${showDownBtn ? `
+                    <button class="stairs-btn stairs-btn--down" type="button" data-action="use-stairs" data-target="${stairs.targetRoom}" title="Di xuong tang duoi">
+                        <span class="stairs-btn__arrow">▼</span>
+                        <span class="stairs-btn__label">DOWN</span>
+                    </button>
+                ` : ''}
+            </div>
         </div>
     `;
 }
@@ -1034,6 +1110,15 @@ function attachDebugEventListeners(mountEl) {
             const direction = moveTarget?.dataset.direction;
             if (direction) {
                 handleDebugMove(mountEl, direction);
+            }
+            return;
+        }
+
+        // Use stairs (debug)
+        if (action === 'use-stairs') {
+            const targetRoom = actionEl?.dataset.target;
+            if (targetRoom) {
+                handleDebugUseStairs(mountEl, targetRoom);
             }
             return;
         }
@@ -1333,6 +1418,63 @@ function handleDebugMove(mountEl, direction) {
         }
         
         // Auto switch to next player and update mySocketId
+        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+        if (nextIdx !== -1) {
+            debugCurrentPlayerIndex = nextIdx;
+            mySocketId = nextPlayerId;
+        }
+    }
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle debug mode use stairs - move between floors
+ * @param {HTMLElement} mountEl
+ * @param {string} targetRoomId
+ */
+function handleDebugUseStairs(mountEl, targetRoomId) {
+    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
+
+    const playerId = mySocketId;
+    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+    
+    // Only allow if it's this player's turn
+    if (playerId !== currentTurnPlayer) {
+        console.log(`Not ${playerId}'s turn`);
+        return;
+    }
+    
+    const moves = currentGameState.playerMoves[playerId] || 0;
+    if (moves <= 0) {
+        console.log(`No moves left for ${playerId}`);
+        return;
+    }
+    
+    // Verify target room exists
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    if (!revealedRooms[targetRoomId]) {
+        console.log(`Target room ${targetRoomId} not found`);
+        return;
+    }
+    
+    // Move to target room (stairs)
+    currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+    
+    // Decrease moves (using stairs costs 1 move)
+    currentGameState.playerMoves[playerId] = moves - 1;
+    
+    // Check if turn ended
+    if (currentGameState.playerMoves[playerId] <= 0) {
+        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+        
+        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const speed = getCharacterSpeed(nextPlayer.characterId);
+            currentGameState.playerMoves[nextPlayerId] = speed;
+        }
+        
         const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
         if (nextIdx !== -1) {
             debugCurrentPlayerIndex = nextIdx;

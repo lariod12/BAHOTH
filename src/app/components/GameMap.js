@@ -41,16 +41,20 @@ function getPlayerCoords(rooms, myPosition) {
 }
 
 /**
- * Filter rooms to only those visible in viewport
+ * Filter rooms to only those visible in viewport AND on same floor
  * @param {Record<string, Room>} rooms
  * @param {number} centerX
  * @param {number} centerY
  * @param {number} radius
+ * @param {string} currentFloor - Current floor to filter by
  * @returns {Room[]}
  */
-function filterVisibleRooms(rooms, centerX, centerY, radius) {
+function filterVisibleRooms(rooms, centerX, centerY, radius, currentFloor) {
     const visible = [];
     for (const room of Object.values(rooms)) {
+        // Only show rooms on the same floor
+        if (room.floor !== currentFloor) continue;
+        
         const dx = Math.abs(room.x - centerX);
         const dy = Math.abs(room.y - centerY);
         if (dx <= radius && dy <= radius) {
@@ -149,13 +153,17 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
     const rooms = mapState.revealedRooms;
     const connections = mapState.connections || {};
 
+    // Get current room to determine floor
+    const currentRoom = myPosition ? rooms[myPosition] : null;
+    const currentFloor = currentRoom?.floor || 'ground';
+
     // Get player position to center viewport
     const playerCoords = getPlayerCoords(rooms, myPosition);
     const centerX = playerCoords.x;
     const centerY = playerCoords.y;
 
-    // Filter rooms within viewport
-    const visibleRooms = filterVisibleRooms(rooms, centerX, centerY, VIEWPORT_RADIUS);
+    // Filter rooms within viewport AND on same floor
+    const visibleRooms = filterVisibleRooms(rooms, centerX, centerY, VIEWPORT_RADIUS, currentFloor);
 
     // Grid size is (2*radius + 1) x (2*radius + 1)
     const gridSize = VIEWPORT_RADIUS * 2 + 1;
@@ -176,7 +184,6 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
     }).join('');
 
     // Get current room name for display
-    const currentRoom = myPosition ? rooms[myPosition] : null;
     const locationText = currentRoom ? currentRoom.name : 'Unknown';
 
     return `

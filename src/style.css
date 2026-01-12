@@ -1875,6 +1875,74 @@ select.field__input option {
     color: #666;
 }
 
+/* Stairs Controls (Up/Down floor buttons) */
+.stairs-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 8px;
+}
+
+.stairs-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 2px solid rgba(100, 130, 180, 0.5);
+    border-radius: 8px;
+    background: rgba(30, 35, 45, 0.9);
+    color: #87ceeb;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 4px;
+}
+
+.stairs-btn:hover {
+    border-color: rgba(135, 206, 235, 0.8);
+    background: rgba(70, 130, 180, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(70, 130, 180, 0.3);
+}
+
+.stairs-btn:active {
+    transform: translateY(0);
+}
+
+.stairs-btn__arrow {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.stairs-btn__label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.stairs-btn--up {
+    border-color: rgba(100, 180, 130, 0.5);
+    color: #90ee90;
+}
+
+.stairs-btn--up:hover {
+    border-color: rgba(144, 238, 144, 0.8);
+    background: rgba(100, 180, 130, 0.3);
+    box-shadow: 0 4px 12px rgba(100, 180, 130, 0.3);
+}
+
+.stairs-btn--down {
+    border-color: rgba(180, 130, 100, 0.5);
+    color: #deb887;
+}
+
+.stairs-btn--down:hover {
+    border-color: rgba(222, 184, 135, 0.8);
+    background: rgba(180, 130, 100, 0.3);
+    box-shadow: 0 4px 12px rgba(180, 130, 100, 0.3);
+}
+
 /* ============================================================
    DICE ROLL OVERLAY
    ============================================================ */
