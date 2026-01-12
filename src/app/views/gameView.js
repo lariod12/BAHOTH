@@ -2,6 +2,7 @@
 import { CHARACTER_BY_ID, CHARACTERS } from '../data/charactersData.js';
 import * as socketClient from '../services/socketClient.js';
 import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
+import { ROOMS } from '../data/mapsData.js';
 
 /** @type {any} */
 let currentGameState = null;
@@ -23,10 +24,44 @@ let isDebugMode = false;
 let debugCurrentPlayerIndex = 0; // Which of the 3 local players is "active"
 
 /**
+ * Convert door side from mapsData format to map format
+ * @param {'top'|'right'|'bottom'|'left'} side
+ * @returns {'north'|'south'|'east'|'west'}
+ */
+function convertDoorSide(side) {
+    const mapping = { top: 'north', bottom: 'south', left: 'west', right: 'east' };
+    return mapping[side] || side;
+}
+
+/**
+ * Get room definition from ROOMS by English name
+ * @param {string} nameEn
+ * @returns {import('../data/mapsData.js').RoomDef | undefined}
+ */
+function getRoomByName(nameEn) {
+    return ROOMS.find(r => r.name.en === nameEn);
+}
+
+/**
+ * Extract doors array from room definition
+ * @param {import('../data/mapsData.js').RoomDef} roomDef
+ * @returns {('north'|'south'|'east'|'west')[]}
+ */
+function extractDoors(roomDef) {
+    return roomDef.doors.map(d => convertDoorSide(d.side));
+}
+
+/**
  * Create mock map for debug mode
+ * Loads door positions from ROOMS data
  * @returns {Object}
  */
 function createMockMap() {
+    // Get room definitions from mapsData
+    const entranceHallDef = getRoomByName('Entrance Hall');
+    const foyerDef = getRoomByName('Foyer');
+    const grandStaircaseDef = getRoomByName('Grand Staircase');
+
     return {
         revealedRooms: {
             'entrance-hall': {
@@ -34,7 +69,7 @@ function createMockMap() {
                 name: 'Entrance Hall',
                 x: 0,
                 y: 0,
-                doors: ['north'],
+                doors: entranceHallDef ? extractDoors(entranceHallDef) : ['north'],
                 floor: 'ground'
             },
             'foyer': {
@@ -42,7 +77,7 @@ function createMockMap() {
                 name: 'Foyer',
                 x: 0,
                 y: 1,
-                doors: ['south', 'north'],
+                doors: foyerDef ? extractDoors(foyerDef) : ['south', 'north'],
                 floor: 'ground'
             },
             'grand-staircase': {
@@ -50,7 +85,7 @@ function createMockMap() {
                 name: 'Grand Staircase',
                 x: 0,
                 y: 2,
-                doors: ['south', 'east', 'west'],
+                doors: grandStaircaseDef ? extractDoors(grandStaircaseDef) : ['south', 'west', 'east'],
                 floor: 'ground'
             }
         },

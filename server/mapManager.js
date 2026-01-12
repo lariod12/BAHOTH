@@ -40,13 +40,14 @@ const maps = new Map();
 // Starting rooms configuration (based on game rules)
 // Layout: Entrance Hall (bottom) -> Foyer (middle) -> Grand Staircase (top)
 // Vertical line from south to north
+// NOTE: Door positions must match src/app/data/mapsData.js ROOMS definitions
 const STARTING_ROOMS = {
     'entrance-hall': {
         id: 'entrance-hall',
         name: 'Entrance Hall',
         x: 0,
         y: 0,
-        doors: ['north'],
+        doors: ['north'], // top door only
         floor: 'ground',
     },
     'foyer': {
@@ -54,7 +55,7 @@ const STARTING_ROOMS = {
         name: 'Foyer',
         x: 0,
         y: 1,
-        doors: ['south', 'north'],
+        doors: ['north', 'south'], // top and bottom doors
         floor: 'ground',
     },
     'grand-staircase': {
@@ -62,7 +63,7 @@ const STARTING_ROOMS = {
         name: 'Grand Staircase',
         x: 0,
         y: 2,
-        doors: ['south', 'east', 'west'],
+        doors: ['south', 'west', 'east'], // bottom, left, right doors
         floor: 'ground',
     },
 };

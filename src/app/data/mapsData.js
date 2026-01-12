@@ -23,6 +23,42 @@
 
 /** @type {RoomDef[]} */
 export const ROOMS = [
+  // ===== STARTING ROOMS (fixed layout) =====
+  {
+    name: { en: 'Entrance Hall', vi: 'Lối vào sảnh chính (Entrance Hall)' },
+    floorsAllowed: ['ground'],
+    doors: [{ side: 'top', kind: 'door' }],
+    tokens: [],
+    text: {},
+    notes: ['Starting tile. Front door (cannot exit).'],
+    isStartingRoom: true,
+  },
+  {
+    name: { en: 'Foyer', vi: 'Sảnh (Foyer)' },
+    floorsAllowed: ['ground'],
+    doors: [
+      { side: 'top', kind: 'door' },
+      { side: 'bottom', kind: 'door' },
+    ],
+    tokens: [],
+    text: {},
+    notes: ['Starting tile. Connects Entrance Hall to Grand Staircase.'],
+    isStartingRoom: true,
+  },
+  {
+    name: { en: 'Grand Staircase', vi: 'Cầu thang lớn (Grand Staircase)' },
+    floorsAllowed: ['ground'],
+    doors: [
+      { side: 'bottom', kind: 'door' },
+      { side: 'left', kind: 'door' },
+      { side: 'right', kind: 'door' },
+    ],
+    tokens: [],
+    text: { en: 'Leads to Upper Landing', vi: 'Dẫn tới Chiếu nghỉ tầng trên' },
+    notes: ['Starting tile. Connects to Upper Landing.'],
+    isStartingRoom: true,
+  },
+
   // ===== FLOOR CARD (not a room tile) =====
   {
     name: { en: 'Basement', vi: 'Tầng hầm (Basement)' },
