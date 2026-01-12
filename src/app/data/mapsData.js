@@ -27,7 +27,12 @@ export const ROOMS = [
   {
     name: { en: 'Entrance Hall', vi: 'Lối vào sảnh chính (Entrance Hall)' },
     floorsAllowed: ['ground'],
-    doors: [{ side: 'top', kind: 'door' }],
+    doors: [
+      { side: 'top', kind: 'door' },
+      { side: 'left', kind: 'door' },
+      { side: 'right', kind: 'door' },
+      { side: 'bottom', kind: 'front-door' }, // Front door - cannot exit
+    ],
     tokens: [],
     text: {},
     notes: ['Starting tile. Front door (cannot exit).'],
@@ -39,6 +44,8 @@ export const ROOMS = [
     doors: [
       { side: 'top', kind: 'door' },
       { side: 'bottom', kind: 'door' },
+      { side: 'left', kind: 'door' },
+      { side: 'right', kind: 'door' },
     ],
     tokens: [],
     text: {},
@@ -50,8 +57,7 @@ export const ROOMS = [
     floorsAllowed: ['ground'],
     doors: [
       { side: 'bottom', kind: 'door' },
-      { side: 'left', kind: 'door' },
-      { side: 'right', kind: 'door' },
+      { side: 'top', kind: 'stairs' }, // Leads to Upper Landing
     ],
     tokens: [],
     text: { en: 'Leads to Upper Landing', vi: 'Dẫn tới Chiếu nghỉ tầng trên' },

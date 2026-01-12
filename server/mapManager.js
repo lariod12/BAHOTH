@@ -47,7 +47,7 @@ const STARTING_ROOMS = {
         name: 'Entrance Hall',
         x: 0,
         y: 0,
-        doors: ['north'], // top door only
+        doors: ['north', 'west', 'east'], // top, left, right (front door south - cannot exit)
         floor: 'ground',
     },
     'foyer': {
@@ -55,7 +55,7 @@ const STARTING_ROOMS = {
         name: 'Foyer',
         x: 0,
         y: 1,
-        doors: ['north', 'south'], // top and bottom doors
+        doors: ['north', 'south', 'west', 'east'], // all 4 doors
         floor: 'ground',
     },
     'grand-staircase': {
@@ -63,7 +63,7 @@ const STARTING_ROOMS = {
         name: 'Grand Staircase',
         x: 0,
         y: 2,
-        doors: ['south', 'west', 'east'], // bottom, left, right doors
+        doors: ['south', 'north'], // bottom door + stairs up to Upper Landing
         floor: 'ground',
     },
 };
