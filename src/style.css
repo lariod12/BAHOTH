@@ -2712,6 +2712,39 @@ select.field__input option {
     color: rgba(201, 165, 92, 0.95);
 }
 
+/* Floor indicator styles */
+.sidebar-stat--floor {
+    background: rgba(100, 100, 100, 0.15);
+    border-color: rgba(100, 100, 100, 0.3);
+}
+
+.sidebar-stat--floor-ground {
+    background: rgba(139, 90, 43, 0.2);
+    border-color: rgba(139, 90, 43, 0.4);
+}
+
+.sidebar-stat--floor-ground .sidebar-stat__value {
+    color: #d4a574;
+}
+
+.sidebar-stat--floor-upper {
+    background: rgba(70, 130, 180, 0.2);
+    border-color: rgba(70, 130, 180, 0.4);
+}
+
+.sidebar-stat--floor-upper .sidebar-stat__value {
+    color: #87ceeb;
+}
+
+.sidebar-stat--floor-basement {
+    background: rgba(85, 85, 85, 0.2);
+    border-color: rgba(85, 85, 85, 0.4);
+}
+
+.sidebar-stat--floor-basement .sidebar-stat__value {
+    color: #a0a0a0;
+}
+
 /* Character Traits (4 stats: Speed, Might, Sanity, Knowledge) */
 .sidebar-traits {
     display: grid;

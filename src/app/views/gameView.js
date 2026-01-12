@@ -563,6 +563,20 @@ function closeCharacterModal(mountEl) {
 }
 
 /**
+ * Get floor display name
+ * @param {'ground' | 'upper' | 'basement'} floor
+ * @returns {string}
+ */
+function getFloorDisplayName(floor) {
+    const floorNames = {
+        ground: 'Tang tret',
+        upper: 'Tang tren',
+        basement: 'Tang ham'
+    };
+    return floorNames[floor] || floor;
+}
+
+/**
  * Render sidebar with current player info (replaces player-bar)
  */
 function renderSidebar(gameState, myId) {
@@ -576,6 +590,13 @@ function renderSidebar(gameState, myId) {
     const myTurn = isMyTurn(gameState, myId);
     const playerPositions = gameState.playerState?.playerPositions || {};
     const myPosition = playerPositions[myId] || 'Unknown';
+
+    // Get current room info for floor
+    const revealedRooms = gameState.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[myPosition];
+    const currentFloor = currentRoom?.floor || 'ground';
+    const floorDisplay = getFloorDisplayName(currentFloor);
+    const roomName = currentRoom?.name || myPosition;
 
     // Get character stats from game state
     const characterData = gameState.playerState?.characterData?.[myId] || gameState.characterData?.[myId];
@@ -597,7 +618,11 @@ function renderSidebar(gameState, myId) {
                 <div class="sidebar-stats">
                     <div class="sidebar-stat">
                         <span class="sidebar-stat__label">Vi tri</span>
-                        <span class="sidebar-stat__value">${myPosition}</span>
+                        <span class="sidebar-stat__value">${roomName}</span>
+                    </div>
+                    <div class="sidebar-stat sidebar-stat--floor sidebar-stat--floor-${currentFloor}">
+                        <span class="sidebar-stat__label">Tang</span>
+                        <span class="sidebar-stat__value">${floorDisplay}</span>
                     </div>
                     <div class="sidebar-stat sidebar-stat--highlight">
                         <span class="sidebar-stat__label">Luot di</span>
