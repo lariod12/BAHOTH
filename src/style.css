@@ -3263,6 +3263,26 @@ select.field__input option {
 }
 
 /* ============================================================
+   VAULT ROOM - Special divided room
+   ============================================================ */
+
+.map-room--vault .map-room__divider {
+    position: absolute;
+    top: 10%;
+    bottom: 10%;
+    left: 50%;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.4);
+    transform: translateX(-50%);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+}
+
+/* Pawn in Vault - positioned on right side (near door) */
+.map-room--vault .map-pawn {
+    left: 75%;
+}
+
+/* ============================================================
    MAP PAWN ICON
    ============================================================ */
 

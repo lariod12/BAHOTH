@@ -153,18 +153,26 @@ function renderRoomTile(room, connections, isCurrentRoom, centerX, centerY, radi
     const currentClass = isCurrentRoom ? 'map-room--current' : '';
     const hasTokens = room.tokens && room.tokens.length > 0;
     const tokensClass = hasTokens ? 'map-room--has-tokens' : '';
+    
+    // Special rooms with divider (like Vault)
+    const isVault = room.name === 'Vault' || room.id === 'vault';
+    const vaultClass = isVault ? 'map-room--vault' : '';
 
     // Calculate grid position relative to viewport (1-indexed for CSS grid)
     // Viewport is (2*radius + 1) x (2*radius + 1)
     const gridCol = (room.x - centerX) + radius + 1;
     const gridRow = -(room.y - centerY) + radius + 1; // Invert Y for CSS
+    
+    // Vault divider line
+    const vaultDivider = isVault ? '<div class="map-room__divider"></div>' : '';
 
     return `
-        <div class="map-room ${floorClass} ${currentClass} ${tokensClass}" 
+        <div class="map-room ${floorClass} ${currentClass} ${tokensClass} ${vaultClass}" 
              data-room-id="${room.id}"
              style="grid-column: ${gridCol}; grid-row: ${gridRow};">
             <div class="map-room__inner">
                 <span class="map-room__name">${room.name}</span>
+                ${vaultDivider}
                 ${renderTokens(room.tokens)}
                 ${renderDoors(room.doors, connections)}
                 ${renderPawnMarker(isCurrentRoom)}
