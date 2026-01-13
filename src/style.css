@@ -3841,3 +3841,169 @@ select.field__input option {
         transition: none;
     }
 }
+
+/* ============================================================
+   ROOM DISCOVERY MODAL
+   ============================================================ */
+
+.room-discovery-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 16px;
+}
+
+.room-discovery-modal {
+    background: linear-gradient(165deg, #1f2428 0%, #14171a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.room-discovery__title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    text-align: center;
+    margin: 0 0 8px;
+    color: #d4af37;
+}
+
+.room-discovery__subtitle {
+    text-align: center;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0 0 20px;
+}
+
+.room-discovery__no-rooms {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #ff6b6b;
+    padding: 16px;
+    background: rgba(255, 107, 107, 0.1);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.room-discovery__options {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.room-discovery__option {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+
+.room-discovery__label {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.room-discovery__select {
+    width: 100%;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: var(--fg);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' fill-opacity='0.6' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.room-discovery__select:focus {
+    outline: none;
+    border-color: rgba(212, 175, 55, 0.5);
+}
+
+.room-discovery__select option {
+    background: #1f2428;
+    color: var(--fg);
+    padding: 8px;
+}
+
+.room-discovery__divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.room-discovery__divider::before,
+.room-discovery__divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.room-discovery__random-btn {
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 1rem;
+}
+
+.room-discovery__cancel {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.room-discovery__cancel:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .room-discovery-modal {
+        padding: 20px 16px;
+    }
+
+    .room-discovery__title {
+        font-size: 1.2rem;
+    }
+
+    .room-discovery__subtitle {
+        font-size: 0.8rem;
+    }
+
+    .room-discovery__select {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+
+    .room-discovery__random-btn {
+        padding: 12px 16px;
+        font-size: 0.9rem;
+    }
+}

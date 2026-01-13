@@ -4,6 +4,10 @@ import * as socketClient from '../services/socketClient.js';
 import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
 import { ROOMS } from '../data/mapsData.js';
 
+// Room discovery modal state
+/** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string } | null} */
+let roomDiscoveryModal = null;
+
 /** @type {any} */
 let currentGameState = null;
 let mySocketId = null;
@@ -911,6 +915,17 @@ function renderGameScreen(gameState, myId) {
         const players = gameState.players || [];
         const playerNames = buildPlayerNamesMap(players, getCharacterName);
         const myPosition = playerPositions[myId];
+        const revealedRooms = mapState?.revealedRooms || {};
+        
+        // Room discovery modal
+        let roomDiscoveryHtml = '';
+        if (roomDiscoveryModal?.isOpen) {
+            roomDiscoveryHtml = renderRoomDiscoveryModal(
+                roomDiscoveryModal.floor,
+                roomDiscoveryModal.doorSide,
+                revealedRooms
+            );
+        }
         
         content = `
             ${renderGameIntro()}
@@ -925,6 +940,7 @@ function renderGameScreen(gameState, myId) {
                 </div>
             </div>
             ${renderGameControls(gameState, myId)}
+            ${roomDiscoveryHtml}
         `;
     } else {
         content = `
@@ -1120,6 +1136,26 @@ function attachDebugEventListeners(mountEl) {
             if (targetRoom) {
                 handleDebugUseStairs(mountEl, targetRoom);
             }
+            return;
+        }
+
+        // Room discovery actions
+        if (action === 'confirm-room-select') {
+            const select = /** @type {HTMLSelectElement} */ (mountEl.querySelector('#room-select'));
+            const selectedRoom = select?.value;
+            if (selectedRoom) {
+                handleRoomDiscovery(mountEl, selectedRoom);
+            }
+            return;
+        }
+
+        if (action === 'random-room') {
+            handleRandomRoomDiscovery(mountEl);
+            return;
+        }
+
+        if (action === 'cancel-room-discovery') {
+            cancelRoomDiscovery(mountEl);
             return;
         }
 
@@ -1357,6 +1393,162 @@ function mapDirectionToDoor(direction) {
 }
 
 /**
+ * Get opposite door direction
+ * @param {string} doorDir - Door direction (north/south/east/west)
+ * @returns {string} - Opposite direction
+ */
+function getOppositeDoor(doorDir) {
+    const opposites = {
+        'north': 'south',
+        'south': 'north',
+        'east': 'west',
+        'west': 'east'
+    };
+    return opposites[doorDir] || doorDir;
+}
+
+/**
+ * Convert door direction to mapsData side format
+ * @param {string} doorDir - Door direction (north/south/east/west)
+ * @returns {string} - Side format (top/bottom/left/right)
+ */
+function doorDirToSide(doorDir) {
+    const mapping = {
+        'north': 'top',
+        'south': 'bottom',
+        'east': 'right',
+        'west': 'left'
+    };
+    return mapping[doorDir] || doorDir;
+}
+
+/**
+ * Get available rooms for a floor that haven't been revealed yet
+ * @param {string} floor - Floor type (ground/upper/basement)
+ * @param {Record<string, any>} revealedRooms - Already revealed rooms
+ * @returns {import('../data/mapsData.js').RoomDef[]}
+ */
+function getAvailableRoomsForFloor(floor, revealedRooms) {
+    // Get names of already revealed rooms
+    const revealedNames = new Set(Object.values(revealedRooms).map(r => r.name));
+    
+    // Filter rooms that:
+    // 1. Are allowed on this floor
+    // 2. Haven't been revealed yet
+    // 3. Are not starting rooms (they're already placed)
+    return ROOMS.filter(room => {
+        if (room.isStartingRoom) return false;
+        if (!room.floorsAllowed.includes(floor)) return false;
+        if (revealedNames.has(room.name.en)) return false;
+        return true;
+    });
+}
+
+/**
+ * Check if a room has a door on the required side
+ * @param {import('../data/mapsData.js').RoomDef} roomDef - Room definition
+ * @param {string} requiredSide - Required door side (top/bottom/left/right)
+ * @returns {boolean}
+ */
+function roomHasDoorOnSide(roomDef, requiredSide) {
+    return roomDef.doors.some(d => d.side === requiredSide && d.kind === 'door');
+}
+
+/**
+ * Check if a door is blocked (e.g., front-door of Entrance Hall)
+ * @param {string} roomName - Room name in English
+ * @param {string} doorDirection - Door direction (north/south/east/west)
+ * @returns {boolean}
+ */
+function isDoorBlocked(roomName, doorDirection) {
+    // Entrance Hall's front door (south/bottom) cannot be used
+    if (roomName === 'Entrance Hall' && doorDirection === 'south') {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Filter rooms that have a connecting door on the required side
+ * @param {import('../data/mapsData.js').RoomDef[]} rooms - Available rooms
+ * @param {string} requiredDoorSide - Required door side (top/bottom/left/right)
+ * @returns {import('../data/mapsData.js').RoomDef[]}
+ */
+function filterRoomsWithConnectingDoor(rooms, requiredDoorSide) {
+    return rooms.filter(room => roomHasDoorOnSide(room, requiredDoorSide));
+}
+
+/**
+ * Render room discovery modal
+ * @param {string} floor - Current floor
+ * @param {string} doorSide - Required door side for connection
+ * @param {Record<string, any>} revealedRooms - Already revealed rooms
+ * @returns {string}
+ */
+function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
+    if (!roomDiscoveryModal?.isOpen) return '';
+    
+    const availableRooms = getAvailableRoomsForFloor(floor, revealedRooms);
+    const validRooms = filterRoomsWithConnectingDoor(availableRooms, doorSide);
+    
+    const floorNames = {
+        ground: 'Tang tret',
+        upper: 'Tang tren',
+        basement: 'Tang ham'
+    };
+    const floorDisplay = floorNames[floor] || floor;
+    
+    const optionsHtml = validRooms.map(room => {
+        const nameVi = room.name.vi || room.name.en;
+        return `<option value="${room.name.en}">${nameVi}</option>`;
+    }).join('');
+    
+    const noRoomsMessage = validRooms.length === 0 
+        ? `<p class="room-discovery__no-rooms">Khong con phong nao co the dat o huong nay!</p>` 
+        : '';
+    
+    return `
+        <div class="room-discovery-overlay">
+            <div class="room-discovery-modal">
+                <h2 class="room-discovery__title">Rut bai phong moi</h2>
+                <p class="room-discovery__subtitle">Ban dang di vao mot khu vuc chua kham pha (${floorDisplay})</p>
+                
+                ${noRoomsMessage}
+                
+                ${validRooms.length > 0 ? `
+                    <div class="room-discovery__options">
+                        <div class="room-discovery__option">
+                            <label class="room-discovery__label">Chon phong:</label>
+                            <select class="room-discovery__select" id="room-select">
+                                <option value="">-- Chon phong --</option>
+                                ${optionsHtml}
+                            </select>
+                            <button class="action-button action-button--primary" type="button" data-action="confirm-room-select">
+                                Xac nhan
+                            </button>
+                        </div>
+                        
+                        <div class="room-discovery__divider">
+                            <span>hoac</span>
+                        </div>
+                        
+                        <div class="room-discovery__option">
+                            <button class="action-button action-button--secondary room-discovery__random-btn" type="button" data-action="random-room">
+                                Rut ngau nhien
+                            </button>
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <button class="room-discovery__cancel" type="button" data-action="cancel-room-discovery">
+                    Huy bo
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Handle debug mode move - uses same logic as main game (map connections)
  * @param {HTMLElement} mountEl
  * @param {string} direction
@@ -1384,6 +1576,7 @@ function handleDebugMove(mountEl, direction) {
     const currentRoomId = currentGameState.playerState.playerPositions[playerId];
     const mapConnections = currentGameState.map?.connections || {};
     const revealedRooms = currentGameState.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[currentRoomId];
     
     // Convert UI direction to door direction
     const doorDirection = mapDirectionToDoor(direction);
@@ -1393,7 +1586,30 @@ function handleDebugMove(mountEl, direction) {
     const targetRoomId = roomConnections[doorDirection];
     
     if (!targetRoomId) {
-        // No connection in that direction - don't move
+        // No connection - check if current room has a door in that direction
+        if (currentRoom && currentRoom.doors.includes(doorDirection)) {
+            // Check if this door is blocked (e.g., front door of Entrance Hall)
+            if (isDoorBlocked(currentRoom.name, doorDirection)) {
+                console.log(`Door to ${doorDirection} from ${currentRoom.name} is blocked`);
+                return;
+            }
+            
+            // There's a door but no room connected - show room discovery modal
+            const currentFloor = currentRoom.floor;
+            const requiredDoorSide = doorDirToSide(getOppositeDoor(doorDirection));
+            
+            roomDiscoveryModal = {
+                isOpen: true,
+                direction: doorDirection,
+                floor: currentFloor,
+                doorSide: requiredDoorSide
+            };
+            
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+        
+        // No door in that direction - don't move
         console.log(`No door to ${doorDirection} from ${currentRoomId}`);
         return;
     }
@@ -1482,6 +1698,158 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
         }
     }
     
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Generate unique room ID from room name
+ * @param {string} roomName - Room name in English
+ * @returns {string}
+ */
+function generateRoomId(roomName) {
+    return roomName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+/**
+ * Calculate new room position based on direction from current room
+ * @param {Object} currentRoom - Current room object
+ * @param {string} direction - Door direction (north/south/east/west)
+ * @returns {{ x: number; y: number }}
+ */
+function calculateNewRoomPosition(currentRoom, direction) {
+    const offsets = {
+        'north': { x: 0, y: 1 },
+        'south': { x: 0, y: -1 },
+        'east': { x: 1, y: 0 },
+        'west': { x: -1, y: 0 }
+    };
+    const offset = offsets[direction] || { x: 0, y: 0 };
+    return {
+        x: currentRoom.x + offset.x,
+        y: currentRoom.y + offset.y
+    };
+}
+
+/**
+ * Handle room discovery - add new room to map and move player
+ * @param {HTMLElement} mountEl
+ * @param {string} roomNameEn - English name of the room to add
+ */
+function handleRoomDiscovery(mountEl, roomNameEn) {
+    if (!currentGameState || !roomDiscoveryModal) return;
+    
+    const playerId = mySocketId;
+    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[currentRoomId];
+    
+    if (!currentRoom) return;
+    
+    // Find room definition
+    const roomDef = ROOMS.find(r => r.name.en === roomNameEn);
+    if (!roomDef) {
+        console.log(`Room definition not found: ${roomNameEn}`);
+        return;
+    }
+    
+    // Generate new room ID and position
+    const newRoomId = generateRoomId(roomNameEn);
+    const newPosition = calculateNewRoomPosition(currentRoom, roomDiscoveryModal.direction);
+    
+    // Extract doors from room definition
+    const newRoomDoors = roomDef.doors
+        .filter(d => d.kind === 'door')
+        .map(d => convertDoorSide(d.side));
+    
+    // Create new room object
+    const newRoom = {
+        id: newRoomId,
+        name: roomDef.name.en,
+        x: newPosition.x,
+        y: newPosition.y,
+        doors: newRoomDoors,
+        floor: currentRoom.floor
+    };
+    
+    // Add room to revealed rooms
+    currentGameState.map.revealedRooms[newRoomId] = newRoom;
+    
+    // Add connections (bidirectional)
+    const direction = roomDiscoveryModal.direction;
+    const oppositeDir = getOppositeDoor(direction);
+    
+    if (!currentGameState.map.connections[currentRoomId]) {
+        currentGameState.map.connections[currentRoomId] = {};
+    }
+    currentGameState.map.connections[currentRoomId][direction] = newRoomId;
+    
+    if (!currentGameState.map.connections[newRoomId]) {
+        currentGameState.map.connections[newRoomId] = {};
+    }
+    currentGameState.map.connections[newRoomId][oppositeDir] = currentRoomId;
+    
+    // Move player to new room
+    currentGameState.playerState.playerPositions[playerId] = newRoomId;
+    
+    // Discovering a room costs 1 move (same as normal movement)
+    const moves = currentGameState.playerMoves[playerId] || 0;
+    currentGameState.playerMoves[playerId] = moves - 1;
+    
+    // Check if turn ended (no more moves)
+    if (currentGameState.playerMoves[playerId] <= 0) {
+        // Move to next player
+        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+        
+        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const speed = getCharacterSpeed(nextPlayer.characterId);
+            currentGameState.playerMoves[nextPlayerId] = speed;
+        }
+        
+        // Auto switch to next player
+        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+        if (nextIdx !== -1) {
+            debugCurrentPlayerIndex = nextIdx;
+            mySocketId = nextPlayerId;
+        }
+    }
+    
+    // Close modal
+    roomDiscoveryModal = null;
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle random room selection
+ * @param {HTMLElement} mountEl
+ */
+function handleRandomRoomDiscovery(mountEl) {
+    if (!currentGameState || !roomDiscoveryModal) return;
+    
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    const availableRooms = getAvailableRoomsForFloor(roomDiscoveryModal.floor, revealedRooms);
+    const validRooms = filterRoomsWithConnectingDoor(availableRooms, roomDiscoveryModal.doorSide);
+    
+    if (validRooms.length === 0) {
+        console.log('No valid rooms available');
+        return;
+    }
+    
+    // Pick random room
+    const randomIndex = Math.floor(Math.random() * validRooms.length);
+    const selectedRoom = validRooms[randomIndex];
+    
+    handleRoomDiscovery(mountEl, selectedRoom.name.en);
+}
+
+/**
+ * Cancel room discovery modal
+ * @param {HTMLElement} mountEl
+ */
+function cancelRoomDiscovery(mountEl) {
+    roomDiscoveryModal = null;
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
