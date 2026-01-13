@@ -896,15 +896,15 @@ function renderGameControls(gameState, myId) {
     const canMoveLeft = canMove && availableDirs.west;
     const canMoveRight = canMove && availableDirs.east;
     
-    // Elevator floor buttons
+    // Elevator floor buttons - sorted: upper on top, ground middle, basement bottom
     const floorNames = { upper: 'Tang tren', ground: 'Tang tret', basement: 'Tang ham' };
-    const elevatorButtons = showElevator ? stairs.availableFloors.map(floor => {
-        const floorOrder = { upper: 0, ground: 1, basement: 2 };
-        const isUp = floorOrder[floor] < floorOrder[stairs.availableFloors.find(f => f !== floor) || 'ground'];
-        return `<button class="stairs-btn stairs-btn--elevator" type="button" data-action="use-elevator" data-floor="${floor}" title="${floorNames[floor]}">
+    const floorOrder = ['upper', 'ground', 'basement'];
+    const sortedFloors = showElevator ? floorOrder.filter(f => stairs.availableFloors.includes(f)) : [];
+    const elevatorButtons = sortedFloors.map(floor => {
+        return `<button class="stairs-btn stairs-btn--elevator stairs-btn--floor-${floor}" type="button" data-action="use-elevator" data-floor="${floor}" title="${floorNames[floor]}">
             <span class="stairs-btn__label">${floorNames[floor]}</span>
         </button>`;
-    }).join('') : '';
+    }).join('');
 
     return `
         <div class="game-controls">
@@ -2118,6 +2118,8 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
 
 /**
  * Handle debug mode use Mystic Elevator - move to selected floor
+ * Elevator snaps to landing room (door-to-door connection)
+ * Ground floor: returns to original position when revealed
  * @param {HTMLElement} mountEl
  * @param {string} targetFloor - 'upper', 'ground', or 'basement'
  */
@@ -2147,27 +2149,67 @@ function handleDebugUseElevator(mountEl, targetFloor) {
         return;
     }
     
-    // Determine target room based on floor
-    let targetRoomId = null;
-    if (targetFloor === 'basement') {
-        targetRoomId = 'basement-landing';
-    } else if (targetFloor === 'upper') {
-        targetRoomId = 'upper-landing';
-    } else if (targetFloor === 'ground') {
-        // Find a ground floor room with open door, or use foyer
-        targetRoomId = 'foyer';
+    // Save original position on first move (ground floor position when revealed)
+    if (!currentRoom.originalPosition) {
+        currentRoom.originalPosition = {
+            x: currentRoom.x,
+            y: currentRoom.y,
+            floor: currentRoom.floor,
+            connections: { ...currentGameState.map.connections[currentRoomId] }
+        };
     }
     
-    if (!targetRoomId || !revealedRooms[targetRoomId]) {
-        console.log(`Target room for floor ${targetFloor} not found`);
-        return;
+    let newX, newY;
+    let newConnections = {};
+    
+    // Ground floor: return to original position
+    if (targetFloor === 'ground' && currentRoom.originalPosition) {
+        newX = currentRoom.originalPosition.x;
+        newY = currentRoom.originalPosition.y;
+        newConnections = { ...currentRoom.originalPosition.connections };
+    } else {
+        // Upper/Basement: snap to landing room
+        const landingNames = {
+            'upper': 'Upper Landing',
+            'basement': 'Basement Landing'
+        };
+        const landingName = landingNames[targetFloor];
+        
+        // Find the landing room
+        let landingRoom = null;
+        let landingRoomId = null;
+        for (const [roomId, room] of Object.entries(revealedRooms)) {
+            if (room.name === landingName && room.floor === targetFloor) {
+                landingRoom = room;
+                landingRoomId = roomId;
+                break;
+            }
+        }
+        
+        if (landingRoom) {
+            // Place elevator south of landing (elevator's north door connects to landing's south door)
+            newX = landingRoom.x;
+            newY = landingRoom.y - 1;
+            // Connect elevator (north) to landing (south)
+            newConnections = { north: landingRoomId };
+            if (!currentGameState.map.connections[landingRoomId]) {
+                currentGameState.map.connections[landingRoomId] = {};
+            }
+            currentGameState.map.connections[landingRoomId].south = currentRoomId;
+        } else {
+            // Fallback: place at origin if no landing found
+            newX = 0;
+            newY = 0;
+        }
     }
     
-    // Move elevator to new floor (update elevator's floor)
+    // Move elevator to new floor (player stays in elevator)
     currentRoom.floor = targetFloor;
+    currentRoom.x = newX;
+    currentRoom.y = newY;
     
-    // Move player to target landing
-    currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+    // Update connections
+    currentGameState.map.connections[currentRoomId] = newConnections;
     
     // Using elevator costs 1 move
     currentGameState.playerMoves[playerId] = moves - 1;
