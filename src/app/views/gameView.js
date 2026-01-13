@@ -816,6 +816,35 @@ function getStairsAvailability(gameState, myId) {
 }
 
 /**
+ * Get available movement directions from current room
+ * @param {Object} gameState
+ * @param {string} myId
+ * @returns {{ north: boolean; south: boolean; east: boolean; west: boolean }}
+ */
+function getAvailableDirections(gameState, myId) {
+    const result = { north: false, south: false, east: false, west: false };
+    
+    const playerPositions = gameState?.playerState?.playerPositions || {};
+    const currentRoomId = playerPositions[myId];
+    const revealedRooms = gameState?.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[currentRoomId];
+    
+    if (!currentRoom) return result;
+    
+    // Check each door direction
+    const doors = currentRoom.doors || [];
+    for (const dir of doors) {
+        // Check if door is blocked (e.g., front door of Entrance Hall)
+        if (isDoorBlocked(currentRoom.name, dir)) {
+            continue;
+        }
+        result[dir] = true;
+    }
+    
+    return result;
+}
+
+/**
  * Render game controls (movement arrows + dice + stairs)
  */
 function renderGameControls(gameState, myId) {
@@ -830,24 +859,31 @@ function renderGameControls(gameState, myId) {
     const showUpBtn = stairs.canGoUp && canMove;
     const showDownBtn = stairs.canGoDown && canMove;
 
+    // Get available directions based on doors
+    const availableDirs = getAvailableDirections(gameState, myId);
+    const canMoveUp = canMove && availableDirs.north;
+    const canMoveDown = canMove && availableDirs.south;
+    const canMoveLeft = canMove && availableDirs.west;
+    const canMoveRight = canMove && availableDirs.east;
+
     return `
         <div class="game-controls">
             <div class="movement-controls">
-                <button class="move-btn move-btn--up" type="button" data-action="move" data-direction="up" ${!canMove ? 'disabled' : ''}>
+                <button class="move-btn move-btn--up" type="button" data-action="move" data-direction="up" ${!canMoveUp ? 'disabled' : ''}>
                     ▲
                 </button>
                 <div class="move-btn-row">
-                    <button class="move-btn move-btn--left" type="button" data-action="move" data-direction="left" ${!canMove ? 'disabled' : ''}>
+                    <button class="move-btn move-btn--left" type="button" data-action="move" data-direction="left" ${!canMoveLeft ? 'disabled' : ''}>
                         ◀
                     </button>
                     <div class="move-center">
                         <span class="moves-remaining">${movesLeft}</span>
                     </div>
-                    <button class="move-btn move-btn--right" type="button" data-action="move" data-direction="right" ${!canMove ? 'disabled' : ''}>
+                    <button class="move-btn move-btn--right" type="button" data-action="move" data-direction="right" ${!canMoveRight ? 'disabled' : ''}>
                         ▶
                     </button>
                 </div>
-                <button class="move-btn move-btn--down" type="button" data-action="move" data-direction="down" ${!canMove ? 'disabled' : ''}>
+                <button class="move-btn move-btn--down" type="button" data-action="move" data-direction="down" ${!canMoveDown ? 'disabled' : ''}>
                     ▼
                 </button>
             </div>
