@@ -1239,8 +1239,14 @@ function attachDebugEventListeners(mountEl) {
             const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
             const selectedRoom = hiddenInput?.value;
             if (selectedRoom && roomDiscoveryModal) {
+                // Find first valid rotation to snap to correct position
+                const roomDef = ROOMS.find(r => r.name.en === selectedRoom);
+                const initialRotation = roomDef 
+                    ? findFirstValidRotation(roomDef, roomDiscoveryModal.doorSide)
+                    : 0;
+                
                 roomDiscoveryModal.selectedRoom = selectedRoom;
-                roomDiscoveryModal.currentRotation = 0; // Start at 0 degrees
+                roomDiscoveryModal.currentRotation = initialRotation;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             } else {
                 alert('Vui long chon mot phong');
@@ -1751,6 +1757,22 @@ function isRotationValid(roomDef, rotation, requiredDoorSide) {
 }
 
 /**
+ * Find first valid rotation for a room
+ * @param {import('../data/mapsData.js').RoomDef} roomDef
+ * @param {string} requiredDoorSide
+ * @returns {number} - First valid rotation (0, 90, 180, 270) or 0 if none found
+ */
+function findFirstValidRotation(roomDef, requiredDoorSide) {
+    const rotations = [0, 90, 180, 270];
+    for (const rotation of rotations) {
+        if (isRotationValid(roomDef, rotation, requiredDoorSide)) {
+            return rotation;
+        }
+    }
+    return 0; // Fallback
+}
+
+/**
  * Render room discovery modal (simplified - just buttons)
  * @param {string} floor - Current floor
  * @param {string} doorSide - Required door side for connection
@@ -2157,9 +2179,12 @@ function handleRandomRoomDiscovery(mountEl) {
     const randomIndex = Math.floor(Math.random() * validRooms.length);
     const selectedRoom = validRooms[randomIndex];
     
-    // Set selected room and go to rotation step (same as manual selection)
+    // Find first valid rotation to snap to correct position
+    const initialRotation = findFirstValidRotation(selectedRoom, roomDiscoveryModal.doorSide);
+    
+    // Set selected room and go to rotation step
     roomDiscoveryModal.selectedRoom = selectedRoom.name.en;
-    roomDiscoveryModal.currentRotation = 0; // Start at 0 degrees, user can rotate
+    roomDiscoveryModal.currentRotation = initialRotation;
     
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
