@@ -56,6 +56,9 @@ function filterVisibleRooms(rooms, centerX, centerY, radius, currentFloor) {
         // Only show rooms on the same floor
         if (room.floor !== currentFloor) continue;
         
+        // Don't show elevator shafts (empty elevator positions)
+        if (room.isElevatorShaft) continue;
+        
         const dx = Math.abs(room.x - centerX);
         const dy = Math.abs(room.y - centerY);
         if (dx <= radius && dy <= radius) {

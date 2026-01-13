@@ -856,17 +856,54 @@ function getAvailableDirections(gameState, myId) {
     const playerPositions = gameState?.playerState?.playerPositions || {};
     const currentRoomId = playerPositions[myId];
     const revealedRooms = gameState?.map?.revealedRooms || {};
+    const connections = gameState?.map?.connections || {};
+    const elevatorShafts = gameState?.map?.elevatorShafts || {};
     const currentRoom = revealedRooms[currentRoomId];
     
     if (!currentRoom) return result;
     
     // Check each door direction
     const doors = currentRoom.doors || [];
+    const roomConnections = connections[currentRoomId] || {};
+    
+    // Direction offsets
+    const dirOffsets = {
+        north: { x: 0, y: 1 },
+        south: { x: 0, y: -1 },
+        east: { x: 1, y: 0 },
+        west: { x: -1, y: 0 }
+    };
+    
     for (const dir of doors) {
         // Check if door is blocked (e.g., front door of Entrance Hall)
         if (isDoorBlocked(currentRoom.name, dir)) {
             continue;
         }
+        
+        // Check if direction leads to an elevator shaft on this floor
+        const shaftId = elevatorShafts[currentRoom.floor];
+        if (shaftId) {
+            const shaft = revealedRooms[shaftId];
+            if (shaft) {
+                const offset = dirOffsets[dir];
+                const targetX = currentRoom.x + offset.x;
+                const targetY = currentRoom.y + offset.y;
+                // If target position matches shaft position, block movement
+                if (shaft.x === targetX && shaft.y === targetY) {
+                    continue; // Can't enter elevator shaft without elevator
+                }
+            }
+        }
+        
+        // Check if target room is an elevator shaft (via connection)
+        const targetRoomId = roomConnections[dir];
+        if (targetRoomId) {
+            const targetRoom = revealedRooms[targetRoomId];
+            if (targetRoom && targetRoom.isElevatorShaft && !targetRoom.elevatorPresent) {
+                continue;
+            }
+        }
+        
         result[dir] = true;
     }
     
@@ -1766,9 +1803,10 @@ function rotateRoomDoors(doors, rotation) {
  * Check if a door is blocked (e.g., front-door of Entrance Hall)
  * @param {string} roomName - Room name in English
  * @param {string} doorDirection - Door direction (north/south/east/west)
+ * @param {string} [targetRoomId] - Optional target room ID to check
  * @returns {boolean}
  */
-function isDoorBlocked(roomName, doorDirection) {
+function isDoorBlocked(roomName, doorDirection, targetRoomId) {
     // Entrance Hall's front door (south/bottom) cannot be used
     if (roomName === 'Entrance Hall' && doorDirection === 'south') {
         return true;
@@ -1785,7 +1823,27 @@ function isDoorBlocked(roomName, doorDirection) {
         }
     }
     
+    // Check if target room is an elevator shaft (elevator not present)
+    if (targetRoomId) {
+        const revealedRooms = currentGameState?.map?.revealedRooms || {};
+        const targetRoom = revealedRooms[targetRoomId];
+        if (targetRoom && targetRoom.isElevatorShaft && !targetRoom.elevatorPresent) {
+            return true;
+        }
+    }
+    
     return false;
+}
+
+/**
+ * Check if moving to a room is blocked by elevator shaft
+ * @param {string} targetRoomId - Target room ID
+ * @returns {boolean}
+ */
+function isElevatorShaftBlocked(targetRoomId) {
+    const revealedRooms = currentGameState?.map?.revealedRooms || {};
+    const targetRoom = revealedRooms[targetRoomId];
+    return targetRoom && targetRoom.isElevatorShaft && !targetRoom.elevatorPresent;
 }
 
 /**
@@ -2120,6 +2178,7 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
  * Handle debug mode use Mystic Elevator - move to selected floor
  * Elevator snaps to landing room (door-to-door connection)
  * Ground floor: returns to original position when revealed
+ * Creates elevator shaft on floors where elevator is not present
  * @param {HTMLElement} mountEl
  * @param {string} targetFloor - 'upper', 'ground', or 'basement'
  */
@@ -2149,6 +2208,10 @@ function handleDebugUseElevator(mountEl, targetFloor) {
         return;
     }
     
+    const previousFloor = currentRoom.floor;
+    const previousX = currentRoom.x;
+    const previousY = currentRoom.y;
+    
     // Save original position on first move (ground floor position when revealed)
     if (!currentRoom.originalPosition) {
         currentRoom.originalPosition = {
@@ -2157,6 +2220,11 @@ function handleDebugUseElevator(mountEl, targetFloor) {
             floor: currentRoom.floor,
             connections: { ...currentGameState.map.connections[currentRoomId] }
         };
+    }
+    
+    // Initialize elevator shafts tracking if not exists
+    if (!currentGameState.map.elevatorShafts) {
+        currentGameState.map.elevatorShafts = {};
     }
     
     let newX, newY;
@@ -2203,10 +2271,50 @@ function handleDebugUseElevator(mountEl, targetFloor) {
         }
     }
     
+    // Create elevator shaft on the floor we're leaving (blocked until elevator returns)
+    const shaftId = `elevator-shaft-${previousFloor}`;
+    revealedRooms[shaftId] = {
+        id: shaftId,
+        name: 'Elevator Shaft',
+        x: previousX,
+        y: previousY,
+        floor: previousFloor,
+        doors: ['north'], // Same as elevator
+        isElevatorShaft: true,
+        elevatorPresent: false
+    };
+    currentGameState.map.elevatorShafts[previousFloor] = shaftId;
+    
+    // Remove connections TO the old elevator position (now shaft)
+    // Find rooms that were connected to elevator and remove their connection
+    const oldConnections = currentGameState.map.connections[currentRoomId] || {};
+    for (const [dir, connectedRoomId] of Object.entries(oldConnections)) {
+        if (connectedRoomId && currentGameState.map.connections[connectedRoomId]) {
+            // Find and remove the reverse connection
+            const reverseDir = getOppositeDoor(dir);
+            if (currentGameState.map.connections[connectedRoomId][reverseDir] === currentRoomId) {
+                // Point to shaft instead (but shaft has no connections = blocked)
+                delete currentGameState.map.connections[connectedRoomId][reverseDir];
+            }
+        }
+    }
+    
+    // Shaft has no connections (blocked)
+    currentGameState.map.connections[shaftId] = {};
+    
+    // Remove shaft on target floor if exists (elevator is arriving)
+    const targetShaftId = currentGameState.map.elevatorShafts[targetFloor];
+    if (targetShaftId && revealedRooms[targetShaftId]) {
+        delete revealedRooms[targetShaftId];
+        delete currentGameState.map.connections[targetShaftId];
+        delete currentGameState.map.elevatorShafts[targetFloor];
+    }
+    
     // Move elevator to new floor (player stays in elevator)
     currentRoom.floor = targetFloor;
     currentRoom.x = newX;
     currentRoom.y = newY;
+    currentRoom.doors = ['north']; // Elevator only has north door
     
     // Update connections
     currentGameState.map.connections[currentRoomId] = newConnections;
