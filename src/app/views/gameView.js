@@ -66,6 +66,7 @@ function createMockMap() {
     const foyerDef = getRoomByName('Foyer');
     const grandStaircaseDef = getRoomByName('Grand Staircase');
     const upperLandingDef = getRoomByName('Upper Landing');
+    const basementLandingDef = getRoomByName('Basement Landing');
 
     return {
         revealedRooms: {
@@ -102,13 +103,22 @@ function createMockMap() {
                 doors: upperLandingDef ? extractDoors(upperLandingDef) : ['north', 'south', 'west', 'east'],
                 floor: 'upper',
                 stairsTo: 'grand-staircase'
+            },
+            'basement-landing': {
+                id: 'basement-landing',
+                name: 'Basement Landing',
+                x: 0,
+                y: 0, // separate coordinate for basement floor
+                doors: basementLandingDef ? extractDoors(basementLandingDef) : ['north', 'south', 'west', 'east'],
+                floor: 'basement'
             }
         },
         connections: {
             'entrance-hall': { north: 'foyer' },
             'foyer': { south: 'entrance-hall', north: 'grand-staircase' },
             'grand-staircase': { south: 'foyer' },
-            'upper-landing': {}
+            'upper-landing': {},
+            'basement-landing': {}
         },
         // Special staircase connections (not regular doors)
         staircaseConnections: {
@@ -779,7 +789,7 @@ function renderTurnOrder(gameState, myId) {
  * Check if player can use stairs from current room
  * @param {Object} gameState
  * @param {string} myId
- * @returns {{ canGoUp: boolean; canGoDown: boolean; targetRoom: string | null }}
+ * @returns {{ canGoUp: boolean; canGoDown: boolean; targetRoom: string | null; isMysticElevator: boolean; availableFloors: string[] }}
  */
 function getStairsAvailability(gameState, myId) {
     const playerPositions = gameState?.playerState?.playerPositions || {};
@@ -788,15 +798,32 @@ function getStairsAvailability(gameState, myId) {
     const currentRoom = revealedRooms[currentRoomId];
     const staircaseConnections = gameState?.map?.staircaseConnections || {};
 
-    if (!currentRoom || !staircaseConnections[currentRoomId]) {
-        return { canGoUp: false, canGoDown: false, targetRoom: null };
+    const defaultResult = { canGoUp: false, canGoDown: false, targetRoom: null, isMysticElevator: false, availableFloors: [] };
+
+    if (!currentRoom) return defaultResult;
+    
+    // Special case: Mystic Elevator - can go to any floor
+    if (currentRoom.name === 'Mystic Elevator') {
+        const currentFloor = currentRoom.floor;
+        const availableFloors = ['upper', 'ground', 'basement'].filter(f => f !== currentFloor);
+        return {
+            canGoUp: currentFloor !== 'upper',
+            canGoDown: currentFloor !== 'basement',
+            targetRoom: null, // Will be determined by floor selection
+            isMysticElevator: true,
+            availableFloors
+        };
+    }
+
+    if (!staircaseConnections[currentRoomId]) {
+        return defaultResult;
     }
 
     const targetRoomId = staircaseConnections[currentRoomId];
     const targetRoom = revealedRooms[targetRoomId];
 
     if (!targetRoom) {
-        return { canGoUp: false, canGoDown: false, targetRoom: null };
+        return defaultResult;
     }
 
     // Determine direction based on floor
@@ -811,7 +838,9 @@ function getStairsAvailability(gameState, myId) {
     return {
         canGoUp: goingUp,
         canGoDown: !goingUp,
-        targetRoom: targetRoomId
+        targetRoom: targetRoomId,
+        isMysticElevator: false,
+        availableFloors: []
     };
 }
 
@@ -856,8 +885,9 @@ function renderGameControls(gameState, myId) {
 
     // Check stairs availability
     const stairs = getStairsAvailability(gameState, myId);
-    const showUpBtn = stairs.canGoUp && canMove;
-    const showDownBtn = stairs.canGoDown && canMove;
+    const showUpBtn = stairs.canGoUp && canMove && !stairs.isMysticElevator;
+    const showDownBtn = stairs.canGoDown && canMove && !stairs.isMysticElevator;
+    const showElevator = stairs.isMysticElevator && canMove;
 
     // Get available directions based on doors
     const availableDirs = getAvailableDirections(gameState, myId);
@@ -865,6 +895,16 @@ function renderGameControls(gameState, myId) {
     const canMoveDown = canMove && availableDirs.south;
     const canMoveLeft = canMove && availableDirs.west;
     const canMoveRight = canMove && availableDirs.east;
+    
+    // Elevator floor buttons
+    const floorNames = { upper: 'Tang tren', ground: 'Tang tret', basement: 'Tang ham' };
+    const elevatorButtons = showElevator ? stairs.availableFloors.map(floor => {
+        const floorOrder = { upper: 0, ground: 1, basement: 2 };
+        const isUp = floorOrder[floor] < floorOrder[stairs.availableFloors.find(f => f !== floor) || 'ground'];
+        return `<button class="stairs-btn stairs-btn--elevator" type="button" data-action="use-elevator" data-floor="${floor}" title="${floorNames[floor]}">
+            <span class="stairs-btn__label">${floorNames[floor]}</span>
+        </button>`;
+    }).join('') : '';
 
     return `
         <div class="game-controls">
@@ -909,6 +949,12 @@ function renderGameControls(gameState, myId) {
                         <span class="stairs-btn__arrow">▼</span>
                         <span class="stairs-btn__label">DOWN</span>
                     </button>
+                ` : ''}
+                ${showElevator ? `
+                    <div class="elevator-controls">
+                        <span class="elevator-label">Thang may:</span>
+                        ${elevatorButtons}
+                    </div>
                 ` : ''}
             </div>
         </div>
@@ -1229,6 +1275,15 @@ function attachDebugEventListeners(mountEl) {
             const targetRoom = actionEl?.dataset.target;
             if (targetRoom) {
                 handleDebugUseStairs(mountEl, targetRoom);
+            }
+            return;
+        }
+        
+        // Use Mystic Elevator (debug)
+        if (action === 'use-elevator') {
+            const targetFloor = actionEl?.dataset.floor;
+            if (targetFloor) {
+                handleDebugUseElevator(mountEl, targetFloor);
             }
             return;
         }
@@ -2038,6 +2093,83 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
     currentGameState.playerState.playerPositions[playerId] = targetRoomId;
     
     // Decrease moves (using stairs costs 1 move)
+    currentGameState.playerMoves[playerId] = moves - 1;
+    
+    // Check if turn ended
+    if (currentGameState.playerMoves[playerId] <= 0) {
+        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+        
+        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const speed = getCharacterSpeed(nextPlayer.characterId);
+            currentGameState.playerMoves[nextPlayerId] = speed;
+        }
+        
+        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+        if (nextIdx !== -1) {
+            debugCurrentPlayerIndex = nextIdx;
+            mySocketId = nextPlayerId;
+        }
+    }
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle debug mode use Mystic Elevator - move to selected floor
+ * @param {HTMLElement} mountEl
+ * @param {string} targetFloor - 'upper', 'ground', or 'basement'
+ */
+function handleDebugUseElevator(mountEl, targetFloor) {
+    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
+
+    const playerId = mySocketId;
+    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+    
+    if (playerId !== currentTurnPlayer) {
+        console.log(`Not ${playerId}'s turn`);
+        return;
+    }
+    
+    const moves = currentGameState.playerMoves[playerId] || 0;
+    if (moves <= 0) {
+        console.log(`No moves left for ${playerId}`);
+        return;
+    }
+    
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
+    const currentRoom = revealedRooms[currentRoomId];
+    
+    if (!currentRoom || currentRoom.name !== 'Mystic Elevator') {
+        console.log('Not in Mystic Elevator');
+        return;
+    }
+    
+    // Determine target room based on floor
+    let targetRoomId = null;
+    if (targetFloor === 'basement') {
+        targetRoomId = 'basement-landing';
+    } else if (targetFloor === 'upper') {
+        targetRoomId = 'upper-landing';
+    } else if (targetFloor === 'ground') {
+        // Find a ground floor room with open door, or use foyer
+        targetRoomId = 'foyer';
+    }
+    
+    if (!targetRoomId || !revealedRooms[targetRoomId]) {
+        console.log(`Target room for floor ${targetFloor} not found`);
+        return;
+    }
+    
+    // Move elevator to new floor (update elevator's floor)
+    currentRoom.floor = targetFloor;
+    
+    // Move player to target landing
+    currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+    
+    // Using elevator costs 1 move
     currentGameState.playerMoves[playerId] = moves - 1;
     
     // Check if turn ended
