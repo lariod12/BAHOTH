@@ -2106,7 +2106,8 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         y: newPosition.y,
         doors: rotatedDoors,
         floor: currentRoom.floor,
-        rotation: rotation // Store rotation for reference
+        rotation: rotation, // Store rotation for reference
+        tokens: roomDef.tokens ? [...roomDef.tokens] : [] // Copy tokens from room definition
     };
     
     // Add room to revealed rooms

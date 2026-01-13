@@ -13,6 +13,7 @@ const MAPS_FILE = join(DATA_DIR, 'maps.json');
 
 /**
  * @typedef {'north' | 'south' | 'east' | 'west'} Direction
+ * @typedef {'omen' | 'event' | 'item'} TokenType
  *
  * @typedef {{
  *   id: string;
@@ -21,6 +22,7 @@ const MAPS_FILE = join(DATA_DIR, 'maps.json');
  *   y: number;
  *   doors: Direction[];
  *   floor: 'ground' | 'upper' | 'basement';
+ *   tokens?: TokenType[];
  * }} RevealedRoom
  *
  * @typedef {{
@@ -77,23 +79,35 @@ const STARTING_ROOMS = {
     },
 };
 
-// Pool of rooms that can be revealed (simplified for now)
+// Pool of rooms that can be revealed (with tokens from mapsData.js)
 const ROOM_POOL = [
-    { id: 'chapel', name: 'Chapel', doors: ['north', 'south'], floor: 'ground' },
-    { id: 'dining-room', name: 'Dining Room', doors: ['north', 'east', 'west'], floor: 'ground' },
-    { id: 'kitchen', name: 'Kitchen', doors: ['south', 'east'], floor: 'ground' },
-    { id: 'ballroom', name: 'Ballroom', doors: ['north', 'south', 'east', 'west'], floor: 'ground' },
-    { id: 'conservatory', name: 'Conservatory', doors: ['north', 'west'], floor: 'ground' },
-    { id: 'library', name: 'Library', doors: ['north', 'south'], floor: 'upper' },
-    { id: 'master-bedroom', name: 'Master Bedroom', doors: ['south', 'west'], floor: 'upper' },
-    { id: 'gallery', name: 'Gallery', doors: ['north', 'east', 'west'], floor: 'upper' },
-    { id: 'attic', name: 'Attic', doors: ['south'], floor: 'upper' },
-    { id: 'bedroom', name: 'Bedroom', doors: ['east', 'west'], floor: 'upper' },
-    { id: 'crypt', name: 'Crypt', doors: ['north', 'south'], floor: 'basement' },
-    { id: 'furnace-room', name: 'Furnace Room', doors: ['east', 'west'], floor: 'basement' },
-    { id: 'wine-cellar', name: 'Wine Cellar', doors: ['north', 'east'], floor: 'basement' },
-    { id: 'coal-chute', name: 'Coal Chute', doors: ['south', 'west'], floor: 'basement' },
-    { id: 'pentagram-chamber', name: 'Pentagram Chamber', doors: ['north', 'south', 'east', 'west'], floor: 'basement' },
+    { id: 'patio', name: 'Patio', doors: ['north', 'south', 'west'], floor: 'ground', tokens: ['event'] },
+    { id: 'gardens', name: 'Gardens', doors: ['north', 'south'], floor: 'ground', tokens: ['event'] },
+    { id: 'graveyard', name: 'Graveyard', doors: ['south'], floor: 'ground', tokens: ['event'] },
+    { id: 'chapel', name: 'Chapel', doors: ['north'], floor: 'ground', tokens: ['event'] },
+    { id: 'dining-room', name: 'Dining Room', doors: ['north', 'east'], floor: 'ground', tokens: ['omen'] },
+    { id: 'kitchen', name: 'Kitchen', doors: ['north', 'east'], floor: 'ground', tokens: ['omen'] },
+    { id: 'ballroom', name: 'Ballroom', doors: ['north', 'south', 'east', 'west'], floor: 'ground', tokens: ['event'] },
+    { id: 'conservatory', name: 'Conservatory', doors: ['north'], floor: 'ground', tokens: ['event'] },
+    { id: 'library', name: 'Library', doors: ['north', 'south'], floor: 'upper', tokens: ['event'] },
+    { id: 'master-bedroom', name: 'Master Bedroom', doors: ['north', 'west', 'south'], floor: 'upper', tokens: ['omen'] },
+    { id: 'gallery', name: 'Gallery', doors: ['north', 'south'], floor: 'upper', tokens: ['omen'] },
+    { id: 'attic', name: 'Attic', doors: ['south'], floor: 'upper', tokens: ['event'] },
+    { id: 'bedroom', name: 'Bedroom', doors: ['west', 'east', 'south'], floor: 'upper', tokens: ['event'] },
+    { id: 'balcony', name: 'Balcony', doors: ['north', 'south'], floor: 'upper', tokens: ['omen'] },
+    { id: 'tower', name: 'Tower', doors: ['west', 'east'], floor: 'upper', tokens: ['event'] },
+    { id: 'gymnasium', name: 'Gymnasium', doors: ['east', 'south'], floor: 'upper', tokens: ['omen'] },
+    { id: 'servants-quarters', name: "Servants' Quarters", doors: ['west', 'east', 'south'], floor: 'upper', tokens: ['omen'] },
+    { id: 'storeroom', name: 'Storeroom', doors: ['north'], floor: 'upper', tokens: ['item'] },
+    { id: 'crypt', name: 'Crypt', doors: ['north'], floor: 'basement', tokens: ['event'] },
+    { id: 'furnace-room', name: 'Furnace Room', doors: ['north', 'south', 'west'], floor: 'basement', tokens: ['omen'] },
+    { id: 'wine-cellar', name: 'Wine Cellar', doors: ['north', 'south'], floor: 'basement', tokens: ['item'] },
+    { id: 'catacombs', name: 'Catacombs', doors: ['north', 'south'], floor: 'basement', tokens: ['omen'] },
+    { id: 'pentagram-chamber', name: 'Pentagram Chamber', doors: ['north', 'east'], floor: 'basement', tokens: ['omen'] },
+    { id: 'underground-lake', name: 'Underground Lake', doors: ['north', 'east'], floor: 'basement', tokens: ['event'] },
+    { id: 'larder', name: 'Larder', doors: ['north'], floor: 'basement', tokens: ['item'] },
+    { id: 'chasm', name: 'Chasm', doors: ['west', 'east'], floor: 'basement', tokens: [] },
+    { id: 'vault', name: 'Vault', doors: ['north'], floor: 'ground', tokens: ['event', 'item', 'item'] },
 ];
 
 /**
@@ -314,6 +328,7 @@ export function revealRoom(gameId, fromRoomId, direction) {
         y: newY,
         doors: [...newRoomTemplate.doors],
         floor: newRoomTemplate.floor,
+        tokens: newRoomTemplate.tokens ? [...newRoomTemplate.tokens] : [],
     };
 
     // Add to revealed rooms
