@@ -5,7 +5,7 @@ import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
 import { ROOMS } from '../data/mapsData.js';
 
 // Room discovery modal state
-/** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number } | null} */
+/** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number; selectedFloor: string | null; needsFloorSelection: boolean } | null} */
 let roomDiscoveryModal = null;
 
 /** @type {any} */
@@ -1239,17 +1239,45 @@ function attachDebugEventListeners(mountEl) {
             const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
             const selectedRoom = hiddenInput?.value;
             if (selectedRoom && roomDiscoveryModal) {
-                // Find first valid rotation to snap to correct position
                 const roomDef = ROOMS.find(r => r.name.en === selectedRoom);
+                
+                // Check if room has multiple floors allowed
+                if (roomDef && roomDef.floorsAllowed.length > 1) {
+                    // Show floor selection step
+                    roomDiscoveryModal.selectedRoom = selectedRoom;
+                    roomDiscoveryModal.needsFloorSelection = true;
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                    return;
+                }
+                
+                // Single floor - proceed to rotation
                 const initialRotation = roomDef 
                     ? findFirstValidRotation(roomDef, roomDiscoveryModal.doorSide)
                     : 0;
                 
                 roomDiscoveryModal.selectedRoom = selectedRoom;
                 roomDiscoveryModal.currentRotation = initialRotation;
+                roomDiscoveryModal.needsFloorSelection = false;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             } else {
                 alert('Vui long chon mot phong');
+            }
+            return;
+        }
+        
+        // Floor selection for multi-floor rooms
+        if (action === 'select-floor') {
+            const selectedFloor = target.dataset.floor;
+            if (roomDiscoveryModal && selectedFloor) {
+                const roomDef = ROOMS.find(r => r.name.en === roomDiscoveryModal.selectedRoom);
+                const initialRotation = roomDef 
+                    ? findFirstValidRotation(roomDef, roomDiscoveryModal.doorSide)
+                    : 0;
+                
+                roomDiscoveryModal.selectedFloor = selectedFloor;
+                roomDiscoveryModal.needsFloorSelection = false;
+                roomDiscoveryModal.currentRotation = initialRotation;
+                updateGameUI(mountEl, currentGameState, mySocketId);
             }
             return;
         }
@@ -1278,6 +1306,8 @@ function attachDebugEventListeners(mountEl) {
             if (roomDiscoveryModal) {
                 roomDiscoveryModal.selectedRoom = null;
                 roomDiscoveryModal.currentRotation = 0;
+                roomDiscoveryModal.needsFloorSelection = false;
+                roomDiscoveryModal.selectedFloor = null;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
             return;
@@ -1792,15 +1822,61 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
     };
     const floorDisplay = floorNames[floor] || floor;
     
+    // Step 1.5: Floor selection for multi-floor rooms
+    if (roomDiscoveryModal.needsFloorSelection && roomDiscoveryModal.selectedRoom) {
+        const selectedRoomDef = ROOMS.find(r => r.name.en === roomDiscoveryModal.selectedRoom);
+        if (selectedRoomDef && selectedRoomDef.floorsAllowed.length > 1) {
+            const roomNameVi = selectedRoomDef.name.vi || selectedRoomDef.name.en;
+            
+            // Sort floors: upper -> ground -> basement (top to bottom)
+            const floorOrder = ['upper', 'ground', 'basement'];
+            const sortedFloors = [...selectedRoomDef.floorsAllowed].sort((a, b) => 
+                floorOrder.indexOf(a) - floorOrder.indexOf(b)
+            );
+            
+            const floorsHtml = sortedFloors.map(f => {
+                const isCurrentFloor = f === floor;
+                const floorLabel = floorNames[f] || f;
+                const currentBadge = isCurrentFloor ? ' (hien tai)' : '';
+                return `<button class="room-discovery__floor-btn ${isCurrentFloor ? 'room-discovery__floor-btn--current' : ''}" 
+                                data-action="select-floor" 
+                                data-floor="${f}">${floorLabel}${currentBadge}</button>`;
+            }).join('');
+            
+            return `
+                <div class="room-discovery-overlay">
+                    <div class="room-discovery-modal">
+                        <h2 class="room-discovery__title">Chon tang cho phong</h2>
+                        <p class="room-discovery__subtitle">${roomNameVi}</p>
+                        <p class="room-discovery__hint">Phong nay co the dat o nhieu tang. Chon tang muon dat:</p>
+                        
+                        <div class="room-discovery__floor-options">
+                            ${floorsHtml}
+                        </div>
+                        
+                        <button class="room-discovery__cancel" type="button" data-action="back-to-room-select">
+                            Quay lai
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
     // Step 1: Select room
     if (!roomDiscoveryModal.selectedRoom) {
         const roomListHtml = validRooms.map(room => {
             const nameVi = room.name.vi || room.name.en;
-            return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}</div>`;
+            const multiFloorBadge = room.floorsAllowed.length > 1 ? ' *' : '';
+            return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}${multiFloorBadge}</div>`;
         }).join('');
         
         const noRoomsMessage = validRooms.length === 0 
             ? `<p class="room-discovery__no-rooms">Khong con phong nao co the dat o huong nay!</p>` 
+            : '';
+        
+        const multiFloorNote = validRooms.some(r => r.floorsAllowed.length > 1)
+            ? `<p class="room-discovery__note">* Phong co the dat o nhieu tang</p>`
             : '';
         
         return `
@@ -1936,7 +2012,9 @@ function handleDebugMove(mountEl, direction) {
                 floor: currentFloor,
                 doorSide: requiredDoorSide,
                 selectedRoom: null,
-                currentRotation: 0
+                currentRotation: 0,
+                selectedFloor: null,
+                needsFloorSelection: false
             };
             
             updateGameUI(mountEl, currentGameState, mySocketId);
@@ -2087,6 +2165,9 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         return;
     }
     
+    // Determine floor - use selectedFloor if multi-floor room, otherwise current floor
+    const targetFloor = roomDiscoveryModal.selectedFloor || currentRoom.floor;
+    
     // Generate new room ID and position
     const newRoomId = generateRoomId(roomNameEn);
     const newPosition = calculateNewRoomPosition(currentRoom, roomDiscoveryModal.direction);
@@ -2105,7 +2186,7 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         x: newPosition.x,
         y: newPosition.y,
         doors: rotatedDoors,
-        floor: currentRoom.floor,
+        floor: targetFloor,
         rotation: rotation, // Store rotation for reference
         tokens: roomDef.tokens ? [...roomDef.tokens] : [] // Copy tokens from room definition
     };

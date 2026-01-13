@@ -4094,6 +4094,57 @@ select.field__input option {
     color: rgba(255, 255, 255, 0.8);
 }
 
+/* Floor selection for multi-floor rooms */
+.room-discovery__hint {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.room-discovery__note {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.75rem;
+    margin-top: 8px;
+    text-align: center;
+    font-style: italic;
+}
+
+.room-discovery__floor-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.room-discovery__floor-btn {
+    padding: 14px 20px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.room-discovery__floor-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.room-discovery__floor-btn--current {
+    background: rgba(201, 165, 92, 0.15);
+    border-color: rgba(201, 165, 92, 0.5);
+    color: #c9a55c;
+}
+
+.room-discovery__floor-btn--current:hover {
+    background: rgba(201, 165, 92, 0.25);
+    border-color: rgba(201, 165, 92, 0.7);
+}
+
 .room-discovery__button-group {
     display: flex;
     gap: 10px;
