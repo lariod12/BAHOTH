@@ -3913,7 +3913,14 @@ select.field__input option {
     letter-spacing: 0.05em;
 }
 
-.room-discovery__select {
+.room-discovery__search-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.room-discovery__search {
     width: 100%;
     padding: 12px 14px;
     background: rgba(255, 255, 255, 0.06);
@@ -3921,11 +3928,59 @@ select.field__input option {
     border-radius: 8px;
     font-size: 0.95rem;
     color: var(--fg);
+}
+
+.room-discovery__search:focus {
+    outline: none;
+    border-color: rgba(212, 175, 55, 0.5);
+}
+
+.room-discovery__search::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.room-discovery__list {
+    width: 100%;
+    max-height: 180px;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+}
+
+.room-discovery__item {
+    padding: 10px 14px;
+    color: var(--fg);
     cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' fill-opacity='0.6' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
+    transition: background 0.15s ease;
+    font-size: 0.9rem;
+}
+
+.room-discovery__item:hover {
+    background: rgba(212, 175, 55, 0.15);
+}
+
+.room-discovery__item.is-selected {
+    background: rgba(212, 175, 55, 0.3);
+    color: #d4af37;
+}
+
+.room-discovery__list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.room-discovery__list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.room-discovery__list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.room-discovery__list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .room-discovery__select:focus {

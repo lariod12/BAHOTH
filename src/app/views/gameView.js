@@ -1141,11 +1141,30 @@ function attachDebugEventListeners(mountEl) {
 
         // Room discovery actions
         if (action === 'confirm-room-select') {
-            const select = /** @type {HTMLSelectElement} */ (mountEl.querySelector('#room-select'));
-            const selectedRoom = select?.value;
+            const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
+            const selectedRoom = hiddenInput?.value;
             if (selectedRoom) {
                 handleRoomDiscovery(mountEl, selectedRoom);
+            } else {
+                alert('Vui long chon mot phong');
             }
+            return;
+        }
+
+        // Select room from list
+        if (target.closest('.room-discovery__item')) {
+            const item = /** @type {HTMLElement} */ (target.closest('.room-discovery__item'));
+            const roomName = item.dataset.roomName;
+            const searchInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-search-input'));
+            const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
+            
+            // Update UI
+            if (searchInput) searchInput.value = item.textContent || '';
+            if (hiddenInput) hiddenInput.value = roomName || '';
+            
+            // Mark as selected
+            mountEl.querySelectorAll('.room-discovery__item').forEach(el => el.classList.remove('is-selected'));
+            item.classList.add('is-selected');
             return;
         }
 
@@ -1183,6 +1202,22 @@ function attachDebugEventListeners(mountEl) {
         if (e.key === 'Enter' && e.target.id === 'dice-manual-input') {
             const btn = mountEl.querySelector('[data-action="roll-manual"]');
             btn?.click();
+        }
+    });
+
+    // Room search input handler
+    mountEl.addEventListener('input', (e) => {
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        if (target.id === 'room-search-input') {
+            const searchText = target.value.toLowerCase().trim();
+            const items = mountEl.querySelectorAll('.room-discovery__item');
+            
+            items.forEach(item => {
+                const itemEl = /** @type {HTMLElement} */ (item);
+                const searchData = itemEl.dataset.searchText || '';
+                const matches = searchText === '' || searchData.includes(searchText);
+                itemEl.style.display = matches ? '' : 'none';
+            });
         }
     });
 }
@@ -1498,9 +1533,9 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
     };
     const floorDisplay = floorNames[floor] || floor;
     
-    const optionsHtml = validRooms.map(room => {
+    const roomListHtml = validRooms.map(room => {
         const nameVi = room.name.vi || room.name.en;
-        return `<option value="${room.name.en}">${nameVi}</option>`;
+        return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}</div>`;
     }).join('');
     
     const noRoomsMessage = validRooms.length === 0 
@@ -1519,10 +1554,17 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
                     <div class="room-discovery__options">
                         <div class="room-discovery__option">
                             <label class="room-discovery__label">Chon phong:</label>
-                            <select class="room-discovery__select" id="room-select">
-                                <option value="">-- Chon phong --</option>
-                                ${optionsHtml}
-                            </select>
+                            <div class="room-discovery__search-wrapper">
+                                <input type="text" 
+                                       class="room-discovery__search" 
+                                       id="room-search-input" 
+                                       placeholder="Nhap ten phong de tim kiem..."
+                                       autocomplete="off" />
+                                <div class="room-discovery__list" id="room-list">
+                                    ${roomListHtml}
+                                </div>
+                            </div>
+                            <input type="hidden" id="room-select-value" value="" />
                             <button class="action-button action-button--primary" type="button" data-action="confirm-room-select">
                                 Xac nhan
                             </button>
