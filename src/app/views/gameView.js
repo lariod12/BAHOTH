@@ -1084,6 +1084,29 @@ function attachDebugEventListeners(mountEl) {
         const actionEl = target.closest('[data-action]');
         const action = actionEl?.dataset.action;
 
+        // Click outside sidebar to close it
+        if (sidebarOpen) {
+            const sidebar = mountEl.querySelector('.game-sidebar');
+            const toggleBtn = mountEl.querySelector('.sidebar-toggle');
+            const isClickInsideSidebar = sidebar?.contains(target);
+            const isClickOnToggle = toggleBtn?.contains(target);
+            
+            if (!isClickInsideSidebar && !isClickOnToggle) {
+                closeSidebar(mountEl);
+            }
+        }
+
+        // Click outside turn order to collapse it
+        if (turnOrderExpanded) {
+            const turnOrder = mountEl.querySelector('.turn-order');
+            const isClickInsideTurnOrder = turnOrder?.contains(target);
+            
+            if (!isClickInsideTurnOrder) {
+                turnOrderExpanded = false;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+        }
+
         // Toggle turn order expand/collapse
         if (action === 'toggle-turn-order') {
             turnOrderExpanded = !turnOrderExpanded;
@@ -1266,6 +1289,29 @@ function attachEventListeners(mountEl, roomId) {
     mountEl.addEventListener('click', async (e) => {
         const target = /** @type {HTMLElement} */ (e.target);
         const action = target.dataset.action || target.closest('[data-action]')?.dataset.action;
+
+        // Click outside sidebar to close it
+        if (sidebarOpen) {
+            const sidebar = mountEl.querySelector('.game-sidebar');
+            const toggleBtn = mountEl.querySelector('.sidebar-toggle');
+            const isClickInsideSidebar = sidebar?.contains(target);
+            const isClickOnToggle = toggleBtn?.contains(target);
+            
+            if (!isClickInsideSidebar && !isClickOnToggle) {
+                closeSidebar(mountEl);
+            }
+        }
+
+        // Click outside turn order to collapse it
+        if (turnOrderExpanded) {
+            const turnOrder = mountEl.querySelector('.turn-order');
+            const isClickInsideTurnOrder = turnOrder?.contains(target);
+            
+            if (!isClickInsideTurnOrder) {
+                turnOrderExpanded = false;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+        }
 
         // Toggle turn order expand/collapse
         if (action === 'toggle-turn-order') {
