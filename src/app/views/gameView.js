@@ -5,7 +5,7 @@ import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
 import { ROOMS } from '../data/mapsData.js';
 
 // Room discovery modal state
-/** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string } | null} */
+/** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number } | null} */
 let roomDiscoveryModal = null;
 
 /** @type {any} */
@@ -952,10 +952,45 @@ function renderGameScreen(gameState, myId) {
         const playerNames = buildPlayerNamesMap(players, getCharacterName);
         const myPosition = playerPositions[myId];
         const revealedRooms = mapState?.revealedRooms || {};
+        const currentRoom = myPosition ? revealedRooms[myPosition] : null;
         
         // Room discovery modal
         let roomDiscoveryHtml = '';
+        let roomPreview = null;
+        
         if (roomDiscoveryModal?.isOpen) {
+            if (roomDiscoveryModal.selectedRoom) {
+                // Create room preview data for map
+                const selectedRoomDef = ROOMS.find(r => r.name.en === roomDiscoveryModal.selectedRoom);
+                if (selectedRoomDef && currentRoom) {
+                    const currentRotation = roomDiscoveryModal.currentRotation || 0;
+                    const originalDoors = selectedRoomDef.doors
+                        .filter(d => d.kind === 'door')
+                        .map(d => convertDoorSide(d.side));
+                    const rotatedDoors = rotateRoomDoors(originalDoors, currentRotation);
+                    const isValid = isRotationValid(selectedRoomDef, currentRotation, roomDiscoveryModal.doorSide);
+                    
+                    // Calculate preview position (next to current room)
+                    const direction = roomDiscoveryModal.direction;
+                    const offsets = {
+                        'north': { x: 0, y: 1 },
+                        'south': { x: 0, y: -1 },
+                        'east': { x: 1, y: 0 },
+                        'west': { x: -1, y: 0 }
+                    };
+                    const offset = offsets[direction] || { x: 0, y: 0 };
+                    
+                    roomPreview = {
+                        name: selectedRoomDef.name.vi || selectedRoomDef.name.en,
+                        doors: rotatedDoors,
+                        rotation: currentRotation,
+                        x: currentRoom.x + offset.x,
+                        y: currentRoom.y + offset.y,
+                        isValid
+                    };
+                }
+            }
+            
             roomDiscoveryHtml = renderRoomDiscoveryModal(
                 roomDiscoveryModal.floor,
                 roomDiscoveryModal.doorSide,
@@ -971,7 +1006,7 @@ function renderGameScreen(gameState, myId) {
                 <div class="game-main">
                     ${renderTurnOrder(gameState, myId)}
                     <div class="game-area">
-                        ${renderGameMap(mapState, playerPositions, playerNames, myId, myPosition)}
+                        ${renderGameMap(mapState, playerPositions, playerNames, myId, myPosition, roomPreview)}
                     </div>
                 </div>
             </div>
@@ -1199,19 +1234,51 @@ function attachDebugEventListeners(mountEl) {
         }
 
         // Room discovery actions
-        if (action === 'confirm-room-select') {
+        // Step 1: Select room and go to next step
+        if (action === 'select-room-next') {
             const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
             const selectedRoom = hiddenInput?.value;
-            if (selectedRoom) {
-                handleRoomDiscovery(mountEl, selectedRoom);
+            if (selectedRoom && roomDiscoveryModal) {
+                roomDiscoveryModal.selectedRoom = selectedRoom;
+                roomDiscoveryModal.currentRotation = 0; // Start at 0 degrees
+                updateGameUI(mountEl, currentGameState, mySocketId);
             } else {
                 alert('Vui long chon mot phong');
             }
             return;
         }
 
-        // Select room from list
-        if (target.closest('.room-discovery__item')) {
+        // Rotate room preview (click on room)
+        if (action === 'rotate-room') {
+            if (roomDiscoveryModal && roomDiscoveryModal.selectedRoom) {
+                // Rotate 90 degrees each click
+                roomDiscoveryModal.currentRotation = (roomDiscoveryModal.currentRotation + 90) % 360;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Step 2: Confirm room placement with rotation
+        if (action === 'confirm-room-placement') {
+            if (roomDiscoveryModal?.selectedRoom) {
+                const rotation = roomDiscoveryModal.currentRotation || 0;
+                handleRoomDiscovery(mountEl, roomDiscoveryModal.selectedRoom, rotation);
+            }
+            return;
+        }
+
+        // Back to room selection
+        if (action === 'back-to-room-select') {
+            if (roomDiscoveryModal) {
+                roomDiscoveryModal.selectedRoom = null;
+                roomDiscoveryModal.currentRotation = 0;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Select room from list (Step 1)
+        if (target.closest('.room-discovery__item') && target.closest('#room-list')) {
             const item = /** @type {HTMLElement} */ (target.closest('.room-discovery__item'));
             const roomName = item.dataset.roomName;
             const searchInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-search-input'));
@@ -1222,7 +1289,7 @@ function attachDebugEventListeners(mountEl) {
             if (hiddenInput) hiddenInput.value = roomName || '';
             
             // Mark as selected
-            mountEl.querySelectorAll('.room-discovery__item').forEach(el => el.classList.remove('is-selected'));
+            mountEl.querySelectorAll('#room-list .room-discovery__item').forEach(el => el.classList.remove('is-selected'));
             item.classList.add('is-selected');
             return;
         }
@@ -1572,6 +1639,68 @@ function roomHasDoorOnSide(roomDef, requiredSide) {
 }
 
 /**
+ * Get all possible orientations for a room to connect with required door side
+ * @param {import('../data/mapsData.js').RoomDef} roomDef
+ * @param {string} requiredConnectionSide - The side that must connect (e.g., 'top' means new room needs door on top)
+ * @returns {Array<{ rotation: number; label: string; doorSide: string }>}
+ */
+function getPossibleRoomOrientations(roomDef, requiredConnectionSide) {
+    const orientations = [];
+    const rotationMap = {
+        'top': { rotation: 0, label: 'Tren (0°)' },
+        'right': { rotation: 90, label: 'Phai (90°)' },
+        'bottom': { rotation: 180, label: 'Duoi (180°)' },
+        'left': { rotation: 270, label: 'Trai (270°)' }
+    };
+    
+    // For each door in the room, calculate what rotation would place it at requiredConnectionSide
+    roomDef.doors.forEach(door => {
+        if (door.kind !== 'door') return;
+        
+        // Calculate rotation needed to move door.side to requiredConnectionSide
+        const sides = ['top', 'right', 'bottom', 'left'];
+        const fromIndex = sides.indexOf(door.side);
+        const toIndex = sides.indexOf(requiredConnectionSide);
+        
+        if (fromIndex === -1 || toIndex === -1) return;
+        
+        const rotationSteps = (toIndex - fromIndex + 4) % 4;
+        const rotation = rotationSteps * 90;
+        
+        // Avoid duplicates
+        if (!orientations.some(o => o.rotation === rotation)) {
+            orientations.push({
+                rotation,
+                label: `Xoay ${rotation}° (cua ${door.side} -> ${requiredConnectionSide})`,
+                doorSide: door.side
+            });
+        }
+    });
+    
+    return orientations;
+}
+
+/**
+ * Rotate room doors based on rotation angle
+ * @param {string[]} doors - Original door directions (north/south/east/west)
+ * @param {number} rotation - Rotation angle (0, 90, 180, 270)
+ * @returns {string[]}
+ */
+function rotateRoomDoors(doors, rotation) {
+    if (rotation === 0) return doors;
+    
+    const rotationSteps = rotation / 90;
+    const directionOrder = ['north', 'east', 'south', 'west'];
+    
+    return doors.map(door => {
+        const currentIndex = directionOrder.indexOf(door);
+        if (currentIndex === -1) return door;
+        const newIndex = (currentIndex + rotationSteps) % 4;
+        return directionOrder[newIndex];
+    });
+}
+
+/**
  * Check if a door is blocked (e.g., front-door of Entrance Hall)
  * @param {string} roomName - Room name in English
  * @param {string} doorDirection - Door direction (north/south/east/west)
@@ -1586,17 +1715,43 @@ function isDoorBlocked(roomName, doorDirection) {
 }
 
 /**
- * Filter rooms that have a connecting door on the required side
+ * Filter rooms that have at least one door (can be rotated to connect)
  * @param {import('../data/mapsData.js').RoomDef[]} rooms - Available rooms
  * @param {string} requiredDoorSide - Required door side (top/bottom/left/right)
  * @returns {import('../data/mapsData.js').RoomDef[]}
  */
 function filterRoomsWithConnectingDoor(rooms, requiredDoorSide) {
-    return rooms.filter(room => roomHasDoorOnSide(room, requiredDoorSide));
+    return rooms.filter(room => {
+        // Room must have at least one regular door that can be rotated to connect
+        const hasRegularDoor = room.doors.some(d => d.kind === 'door');
+        if (!hasRegularDoor) return false;
+        
+        // Check if any orientation is possible
+        const orientations = getPossibleRoomOrientations(room, requiredDoorSide);
+        return orientations.length > 0;
+    });
 }
 
 /**
- * Render room discovery modal
+ * Check if current rotation is valid (has connecting door)
+ * @param {import('../data/mapsData.js').RoomDef} roomDef
+ * @param {number} rotation
+ * @param {string} requiredDoorSide
+ * @returns {boolean}
+ */
+function isRotationValid(roomDef, rotation, requiredDoorSide) {
+    const originalDoors = roomDef.doors
+        .filter(d => d.kind === 'door')
+        .map(d => convertDoorSide(d.side));
+    
+    const rotatedDoors = rotateRoomDoors(originalDoors, rotation);
+    const requiredDoorDir = convertDoorSide(requiredDoorSide);
+    
+    return rotatedDoors.includes(requiredDoorDir);
+}
+
+/**
+ * Render room discovery modal (simplified - just buttons)
  * @param {string} floor - Current floor
  * @param {string} doorSide - Required door side for connection
  * @param {Record<string, any>} revealedRooms - Already revealed rooms
@@ -1615,58 +1770,89 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
     };
     const floorDisplay = floorNames[floor] || floor;
     
-    const roomListHtml = validRooms.map(room => {
-        const nameVi = room.name.vi || room.name.en;
-        return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}</div>`;
-    }).join('');
+    // Step 1: Select room
+    if (!roomDiscoveryModal.selectedRoom) {
+        const roomListHtml = validRooms.map(room => {
+            const nameVi = room.name.vi || room.name.en;
+            return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}</div>`;
+        }).join('');
+        
+        const noRoomsMessage = validRooms.length === 0 
+            ? `<p class="room-discovery__no-rooms">Khong con phong nao co the dat o huong nay!</p>` 
+            : '';
+        
+        return `
+            <div class="room-discovery-overlay">
+                <div class="room-discovery-modal">
+                    <h2 class="room-discovery__title">Rut bai phong moi</h2>
+                    <p class="room-discovery__subtitle">Chon phong (${floorDisplay})</p>
+                    
+                    ${noRoomsMessage}
+                    
+                    ${validRooms.length > 0 ? `
+                        <div class="room-discovery__options">
+                            <div class="room-discovery__option">
+                                <label class="room-discovery__label">Chon phong:</label>
+                                <div class="room-discovery__search-wrapper">
+                                    <input type="text" 
+                                           class="room-discovery__search" 
+                                           id="room-search-input" 
+                                           placeholder="Nhap ten phong de tim kiem..."
+                                           autocomplete="off" />
+                                    <div class="room-discovery__list" id="room-list">
+                                        ${roomListHtml}
+                                    </div>
+                                </div>
+                                <input type="hidden" id="room-select-value" value="" />
+                                <button class="action-button action-button--primary" type="button" data-action="select-room-next">
+                                    Tiep theo
+                                </button>
+                            </div>
+                            
+                            <div class="room-discovery__divider">
+                                <span>hoac</span>
+                            </div>
+                            
+                            <div class="room-discovery__option">
+                                <button class="action-button action-button--secondary room-discovery__random-btn" type="button" data-action="random-room">
+                                    Rut ngau nhien
+                                </button>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <button class="room-discovery__cancel" type="button" data-action="cancel-room-discovery">
+                        Huy bo
+                    </button>
+                </div>
+            </div>
+        `;
+    }
     
-    const noRoomsMessage = validRooms.length === 0 
-        ? `<p class="room-discovery__no-rooms">Khong con phong nao co the dat o huong nay!</p>` 
-        : '';
+    // Step 2: Simple control panel (room preview is on map)
+    const selectedRoomDef = ROOMS.find(r => r.name.en === roomDiscoveryModal.selectedRoom);
+    if (!selectedRoomDef) return '';
+    
+    const roomNameVi = selectedRoomDef.name.vi || selectedRoomDef.name.en;
+    const currentRotation = roomDiscoveryModal.currentRotation || 0;
+    const isValid = isRotationValid(selectedRoomDef, currentRotation, doorSide);
     
     return `
-        <div class="room-discovery-overlay">
-            <div class="room-discovery-modal">
-                <h2 class="room-discovery__title">Rut bai phong moi</h2>
-                <p class="room-discovery__subtitle">Ban dang di vao mot khu vuc chua kham pha (${floorDisplay})</p>
-                
-                ${noRoomsMessage}
-                
-                ${validRooms.length > 0 ? `
-                    <div class="room-discovery__options">
-                        <div class="room-discovery__option">
-                            <label class="room-discovery__label">Chon phong:</label>
-                            <div class="room-discovery__search-wrapper">
-                                <input type="text" 
-                                       class="room-discovery__search" 
-                                       id="room-search-input" 
-                                       placeholder="Nhap ten phong de tim kiem..."
-                                       autocomplete="off" />
-                                <div class="room-discovery__list" id="room-list">
-                                    ${roomListHtml}
-                                </div>
-                            </div>
-                            <input type="hidden" id="room-select-value" value="" />
-                            <button class="action-button action-button--primary" type="button" data-action="confirm-room-select">
-                                Xac nhan
-                            </button>
-                        </div>
-                        
-                        <div class="room-discovery__divider">
-                            <span>hoac</span>
-                        </div>
-                        
-                        <div class="room-discovery__option">
-                            <button class="action-button action-button--secondary room-discovery__random-btn" type="button" data-action="random-room">
-                                Rut ngau nhien
-                            </button>
-                        </div>
-                    </div>
-                ` : ''}
-                
-                <button class="room-discovery__cancel" type="button" data-action="cancel-room-discovery">
-                    Huy bo
-                </button>
+        <div class="room-discovery-panel">
+            <div class="room-discovery-panel__content">
+                <h3 class="room-discovery-panel__title">${roomNameVi}</h3>
+                <p class="room-discovery-panel__hint">Click vao phong tren map de xoay</p>
+                <p class="room-discovery-panel__status ${isValid ? 'room-discovery-panel__status--valid' : 'room-discovery-panel__status--invalid'}">
+                    ${isValid ? '✓ Hop le' : '✗ Chua hop le'}
+                </p>
+                <div class="room-discovery-panel__buttons">
+                    <button class="action-button action-button--secondary" type="button" data-action="back-to-room-select">
+                        Quay lai
+                    </button>
+                    <button class="action-button action-button--primary" type="button" data-action="confirm-room-placement" ${!isValid ? 'disabled' : ''}>
+                        Xac nhan
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -1726,7 +1912,9 @@ function handleDebugMove(mountEl, direction) {
                 isOpen: true,
                 direction: doorDirection,
                 floor: currentFloor,
-                doorSide: requiredDoorSide
+                doorSide: requiredDoorSide,
+                selectedRoom: null,
+                currentRotation: 0
             };
             
             updateGameUI(mountEl, currentGameState, mySocketId);
@@ -1858,8 +2046,9 @@ function calculateNewRoomPosition(currentRoom, direction) {
  * Handle room discovery - add new room to map and move player
  * @param {HTMLElement} mountEl
  * @param {string} roomNameEn - English name of the room to add
+ * @param {number} rotation - Rotation angle (0, 90, 180, 270)
  */
-function handleRoomDiscovery(mountEl, roomNameEn) {
+function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     if (!currentGameState || !roomDiscoveryModal) return;
     
     const playerId = mySocketId;
@@ -1880,10 +2069,12 @@ function handleRoomDiscovery(mountEl, roomNameEn) {
     const newRoomId = generateRoomId(roomNameEn);
     const newPosition = calculateNewRoomPosition(currentRoom, roomDiscoveryModal.direction);
     
-    // Extract doors from room definition
-    const newRoomDoors = roomDef.doors
+    // Extract doors from room definition and apply rotation
+    const originalDoors = roomDef.doors
         .filter(d => d.kind === 'door')
         .map(d => convertDoorSide(d.side));
+    
+    const rotatedDoors = rotateRoomDoors(originalDoors, rotation);
     
     // Create new room object
     const newRoom = {
@@ -1891,8 +2082,9 @@ function handleRoomDiscovery(mountEl, roomNameEn) {
         name: roomDef.name.en,
         x: newPosition.x,
         y: newPosition.y,
-        doors: newRoomDoors,
-        floor: currentRoom.floor
+        doors: rotatedDoors,
+        floor: currentRoom.floor,
+        rotation: rotation // Store rotation for reference
     };
     
     // Add room to revealed rooms
@@ -1946,7 +2138,7 @@ function handleRoomDiscovery(mountEl, roomNameEn) {
 }
 
 /**
- * Handle random room selection
+ * Handle random room selection - just select room, user still needs to rotate and confirm
  * @param {HTMLElement} mountEl
  */
 function handleRandomRoomDiscovery(mountEl) {
@@ -1965,7 +2157,11 @@ function handleRandomRoomDiscovery(mountEl) {
     const randomIndex = Math.floor(Math.random() * validRooms.length);
     const selectedRoom = validRooms[randomIndex];
     
-    handleRoomDiscovery(mountEl, selectedRoom.name.en);
+    // Set selected room and go to rotation step (same as manual selection)
+    roomDiscoveryModal.selectedRoom = selectedRoom.name.en;
+    roomDiscoveryModal.currentRotation = 0; // Start at 0 degrees, user can rotate
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**
@@ -1973,6 +2169,10 @@ function handleRandomRoomDiscovery(mountEl) {
  * @param {HTMLElement} mountEl
  */
 function cancelRoomDiscovery(mountEl) {
+    if (roomDiscoveryModal) {
+        roomDiscoveryModal.selectedRoom = null;
+        roomDiscoveryModal.currentRotation = 0;
+    }
     roomDiscoveryModal = null;
     updateGameUI(mountEl, currentGameState, mySocketId);
 }

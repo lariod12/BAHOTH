@@ -139,9 +139,10 @@ function renderRoomTile(room, connections, isCurrentRoom, centerX, centerY, radi
  * @param {Record<string, string>} playerNames - socketId -> character name
  * @param {string} myId
  * @param {string | undefined} myPosition
+ * @param {Object | null} roomPreview - Preview room data { name, doors, rotation, x, y, isValid }
  * @returns {string}
  */
-export function renderGameMap(mapState, playerPositions, playerNames, myId, myPosition) {
+export function renderGameMap(mapState, playerPositions, playerNames, myId, myPosition, roomPreview = null) {
     if (!mapState || !mapState.revealedRooms) {
         return `
             <div class="game-map game-map--empty">
@@ -183,6 +184,31 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
         );
     }).join('');
 
+    // Render room preview if in placement mode
+    let previewHtml = '';
+    if (roomPreview) {
+        const gridCol = (roomPreview.x - centerX) + VIEWPORT_RADIUS + 1;
+        const gridRow = -(roomPreview.y - centerY) + VIEWPORT_RADIUS + 1;
+        const validClass = roomPreview.isValid ? 'map-room-preview--valid' : 'map-room-preview--invalid';
+        
+        // Render doors for preview (already rotated)
+        const previewDoorsHtml = roomPreview.doors.map(dir => {
+            return `<div class="map-door map-door--${dir}"></div>`;
+        }).join('');
+        
+        previewHtml = `
+            <div class="map-room-preview ${validClass}" 
+                 data-action="rotate-room"
+                 style="grid-column: ${gridCol}; grid-row: ${gridRow};">
+                <div class="map-room-preview__inner">
+                    <span class="map-room-preview__name">${roomPreview.name}</span>
+                    <span class="map-room-preview__rotation">${roomPreview.rotation}°</span>
+                    ${previewDoorsHtml}
+                </div>
+            </div>
+        `;
+    }
+
     // Get current room name for display
     const locationText = currentRoom ? currentRoom.name : 'Unknown';
 
@@ -193,6 +219,7 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
             </div>
             <div class="game-map__grid" style="--grid-size: ${gridSize};">
                 ${roomsHtml}
+                ${previewHtml}
             </div>
         </div>
     `;
