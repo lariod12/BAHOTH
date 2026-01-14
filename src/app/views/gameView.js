@@ -2063,7 +2063,68 @@ function handleDebugMove(mountEl, direction) {
                 return;
             }
             
-            // There's a door but no room connected - show room discovery modal
+            // Check if there's already a room at the target position (just not connected)
+            const dirOffsets = {
+                north: { x: 0, y: 1 },
+                south: { x: 0, y: -1 },
+                east: { x: 1, y: 0 },
+                west: { x: -1, y: 0 }
+            };
+            const offset = dirOffsets[doorDirection];
+            const targetX = currentRoom.x + offset.x;
+            const targetY = currentRoom.y + offset.y;
+            
+            // Find room at target position on same floor
+            let existingRoom = null;
+            let existingRoomId = null;
+            for (const [roomId, room] of Object.entries(revealedRooms)) {
+                if (room.floor === currentRoom.floor && room.x === targetX && room.y === targetY) {
+                    // Skip elevator shafts
+                    if (!room.isElevatorShaft) {
+                        existingRoom = room;
+                        existingRoomId = roomId;
+                        break;
+                    }
+                }
+            }
+            
+            // If room exists at target position, connect and move
+            if (existingRoom && existingRoomId) {
+                const oppositeDir = getOppositeDoor(doorDirection);
+                // Check if target room has a door facing us
+                if (existingRoom.doors && existingRoom.doors.includes(oppositeDir)) {
+                    // Create connection
+                    if (!mapConnections[currentRoomId]) mapConnections[currentRoomId] = {};
+                    if (!mapConnections[existingRoomId]) mapConnections[existingRoomId] = {};
+                    mapConnections[currentRoomId][doorDirection] = existingRoomId;
+                    mapConnections[existingRoomId][oppositeDir] = currentRoomId;
+                    
+                    // Move player
+                    currentGameState.playerState.playerPositions[playerId] = existingRoomId;
+                    currentGameState.playerMoves[playerId] = moves - 1;
+                    
+                    // Check if turn ended
+                    if (currentGameState.playerMoves[playerId] <= 0) {
+                        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+                        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+                        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+                        if (nextPlayer) {
+                            const speed = getCharacterSpeed(nextPlayer.characterId);
+                            currentGameState.playerMoves[nextPlayerId] = speed;
+                        }
+                        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+                        if (nextIdx !== -1) {
+                            debugCurrentPlayerIndex = nextIdx;
+                            mySocketId = nextPlayerId;
+                        }
+                    }
+                    
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                    return;
+                }
+            }
+            
+            // No existing room - show room discovery modal
             const currentFloor = currentRoom.floor;
             const requiredDoorSide = doorDirToSide(getOppositeDoor(doorDirection));
             
