@@ -77,15 +77,14 @@ export const ROOMS = [
 
   // ===== SPECIAL CONNECTORS =====
   {
-    name: { en: 'Stairs From Basement', vi: 'Cầu thang từ Tầng hầm' },
+    name: { en: 'Stairs From Basement', vi: 'Cầu thang từ Tầng hầm (Stairs From Basement)' },
     floorsAllowed: ['basement'],
     doors: [
-      { side: 'top', kind: 'door' },
-      { side: 'bottom', kind: 'door' },
+      { side: 'top', kind: 'door' }, // Only one door - connects to adjacent room
     ],
     tokens: [],
     text: { en: 'Leads to and from Foyer', vi: 'Dẫn tới/về từ Sảnh (Foyer)' },
-    notes: ['Connects Basement <-> Foyer (special stair connection).'],
+    notes: ['Connects Basement <-> Foyer (special stair connection). Only has one door.'],
   },
 
   // ===== BASEMENT =====
