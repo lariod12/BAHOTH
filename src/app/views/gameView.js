@@ -3,10 +3,15 @@ import { CHARACTER_BY_ID, CHARACTERS } from '../data/charactersData.js';
 import * as socketClient from '../services/socketClient.js';
 import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
 import { ROOMS } from '../data/mapsData.js';
+import { ITEMS, EVENTS, OMENS } from '../data/cardsData.js';
 
 // Room discovery modal state
 /** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number; selectedFloor: string | null; needsFloorSelection: boolean } | null} */
 let roomDiscoveryModal = null;
+
+// Token drawing modal state
+/** @type {{ isOpen: boolean; tokensToDrawn: Array<{type: 'omen'|'event'|'item'; drawn: boolean; selectedCard: string | null}>; currentIndex: number } | null} */
+let tokenDrawingModal = null;
 
 /** @type {any} */
 let currentGameState = null;
@@ -649,10 +654,11 @@ function renderSidebar(gameState, myId) {
     // Get character stats from game state
     const characterData = gameState.playerState?.characterData?.[myId] || gameState.characterData?.[myId];
 
-    // TODO: Get actual cards from game state when implemented
-    const omenCards = [];
-    const eventCards = [];
-    const itemCards = [];
+    // Get actual cards from game state
+    const playerCards = gameState.playerState?.playerCards?.[myId] || { omens: [], events: [], items: [] };
+    const omenCards = playerCards.omens || [];
+    const eventCards = playerCards.events || [];
+    const itemCards = playerCards.items || [];
 
     const openClass = sidebarOpen ? 'is-open' : '';
 
@@ -1197,6 +1203,7 @@ function renderGameScreen(gameState, myId) {
             </div>
             ${renderGameControls(gameState, myId)}
             ${roomDiscoveryHtml}
+            ${renderTokenDrawingModal()}
             ${renderTutorialModal()}
         `;
     } else {
@@ -1548,6 +1555,28 @@ function attachDebugEventListeners(mountEl) {
             return;
         }
 
+        // Token drawing actions
+        if (action === 'token-draw-random') {
+            handleRandomCardDraw(mountEl);
+            return;
+        }
+
+        if (action === 'token-draw-next') {
+            handleTokenDrawNext(mountEl);
+            return;
+        }
+
+        // Select card from list
+        if (target.closest('.token-card__item') && target.closest('#token-card-list')) {
+            const item = /** @type {HTMLElement} */ (target.closest('.token-card__item'));
+            const cardId = item.dataset.cardId;
+            
+            if (cardId) {
+                handleCardSelect(mountEl, cardId);
+            }
+            return;
+        }
+
         // View character detail
         if (action === 'view-character-detail') {
             const charId = actionEl?.dataset.characterId;
@@ -1581,6 +1610,19 @@ function attachDebugEventListeners(mountEl) {
         if (target.id === 'room-search-input') {
             const searchText = target.value.toLowerCase().trim();
             const items = mountEl.querySelectorAll('.room-discovery__item');
+            
+            items.forEach(item => {
+                const itemEl = /** @type {HTMLElement} */ (item);
+                const searchData = itemEl.dataset.searchText || '';
+                const matches = searchText === '' || searchData.includes(searchText);
+                itemEl.style.display = matches ? '' : 'none';
+            });
+        }
+        
+        // Token card search
+        if (target.id === 'token-card-search-input') {
+            const searchText = target.value.toLowerCase().trim();
+            const items = mountEl.querySelectorAll('.token-card__item');
             
             items.forEach(item => {
                 const itemEl = /** @type {HTMLElement} */ (item);
@@ -2324,6 +2366,26 @@ function handleDebugMove(mountEl, direction) {
     // Decrease moves
     currentGameState.playerMoves[playerId] = moves - 1;
     
+    // Check if target room has tokens and hasn't been drawn yet
+    const targetRoom = revealedRooms[targetRoomId];
+    if (targetRoom && targetRoom.tokens && targetRoom.tokens.length > 0) {
+        // Initialize drawnRooms tracking if not exists
+        if (!currentGameState.playerState.drawnRooms) {
+            currentGameState.playerState.drawnRooms = [];
+        }
+        
+        // Check if this room's tokens haven't been drawn yet
+        if (!currentGameState.playerState.drawnRooms.includes(targetRoomId)) {
+            // Mark room as drawn
+            currentGameState.playerState.drawnRooms.push(targetRoomId);
+            
+            // Trigger token drawing
+            initTokenDrawing(mountEl, targetRoom.tokens);
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return; // Don't end turn yet
+        }
+    }
+    
     // Check if turn ended
     if (currentGameState.playerMoves[playerId] <= 0) {
         // Move to next player
@@ -2383,6 +2445,26 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
     
     // Decrease moves (using stairs costs 1 move)
     currentGameState.playerMoves[playerId] = moves - 1;
+    
+    // Check if target room has tokens and hasn't been drawn yet
+    const targetRoom = revealedRooms[targetRoomId];
+    if (targetRoom && targetRoom.tokens && targetRoom.tokens.length > 0) {
+        // Initialize drawnRooms tracking if not exists
+        if (!currentGameState.playerState.drawnRooms) {
+            currentGameState.playerState.drawnRooms = [];
+        }
+        
+        // Check if this room's tokens haven't been drawn yet
+        if (!currentGameState.playerState.drawnRooms.includes(targetRoomId)) {
+            // Mark room as drawn
+            currentGameState.playerState.drawnRooms.push(targetRoomId);
+            
+            // Trigger token drawing
+            initTokenDrawing(mountEl, targetRoom.tokens);
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return; // Don't end turn yet
+        }
+    }
     
     // Check if turn ended
     if (currentGameState.playerMoves[playerId] <= 0) {
@@ -2668,6 +2750,25 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     const moves = currentGameState.playerMoves[playerId] || 0;
     currentGameState.playerMoves[playerId] = moves - 1;
     
+    // Close room discovery modal
+    roomDiscoveryModal = null;
+    
+    // Check if new room has tokens - trigger token drawing
+    if (newRoom.tokens && newRoom.tokens.length > 0) {
+        // Initialize drawnRooms tracking if not exists
+        if (!currentGameState.playerState.drawnRooms) {
+            currentGameState.playerState.drawnRooms = [];
+        }
+        
+        // Mark room as drawn
+        currentGameState.playerState.drawnRooms.push(newRoomId);
+        
+        initTokenDrawing(mountEl, newRoom.tokens);
+        // Don't end turn yet, wait for token drawing to complete
+        updateGameUI(mountEl, currentGameState, mySocketId);
+        return;
+    }
+    
     // Check if turn ended (no more moves)
     if (currentGameState.playerMoves[playerId] <= 0) {
         // Move to next player
@@ -2687,9 +2788,6 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
             mySocketId = nextPlayerId;
         }
     }
-    
-    // Close modal
-    roomDiscoveryModal = null;
     
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
@@ -2735,6 +2833,240 @@ function cancelRoomDiscovery(mountEl) {
     }
     roomDiscoveryModal = null;
     updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+// ===== TOKEN DRAWING FUNCTIONS =====
+
+/**
+ * Get card data by type and id
+ * @param {'omen'|'event'|'item'} type
+ * @param {string} cardId
+ * @returns {any}
+ */
+function getCardData(type, cardId) {
+    const deck = type === 'omen' ? OMENS : type === 'event' ? EVENTS : ITEMS;
+    return deck.find(c => c.id === cardId);
+}
+
+/**
+ * Get all cards of a type
+ * @param {'omen'|'event'|'item'} type
+ * @returns {any[]}
+ */
+function getCardsByType(type) {
+    return type === 'omen' ? OMENS : type === 'event' ? EVENTS : ITEMS;
+}
+
+/**
+ * Initialize token drawing modal when entering room with tokens
+ * @param {HTMLElement} mountEl
+ * @param {string[]} tokens - Array of token types from room
+ */
+function initTokenDrawing(mountEl, tokens) {
+    if (!tokens || tokens.length === 0) return;
+    
+    tokenDrawingModal = {
+        isOpen: true,
+        tokensToDrawn: tokens.map(type => ({
+            type: type,
+            drawn: false,
+            selectedCard: null
+        })),
+        currentIndex: 0
+    };
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle manual card selection
+ * @param {HTMLElement} mountEl
+ * @param {string} cardId
+ */
+function handleCardSelect(mountEl, cardId) {
+    if (!tokenDrawingModal) return;
+    
+    const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
+    if (!current) return;
+    
+    current.selectedCard = cardId;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle random card draw
+ * @param {HTMLElement} mountEl
+ */
+function handleRandomCardDraw(mountEl) {
+    if (!tokenDrawingModal) return;
+    
+    const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
+    if (!current) return;
+    
+    const cards = getCardsByType(current.type);
+    const randomCard = cards[Math.floor(Math.random() * cards.length)];
+    
+    current.selectedCard = randomCard.id;
+    current.drawn = true;
+    
+    // Move to next token or finish
+    if (tokenDrawingModal.currentIndex < tokenDrawingModal.tokensToDrawn.length - 1) {
+        tokenDrawingModal.currentIndex++;
+    } else {
+        confirmTokenDrawing(mountEl);
+        return;
+    }
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle next button (after manual selection)
+ * @param {HTMLElement} mountEl
+ */
+function handleTokenDrawNext(mountEl) {
+    if (!tokenDrawingModal) return;
+    
+    const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
+    if (!current || !current.selectedCard) return;
+    
+    current.drawn = true;
+    
+    // Move to next token or finish
+    if (tokenDrawingModal.currentIndex < tokenDrawingModal.tokensToDrawn.length - 1) {
+        tokenDrawingModal.currentIndex++;
+    } else {
+        confirmTokenDrawing(mountEl);
+        return;
+    }
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Confirm and save drawn cards to player inventory
+ * @param {HTMLElement} mountEl
+ */
+function confirmTokenDrawing(mountEl) {
+    if (!tokenDrawingModal || !currentGameState) return;
+    
+    const playerId = mySocketId;
+    
+    // Initialize player cards if not exists
+    if (!currentGameState.playerState.playerCards) {
+        currentGameState.playerState.playerCards = {};
+    }
+    if (!currentGameState.playerState.playerCards[playerId]) {
+        currentGameState.playerState.playerCards[playerId] = {
+            omens: [],
+            events: [],
+            items: []
+        };
+    }
+    
+    // Add drawn cards to player inventory
+    tokenDrawingModal.tokensToDrawn.forEach(token => {
+        if (token.drawn && token.selectedCard) {
+            const cardType = token.type === 'omen' ? 'omens' : token.type === 'event' ? 'events' : 'items';
+            currentGameState.playerState.playerCards[playerId][cardType].push(token.selectedCard);
+        }
+    });
+    
+    // Close modal
+    tokenDrawingModal = null;
+    
+    // Check if turn ended (no more moves)
+    if (currentGameState.playerMoves[playerId] <= 0) {
+        // Move to next player
+        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+        
+        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const speed = getCharacterSpeed(nextPlayer.characterId);
+            currentGameState.playerMoves[nextPlayerId] = speed;
+        }
+        
+        // Auto switch to next player in debug mode
+        if (isDebugMode) {
+            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+            if (nextIdx !== -1) {
+                debugCurrentPlayerIndex = nextIdx;
+                mySocketId = nextPlayerId;
+            }
+        }
+    }
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Render token drawing modal
+ * @returns {string}
+ */
+function renderTokenDrawingModal() {
+    if (!tokenDrawingModal || !tokenDrawingModal.isOpen) return '';
+    
+    const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
+    if (!current) return '';
+    
+    const typeLabels = { omen: 'Omen', event: 'Event', item: 'Item' };
+    const typeLabel = typeLabels[current.type];
+    
+    const totalTokens = tokenDrawingModal.tokensToDrawn.length;
+    const currentNum = tokenDrawingModal.currentIndex + 1;
+    
+    const cards = getCardsByType(current.type);
+    
+    // Card list for dropdown
+    const cardListHtml = cards.map(card => {
+        const cardName = card.name?.vi || card.id;
+        const isSelected = current.selectedCard === card.id;
+        return `<div class="token-card__item ${isSelected ? 'is-selected' : ''}" data-card-id="${card.id}" data-search-text="${cardName.toLowerCase()}">${cardName}</div>`;
+    }).join('');
+    
+    return `
+        <div class="token-drawing-overlay">
+            <div class="token-drawing-modal">
+                <h2 class="token-drawing__title">Rut bai ${typeLabel}</h2>
+                <p class="token-drawing__subtitle">Token ${currentNum}/${totalTokens}</p>
+                
+                <div class="token-drawing__options">
+                    <div class="token-drawing__option">
+                        <label class="token-drawing__label">Chon bai:</label>
+                        <div class="token-card__search-wrapper">
+                            <input type="text" 
+                                   class="token-card__search" 
+                                   id="token-card-search-input" 
+                                   placeholder="Nhap ten bai de tim kiem..."
+                                   autocomplete="off" />
+                            <div class="token-card__list" id="token-card-list">
+                                ${cardListHtml}
+                            </div>
+                        </div>
+                        <button class="action-button action-button--primary" 
+                                type="button" 
+                                data-action="token-draw-next"
+                                ${!current.selectedCard ? 'disabled' : ''}>
+                            ${currentNum < totalTokens ? 'Tiep theo' : 'Xac nhan'}
+                        </button>
+                    </div>
+                    
+                    <div class="token-drawing__divider">
+                        <span>hoac</span>
+                    </div>
+                    
+                    <div class="token-drawing__option">
+                        <button class="action-button action-button--secondary token-drawing__random-btn" 
+                                type="button" 
+                                data-action="token-draw-random">
+                            Rut ngau nhien
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 /**

@@ -1390,9 +1390,9 @@ export const EVENTS = [
 
 export const OMENS = [
   {
-    id: 'met_can',
+    id: 'vet_can',
     type: 'omen',
-    name: { vi: 'Mết cắn' },
+    name: { vi: 'Vết cắn' },
     text: {
       vi:
         'Một tiếng gầm gừ trong bóng tối, nặng mùi của cái chết và sự đau đớn.\n' +
