@@ -816,6 +816,54 @@ function getStairsAvailability(gameState, myId) {
             availableFloors
         };
     }
+    
+    // Special case: Stairs From Basement - goes UP to Foyer
+    if (currentRoom.name === 'Stairs From Basement') {
+        // Find Foyer room
+        let foyerRoomId = null;
+        for (const [roomId, room] of Object.entries(revealedRooms)) {
+            if (room.name === 'Foyer') {
+                foyerRoomId = roomId;
+                break;
+            }
+        }
+        if (foyerRoomId) {
+            return {
+                canGoUp: true,
+                canGoDown: false,
+                targetRoom: foyerRoomId,
+                isMysticElevator: false,
+                availableFloors: []
+            };
+        }
+    }
+    
+    // Special case: Foyer - can go DOWN to Stairs From Basement (if revealed)
+    if (currentRoom.name === 'Foyer') {
+        // Find Stairs From Basement room
+        let stairsFromBasementId = null;
+        for (const [roomId, room] of Object.entries(revealedRooms)) {
+            if (room.name === 'Stairs From Basement') {
+                stairsFromBasementId = roomId;
+                break;
+            }
+        }
+        
+        // Check if Grand Staircase connection exists (for UP)
+        const grandStaircaseTarget = staircaseConnections[currentRoomId];
+        const canGoUpToGrandStaircase = !!grandStaircaseTarget;
+        
+        if (stairsFromBasementId) {
+            return {
+                canGoUp: canGoUpToGrandStaircase,
+                canGoDown: true,
+                targetRoom: stairsFromBasementId, // DOWN goes to Stairs From Basement
+                targetRoomUp: grandStaircaseTarget, // UP goes to Grand Staircase target
+                isMysticElevator: false,
+                availableFloors: []
+            };
+        }
+    }
 
     if (!staircaseConnections[currentRoomId]) {
         return defaultResult;
@@ -978,7 +1026,7 @@ function renderGameControls(gameState, myId) {
             </button>
             <div class="stairs-controls">
                 ${showUpBtn ? `
-                    <button class="stairs-btn stairs-btn--up" type="button" data-action="use-stairs" data-target="${stairs.targetRoom}" title="Leo len tang tren">
+                    <button class="stairs-btn stairs-btn--up" type="button" data-action="use-stairs" data-target="${stairs.targetRoomUp || stairs.targetRoom}" title="Leo len tang tren">
                         <span class="stairs-btn__arrow">▲</span>
                         <span class="stairs-btn__label">UP</span>
                     </button>
