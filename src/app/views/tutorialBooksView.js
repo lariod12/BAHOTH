@@ -24,7 +24,15 @@ export function renderTutorialBooksView({ mountEl, onNavigate }) {
     mountEl.innerHTML = renderTutorialBooksMarkup();
 
     const backButton = mountEl.querySelector('[data-action="back"]');
-    backButton?.addEventListener('click', () => onNavigate('#/'));
+    backButton?.addEventListener('click', () => {
+        const returnRoute = sessionStorage.getItem('tutorialReturnRoute');
+        if (returnRoute) {
+            sessionStorage.removeItem('tutorialReturnRoute');
+            onNavigate(returnRoute);
+        } else {
+            onNavigate('#/');
+        }
+    });
 
     const bookButtons = Array.from(mountEl.querySelectorAll('[data-book]'));
     for (const button of bookButtons) {

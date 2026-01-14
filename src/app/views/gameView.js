@@ -16,6 +16,7 @@ let sidebarOpen = false;
 let introShown = false;
 let introTimeout = null;
 let turnOrderExpanded = false; // Turn order collapsed by default
+let tutorialOpen = false; // Tutorial modal state
 /** @type {Set<string>} Track expanded player IDs in sidebar */
 let expandedPlayers = new Set();
 /** @type {Set<string>} Track active player IDs */
@@ -198,6 +199,20 @@ function createGameStateFromPlayers(players) {
  * @returns {any}
  */
 function createDebugGameState() {
+    // Check for backup state from tutorial return
+    const backupState = sessionStorage.getItem('debugGameStateBackup');
+    if (backupState) {
+        try {
+            const restored = JSON.parse(backupState);
+            sessionStorage.removeItem('debugGameStateBackup');
+            console.log('[Debug] Restored game state from tutorial backup');
+            return restored;
+        } catch (e) {
+            console.error('Failed to restore debug game state:', e);
+            sessionStorage.removeItem('debugGameStateBackup');
+        }
+    }
+
     // Check for passed data from debug room
     const savedData = sessionStorage.getItem('debugGameData');
     if (savedData) {
@@ -1066,6 +1081,43 @@ function renderGameIntro() {
 }
 
 /**
+ * Render tutorial modal overlay (in-game tutorial)
+ */
+function renderTutorialModal() {
+    if (!tutorialOpen) return '';
+
+    return `
+        <div class="tutorial-modal-overlay">
+            <div class="tutorial-modal-overlay__backdrop" data-action="close-tutorial"></div>
+            <div class="tutorial-modal-overlay__content">
+                <header class="tutorial-modal-overlay__header">
+                    <h2>Huong Dan Choi</h2>
+                    <button class="tutorial-modal-overlay__close" type="button" data-action="close-tutorial">×</button>
+                </header>
+                <div class="tutorial-modal-overlay__body">
+                    <div class="tutorial-books">
+                        <button class="tutorial-book-btn" data-tutorial-book="rules">
+                            <span class="tutorial-book-btn__title">RULESBOOK</span>
+                            <span class="tutorial-book-btn__desc">Luat choi co ban</span>
+                        </button>
+                        <button class="tutorial-book-btn" data-tutorial-book="traitors">
+                            <span class="tutorial-book-btn__title">TRAITORS TOME</span>
+                            <span class="tutorial-book-btn__desc">Bang tra cuu ke phan boi</span>
+                        </button>
+                        <button class="tutorial-book-btn" data-tutorial-book="survival">
+                            <span class="tutorial-book-btn__title">SURVIVAL</span>
+                            <span class="tutorial-book-btn__desc">Huong dan song sot</span>
+                        </button>
+                    </div>
+                    <p class="tutorial-modal-overlay__note">Chon sach de xem chi tiet. Cac sach se mo trong tab moi.</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+
+/**
  * Render main game screen
  */
 function renderGameScreen(gameState, myId) {
@@ -1145,6 +1197,7 @@ function renderGameScreen(gameState, myId) {
             </div>
             ${renderGameControls(gameState, myId)}
             ${roomDiscoveryHtml}
+            ${renderTutorialModal()}
         `;
     } else {
         content = `
@@ -1158,6 +1211,14 @@ function renderGameScreen(gameState, myId) {
         <div class="game-container">
             ${content}
             ${renderCharacterModal()}
+            <button class="tutorial-fab" type="button" data-action="open-tutorial" title="Huong dan choi">
+                <svg class="tutorial-fab__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="8" y1="7" x2="16" y2="7" stroke="currentColor" stroke-width="1.5"/>
+                    <line x1="8" y1="11" x2="14" y2="11" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+            </button>
         </div>
     `;
 }
@@ -1300,6 +1361,40 @@ function attachDebugEventListeners(mountEl) {
         // Skip intro
         if (action === 'skip-intro') {
             hideIntro(mountEl);
+            return;
+        }
+
+        // Open tutorial - show modal overlay
+        if (action === 'open-tutorial') {
+            tutorialOpen = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Close tutorial modal
+        if (action === 'close-tutorial') {
+            tutorialOpen = false;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Tutorial book selection - open in new tab
+        if (target.closest('[data-tutorial-book]')) {
+            const bookBtn = target.closest('[data-tutorial-book]');
+            const book = bookBtn?.dataset.tutorialBook;
+            if (book) {
+                let url = '';
+                if (book === 'rules') {
+                    url = window.location.origin + '/#/tutorial/rulesbook';
+                } else if (book === 'traitors') {
+                    url = window.location.origin + '/#/tutorial/traitors-tome';
+                } else if (book === 'survival') {
+                    url = window.location.origin + '/#/tutorial/survival';
+                }
+                if (url) {
+                    window.open(url, '_blank');
+                }
+            }
             return;
         }
 
@@ -1539,6 +1634,40 @@ function attachEventListeners(mountEl, roomId) {
         // Skip intro
         if (action === 'skip-intro') {
             hideIntro(mountEl);
+            return;
+        }
+
+        // Open tutorial - show modal overlay
+        if (action === 'open-tutorial') {
+            tutorialOpen = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Close tutorial modal
+        if (action === 'close-tutorial') {
+            tutorialOpen = false;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Tutorial book selection - open in new tab
+        if (target.closest('[data-tutorial-book]')) {
+            const bookBtn = target.closest('[data-tutorial-book]');
+            const book = bookBtn?.dataset.tutorialBook;
+            if (book) {
+                let url = '';
+                if (book === 'rules') {
+                    url = window.location.origin + '/#/tutorial/rulesbook';
+                } else if (book === 'traitors') {
+                    url = window.location.origin + '/#/tutorial/traitors-tome';
+                } else if (book === 'survival') {
+                    url = window.location.origin + '/#/tutorial/survival';
+                }
+                if (url) {
+                    window.open(url, '_blank');
+                }
+            }
             return;
         }
 
