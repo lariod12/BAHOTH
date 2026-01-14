@@ -13,6 +13,10 @@ let roomDiscoveryModal = null;
 /** @type {{ isOpen: boolean; tokensToDrawn: Array<{type: 'omen'|'event'|'item'; drawn: boolean; selectedCard: string | null}>; currentIndex: number } | null} */
 let tokenDrawingModal = null;
 
+// Cards view modal state
+/** @type {{ isOpen: boolean; cardType: 'omen'|'event'|'item'; cardIds: string[]; expandedCards: Set<string> } | null} */
+let cardsViewModal = null;
+
 /** @type {any} */
 let currentGameState = null;
 let mySocketId = null;
@@ -685,15 +689,15 @@ function renderSidebar(gameState, myId) {
                 </div>
                 ${renderCharacterStats(characterData)}
                 <div class="sidebar-cards">
-                    <div class="sidebar-card sidebar-card--omen">
+                    <div class="sidebar-card sidebar-card--omen" data-action="view-cards" data-card-type="omen">
                         <span class="sidebar-card__count">${omenCards.length}</span>
                         <span class="sidebar-card__label">Omen</span>
                     </div>
-                    <div class="sidebar-card sidebar-card--event">
+                    <div class="sidebar-card sidebar-card--event" data-action="view-cards" data-card-type="event">
                         <span class="sidebar-card__count">${eventCards.length}</span>
                         <span class="sidebar-card__label">Event</span>
                     </div>
-                    <div class="sidebar-card sidebar-card--item">
+                    <div class="sidebar-card sidebar-card--item" data-action="view-cards" data-card-type="item">
                         <span class="sidebar-card__count">${itemCards.length}</span>
                         <span class="sidebar-card__label">Item</span>
                     </div>
@@ -1204,6 +1208,7 @@ function renderGameScreen(gameState, myId) {
             ${renderGameControls(gameState, myId)}
             ${roomDiscoveryHtml}
             ${renderTokenDrawingModal()}
+            ${renderCardsViewModal()}
             ${renderTutorialModal()}
         `;
     } else {
@@ -1324,10 +1329,12 @@ function attachDebugEventListeners(mountEl) {
         if (sidebarOpen) {
             const sidebar = mountEl.querySelector('.game-sidebar');
             const toggleBtn = mountEl.querySelector('.sidebar-toggle');
+            const cardsViewModal = mountEl.querySelector('.cards-view-overlay');
             const isClickInsideSidebar = sidebar?.contains(target);
             const isClickOnToggle = toggleBtn?.contains(target);
+            const isClickInsideCardsView = cardsViewModal?.contains(target);
             
-            if (!isClickInsideSidebar && !isClickOnToggle) {
+            if (!isClickInsideSidebar && !isClickOnToggle && !isClickInsideCardsView) {
                 closeSidebar(mountEl);
             }
         }
@@ -1566,6 +1573,30 @@ function attachDebugEventListeners(mountEl) {
             return;
         }
 
+        // Cards view actions
+        if (action === 'view-cards') {
+            const cardType = actionEl?.dataset.cardType;
+            if (cardType) {
+                openCardsViewModal(mountEl, cardType);
+            }
+            return;
+        }
+
+        if (action === 'close-cards-view') {
+            closeCardsViewModal(mountEl);
+            return;
+        }
+
+        if (action === 'toggle-card') {
+            // Get the exact header element that was clicked
+            const header = target.closest('.card-detail__header');
+            const cardId = header?.dataset.cardId;
+            if (cardId) {
+                toggleCardExpansion(mountEl, cardId);
+            }
+            return;
+        }
+
         // Select card from list
         if (target.closest('.token-card__item') && target.closest('#token-card-list')) {
             const item = /** @type {HTMLElement} */ (target.closest('.token-card__item'));
@@ -1647,10 +1678,12 @@ function attachEventListeners(mountEl, roomId) {
         if (sidebarOpen) {
             const sidebar = mountEl.querySelector('.game-sidebar');
             const toggleBtn = mountEl.querySelector('.sidebar-toggle');
+            const cardsViewModal = mountEl.querySelector('.cards-view-overlay');
             const isClickInsideSidebar = sidebar?.contains(target);
             const isClickOnToggle = toggleBtn?.contains(target);
+            const isClickInsideCardsView = cardsViewModal?.contains(target);
             
-            if (!isClickInsideSidebar && !isClickOnToggle) {
+            if (!isClickInsideSidebar && !isClickOnToggle && !isClickInsideCardsView) {
                 closeSidebar(mountEl);
             }
         }
@@ -1792,6 +1825,29 @@ function attachEventListeners(mountEl, roomId) {
         // Close modal
         if (action === 'close-modal') {
             closeCharacterModal(mountEl);
+            return;
+        }
+
+        // Cards view actions (normal mode)
+        if (action === 'view-cards') {
+            const cardType = target.closest('[data-card-type]')?.dataset.cardType;
+            if (cardType) {
+                openCardsViewModal(mountEl, cardType);
+            }
+            return;
+        }
+
+        if (action === 'close-cards-view') {
+            closeCardsViewModal(mountEl);
+            return;
+        }
+
+        if (action === 'toggle-card') {
+            const header = target.closest('.card-detail__header');
+            const cardId = header?.dataset.cardId;
+            if (cardId) {
+                toggleCardExpansion(mountEl, cardId);
+            }
             return;
         }
     });
@@ -3063,6 +3119,107 @@ function renderTokenDrawingModal() {
                             Rut ngau nhien
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ===== CARDS VIEW MODAL FUNCTIONS =====
+
+/**
+ * Open cards view modal
+ * @param {HTMLElement} mountEl
+ * @param {'omen'|'event'|'item'} cardType
+ */
+function openCardsViewModal(mountEl, cardType) {
+    if (!currentGameState) return;
+    
+    const playerId = mySocketId;
+    const playerCards = currentGameState.playerState?.playerCards?.[playerId];
+    
+    if (!playerCards) return;
+    
+    const cardIds = cardType === 'omen' ? playerCards.omens : 
+                    cardType === 'event' ? playerCards.events : 
+                    playerCards.items;
+    
+    if (!cardIds || cardIds.length === 0) return;
+    
+    cardsViewModal = {
+        isOpen: true,
+        cardType,
+        cardIds,
+        expandedCards: new Set() // Start with all collapsed
+    };
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Toggle card expansion
+ * @param {HTMLElement} mountEl
+ * @param {string} cardId
+ */
+function toggleCardExpansion(mountEl, cardId) {
+    if (!cardsViewModal) return;
+    
+    if (cardsViewModal.expandedCards.has(cardId)) {
+        cardsViewModal.expandedCards.delete(cardId);
+    } else {
+        cardsViewModal.expandedCards.add(cardId);
+    }
+    
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close cards view modal
+ * @param {HTMLElement} mountEl
+ */
+function closeCardsViewModal(mountEl) {
+    cardsViewModal = null;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Render cards view modal
+ * @returns {string}
+ */
+function renderCardsViewModal() {
+    if (!cardsViewModal || !cardsViewModal.isOpen) return '';
+    
+    const typeLabels = { omen: 'Omen', event: 'Event', item: 'Item' };
+    const typeLabel = typeLabels[cardsViewModal.cardType];
+    
+    const cardsHtml = cardsViewModal.cardIds.map(cardId => {
+        const cardData = getCardData(cardsViewModal.cardType, cardId);
+        if (!cardData) return '';
+        
+        const cardName = cardData.name?.vi || cardId;
+        const cardText = cardData.text?.vi || '';
+        const isExpanded = cardsViewModal.expandedCards.has(cardId);
+        
+        return `
+            <div class="card-detail ${isExpanded ? 'is-expanded' : ''}">
+                <div class="card-detail__header" data-action="toggle-card" data-card-id="${cardId}">
+                    <h3 class="card-detail__name">${cardName}</h3>
+                    <span class="card-detail__toggle">${isExpanded ? '−' : '+'}</span>
+                </div>
+                ${isExpanded ? `<p class="card-detail__text">${cardText}</p>` : ''}
+            </div>
+        `;
+    }).join('');
+    
+    return `
+        <div class="cards-view-overlay">
+            <div class="cards-view-modal">
+                <div class="cards-view__header">
+                    <h2 class="cards-view__title">${typeLabel} (${cardsViewModal.cardIds.length})</h2>
+                    <button class="cards-view__close" type="button" data-action="close-cards-view">&times;</button>
+                </div>
+                <div class="cards-view__content">
+                    ${cardsHtml}
                 </div>
             </div>
         </div>

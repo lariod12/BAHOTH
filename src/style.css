@@ -4823,3 +4823,201 @@ select.field__input option {
         font-size: 0.9rem;
     }
 }
+
+/* ============================================================
+   CARDS VIEW MODAL
+   ============================================================ */
+
+.cards-view-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.cards-view-modal {
+    background: linear-gradient(165deg, #1f2428 0%, #14171a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    max-width: 600px;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.cards-view__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cards-view__title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #d4af37;
+    margin: 0;
+}
+
+.cards-view__close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.cards-view__close:hover {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.cards-view__content {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.card-detail {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: background 0.2s ease;
+}
+
+.card-detail:last-child {
+    margin-bottom: 0;
+}
+
+.card-detail__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.card-detail__header:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.card-detail__name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #d4af37;
+    margin: 0;
+    flex: 1;
+}
+
+.card-detail__toggle {
+    font-size: 1.5rem;
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1;
+    margin-left: 12px;
+}
+
+.card-detail__text {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.85);
+    margin: 0;
+    padding: 0 16px 16px;
+    white-space: pre-line;
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.cards-view__content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.cards-view__content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.cards-view__content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.cards-view__content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Make sidebar cards clickable */
+.sidebar-card {
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-card:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-card:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+    .cards-view-modal {
+        max-width: 100%;
+        max-height: 90vh;
+    }
+
+    .cards-view__header {
+        padding: 16px 20px;
+    }
+
+    .cards-view__title {
+        font-size: 1.2rem;
+    }
+
+    .cards-view__content {
+        padding: 16px 20px;
+    }
+
+    .card-detail__header {
+        padding: 12px 14px;
+    }
+
+    .card-detail__name {
+        font-size: 0.95rem;
+    }
+
+    .card-detail__text {
+        font-size: 0.85rem;
+        padding: 0 14px 14px;
+    }
+}
