@@ -2319,26 +2319,8 @@ function handleDebugUseElevator(mountEl, targetFloor) {
     // Update connections
     currentGameState.map.connections[currentRoomId] = newConnections;
     
-    // Using elevator costs 1 move
-    currentGameState.playerMoves[playerId] = moves - 1;
-    
-    // Check if turn ended
-    if (currentGameState.playerMoves[playerId] <= 0) {
-        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-        
-        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-        if (nextPlayer) {
-            const speed = getCharacterSpeed(nextPlayer.characterId);
-            currentGameState.playerMoves[nextPlayerId] = speed;
-        }
-        
-        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-        if (nextIdx !== -1) {
-            debugCurrentPlayerIndex = nextIdx;
-            mySocketId = nextPlayerId;
-        }
-    }
+    // Using elevator does NOT cost a move (free action)
+    // Player can continue moving after using elevator
     
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
