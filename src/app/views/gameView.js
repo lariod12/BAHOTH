@@ -47,12 +47,14 @@ function getRoomByName(nameEn) {
 }
 
 /**
- * Extract doors array from room definition
+ * Extract doors array from room definition (only regular doors, not stairs)
  * @param {import('../data/mapsData.js').RoomDef} roomDef
  * @returns {('north'|'south'|'east'|'west')[]}
  */
 function extractDoors(roomDef) {
-    return roomDef.doors.map(d => convertDoorSide(d.side));
+    return roomDef.doors
+        .filter(d => d.kind === 'door') // Only regular doors, not stairs
+        .map(d => convertDoorSide(d.side));
 }
 
 /**
@@ -1812,17 +1814,6 @@ function isDoorBlocked(roomName, doorDirection, targetRoomId) {
         return true;
     }
     
-    // Foyer's west door is blocked until Stairs From Basement is revealed
-    if (roomName === 'Foyer' && doorDirection === 'west') {
-        const revealedRooms = currentGameState?.map?.revealedRooms || {};
-        const stairsFromBasementRevealed = Object.values(revealedRooms).some(
-            r => r.name === 'Stairs From Basement'
-        );
-        if (!stairsFromBasementRevealed) {
-            return true;
-        }
-    }
-    
     // Check if target room is an elevator shaft (elevator not present)
     if (targetRoomId) {
         const revealedRooms = currentGameState?.map?.revealedRooms || {};
@@ -2490,23 +2481,6 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         currentGameState.map.connections[newRoomId] = {};
     }
     currentGameState.map.connections[newRoomId][oppositeDir] = currentRoomId;
-    
-    // Special case: Stairs From Basement auto-connects to Foyer (west side)
-    if (roomDef.name.en === 'Stairs From Basement') {
-        // Connect Stairs From Basement <-> Foyer
-        if (!currentGameState.map.connections['foyer']) {
-            currentGameState.map.connections['foyer'] = {};
-        }
-        currentGameState.map.connections['foyer']['west'] = newRoomId;
-        currentGameState.map.connections[newRoomId]['east'] = 'foyer';
-        
-        // Add staircase connection for floor transition
-        if (!currentGameState.map.staircaseConnections) {
-            currentGameState.map.staircaseConnections = {};
-        }
-        currentGameState.map.staircaseConnections[newRoomId] = 'foyer';
-        currentGameState.map.staircaseConnections['foyer'] = newRoomId;
-    }
     
     // Move player to new room
     currentGameState.playerState.playerPositions[playerId] = newRoomId;

@@ -57,11 +57,11 @@ export const ROOMS = [
     floorsAllowed: ['ground'],
     doors: [
       { side: 'bottom', kind: 'door' },
-      { side: 'top', kind: 'stairs' }, // Leads to Upper Landing
+      { side: 'top', kind: 'stairs' }, // Leads to Upper Landing - not a regular door
     ],
     tokens: [],
     text: { en: 'Leads to Upper Landing', vi: 'Dẫn tới Chiếu nghỉ tầng trên' },
-    notes: ['Starting tile. Connects to Upper Landing.'],
+    notes: ['Starting tile. Connects to Upper Landing via stairs only.'],
     isStartingRoom: true,
   },
 
