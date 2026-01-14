@@ -17,6 +17,10 @@ let tokenDrawingModal = null;
 /** @type {{ isOpen: boolean; cardType: 'omen'|'event'|'item'; cardIds: string[]; expandedCards: Set<string> } | null} */
 let cardsViewModal = null;
 
+// Dice results display state
+let showingDiceResults = false;
+let diceResultsTimeout = null;
+
 /** @type {any} */
 let currentGameState = null;
 let mySocketId = null;
@@ -363,10 +367,60 @@ function needsToRoll(gameState, myId) {
 }
 
 /**
+ * Render dice results screen (after all players rolled)
+ */
+function renderDiceResults(gameState, myId) {
+    const players = gameState.players || [];
+    const diceRolls = gameState.diceRolls || {};
+    const turnOrder = gameState.turnOrder || [];
+    
+    // Sort players by turn order (highest roll first)
+    const sortedPlayers = turnOrder.map(playerId => {
+        const player = players.find(p => p.id === playerId);
+        return player ? { ...player, roll: diceRolls[playerId] } : null;
+    }).filter(p => p !== null);
+    
+    const playersHtml = sortedPlayers.map((player, index) => {
+        const charName = getCharacterName(player.characterId);
+        const isMe = player.id === myId;
+        const orderLabel = index === 0 ? 'Di truoc' : `Thu tu ${index + 1}`;
+        
+        return `
+            <div class="dice-result-player ${isMe ? 'is-me' : ''} ${index === 0 ? 'is-first' : ''}">
+                <span class="dice-result-player__name">${charName}${isMe ? ' (You)' : ''}</span>
+                <span class="dice-result-player__roll">${player.roll}</span>
+                <span class="dice-result-player__order">${orderLabel}</span>
+            </div>
+        `;
+    }).join('');
+    
+    return `
+        <div class="dice-overlay">
+            <div class="dice-modal dice-modal--results">
+                <h2 class="dice-title">Ket qua Tung Xi Ngau</h2>
+                <p class="dice-subtitle">Nguoi co diem cao nhat se di truoc</p>
+                <div class="dice-results-list">
+                    ${playersHtml}
+                </div>
+                <p class="dice-results-countdown">Bat dau trong 5 giay...</p>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render dice roll overlay
  */
 function renderDiceRollOverlay(gameState, myId) {
-    if (!gameState || gameState.gamePhase !== 'rolling') return '';
+    if (!gameState) return '';
+    
+    // Show results screen if all players rolled
+    if (showingDiceResults) {
+        return renderDiceResults(gameState, myId);
+    }
+    
+    // Only show rolling UI if in rolling phase
+    if (gameState.gamePhase !== 'rolling') return '';
 
     const players = gameState.players || [];
     const diceRolls = gameState.diceRolls || {};
@@ -1917,21 +1971,39 @@ function handleDebugDiceRoll(mountEl, value) {
         const sorted = Object.entries(rolls).sort((a, b) => b[1] - a[1]);
         currentGameState.turnOrder = sorted.map(([id]) => id);
         currentGameState.currentTurnIndex = 0;
-        currentGameState.gamePhase = 'playing';
         
-        // Set initial moves for first player
-        const firstPlayer = currentGameState.players.find(p => p.id === currentGameState.turnOrder[0]);
-        if (firstPlayer) {
-            const speed = getCharacterSpeed(firstPlayer.characterId);
-            currentGameState.playerMoves[firstPlayer.id] = speed;
+        // Show dice results for 5 seconds before starting game
+        showingDiceResults = true;
+        updateGameUI(mountEl, currentGameState, mySocketId);
+        
+        // Clear any existing timeout
+        if (diceResultsTimeout) {
+            clearTimeout(diceResultsTimeout);
         }
         
-        // Auto switch to first player in turn order
-        const firstIdx = currentGameState.players.findIndex(p => p.id === currentGameState.turnOrder[0]);
-        if (firstIdx !== -1) {
-            debugCurrentPlayerIndex = firstIdx;
-            mySocketId = currentGameState.players[firstIdx].id;
-        }
+        // After 5 seconds, transition to playing phase
+        diceResultsTimeout = setTimeout(() => {
+            showingDiceResults = false;
+            currentGameState.gamePhase = 'playing';
+            
+            // Set initial moves for first player
+            const firstPlayer = currentGameState.players.find(p => p.id === currentGameState.turnOrder[0]);
+            if (firstPlayer) {
+                const speed = getCharacterSpeed(firstPlayer.characterId);
+                currentGameState.playerMoves[firstPlayer.id] = speed;
+            }
+            
+            // Auto switch to first player in turn order
+            const firstIdx = currentGameState.players.findIndex(p => p.id === currentGameState.turnOrder[0]);
+            if (firstIdx !== -1) {
+                debugCurrentPlayerIndex = firstIdx;
+                mySocketId = currentGameState.players[firstIdx].id;
+            }
+            
+            updateGameUI(mountEl, currentGameState, mySocketId);
+        }, 5000);
+        
+        return;
     }
     
     updateGameUI(mountEl, currentGameState, mySocketId);
