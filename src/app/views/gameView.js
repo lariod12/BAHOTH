@@ -2101,7 +2101,9 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
             const floorsLabel = room.floorsAllowed.length > 1 
                 ? ` (${room.floorsAllowed.map(f => floorShortNames[f] || f).join('/')})`
                 : '';
-            return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}${floorsLabel}</div>`;
+            // Add (*) indicator if room has tokens
+            const tokenIndicator = room.tokens && room.tokens.length > 0 ? ' (*)' : '';
+            return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}${floorsLabel}${tokenIndicator}</div>`;
         }).join('');
         
         const noRoomsMessage = validRooms.length === 0 
