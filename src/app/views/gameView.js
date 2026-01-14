@@ -2177,7 +2177,7 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
 /**
  * Handle debug mode use Mystic Elevator - move to selected floor
  * Elevator snaps to landing room (door-to-door connection)
- * Ground floor: returns to original position when revealed
+ * Remembers position for each floor visited
  * Creates elevator shaft on floors where elevator is not present
  * @param {HTMLElement} mountEl
  * @param {string} targetFloor - 'upper', 'ground', or 'basement'
@@ -2211,16 +2211,21 @@ function handleDebugUseElevator(mountEl, targetFloor) {
     const previousFloor = currentRoom.floor;
     const previousX = currentRoom.x;
     const previousY = currentRoom.y;
+    const previousDoors = [...(currentRoom.doors || ['north'])];
+    const previousConnections = { ...currentGameState.map.connections[currentRoomId] };
     
-    // Save original position on first move (ground floor position when revealed)
-    if (!currentRoom.originalPosition) {
-        currentRoom.originalPosition = {
-            x: currentRoom.x,
-            y: currentRoom.y,
-            floor: currentRoom.floor,
-            connections: { ...currentGameState.map.connections[currentRoomId] }
-        };
+    // Initialize elevator floor positions tracking if not exists
+    if (!currentRoom.floorPositions) {
+        currentRoom.floorPositions = {};
     }
+    
+    // Save current floor position before moving (including doors)
+    currentRoom.floorPositions[previousFloor] = {
+        x: previousX,
+        y: previousY,
+        doors: previousDoors,
+        connections: previousConnections
+    };
     
     // Initialize elevator shafts tracking if not exists
     if (!currentGameState.map.elevatorShafts) {
@@ -2228,18 +2233,23 @@ function handleDebugUseElevator(mountEl, targetFloor) {
     }
     
     let newX, newY;
+    let newDoors = ['north']; // Default door direction
     let newConnections = {};
     
-    // Ground floor: return to original position
-    if (targetFloor === 'ground' && currentRoom.originalPosition) {
-        newX = currentRoom.originalPosition.x;
-        newY = currentRoom.originalPosition.y;
-        newConnections = { ...currentRoom.originalPosition.connections };
+    // Check if we have a saved position for target floor
+    if (currentRoom.floorPositions[targetFloor]) {
+        // Return to saved position on this floor
+        const savedPos = currentRoom.floorPositions[targetFloor];
+        newX = savedPos.x;
+        newY = savedPos.y;
+        newDoors = savedPos.doors || ['north'];
+        newConnections = { ...savedPos.connections };
     } else {
-        // Upper/Basement: snap to landing room
+        // First time visiting this floor - snap to landing room
         const landingNames = {
             'upper': 'Upper Landing',
-            'basement': 'Basement Landing'
+            'basement': 'Basement Landing',
+            'ground': 'Foyer'
         };
         const landingName = landingNames[targetFloor];
         
@@ -2279,7 +2289,7 @@ function handleDebugUseElevator(mountEl, targetFloor) {
         x: previousX,
         y: previousY,
         floor: previousFloor,
-        doors: ['north'], // Same as elevator
+        doors: previousDoors, // Same doors as elevator had on this floor
         isElevatorShaft: true,
         elevatorPresent: false
     };
@@ -2314,7 +2324,7 @@ function handleDebugUseElevator(mountEl, targetFloor) {
     currentRoom.floor = targetFloor;
     currentRoom.x = newX;
     currentRoom.y = newY;
-    currentRoom.doors = ['north']; // Elevator only has north door
+    currentRoom.doors = newDoors; // Restore saved doors for this floor
     
     // Update connections
     currentGameState.map.connections[currentRoomId] = newConnections;
