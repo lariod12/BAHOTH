@@ -2271,8 +2271,19 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
             const floorsLabel = room.floorsAllowed.length > 1 
                 ? ` (${room.floorsAllowed.map(f => floorShortNames[f] || f).join('/')})`
                 : '';
-            // Add (*) indicator if room has tokens
-            const tokenIndicator = room.tokens && room.tokens.length > 0 ? ' (*)' : '';
+            // Show token types with counts
+            let tokenIndicator = '';
+            if (room.tokens && room.tokens.length > 0) {
+                const tokenCounts = {};
+                room.tokens.forEach(token => {
+                    tokenCounts[token] = (tokenCounts[token] || 0) + 1;
+                });
+                const tokenLabels = [];
+                if (tokenCounts.item) tokenLabels.push(tokenCounts.item > 1 ? `Itemx${tokenCounts.item}` : 'Item');
+                if (tokenCounts.event) tokenLabels.push(tokenCounts.event > 1 ? `Eventx${tokenCounts.event}` : 'Event');
+                if (tokenCounts.omen) tokenLabels.push(tokenCounts.omen > 1 ? `Omenx${tokenCounts.omen}` : 'Omen');
+                tokenIndicator = ` (${tokenLabels.join(', ')})`;
+            }
             return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}${floorsLabel}${tokenIndicator}</div>`;
         }).join('');
         
