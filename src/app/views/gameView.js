@@ -2806,6 +2806,75 @@ function calculateNewRoomPosition(currentRoom, direction) {
 }
 
 /**
+ * Find room at specific position and floor
+ * @param {Object} revealedRooms - Map of revealed rooms
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ * @param {string} floor - Floor name
+ * @returns {Object|null} Room object or null
+ */
+function findRoomAtPosition(revealedRooms, x, y, floor) {
+    for (const roomId in revealedRooms) {
+        const room = revealedRooms[roomId];
+        if (room.x === x && room.y === y && room.floor === floor) {
+            return room;
+        }
+    }
+    return null;
+}
+
+/**
+ * Remove doors that connect to walls (not doors) of adjacent existing rooms
+ * When a new room is placed, check all its doors against adjacent rooms.
+ * If a door points to an existing room that doesn't have a matching door, remove it.
+ * @param {Object} newRoom - The newly placed room
+ * @param {Object} revealedRooms - Map of all revealed rooms
+ * @param {string} excludeDirection - Direction to exclude (the door we came from)
+ * @returns {string[]} Updated doors array with invalid doors removed
+ */
+function removeDoorsToWalls(newRoom, revealedRooms, excludeDirection) {
+    const directionOffsets = {
+        'north': { x: 0, y: 1 },
+        'south': { x: 0, y: -1 },
+        'east': { x: 1, y: 0 },
+        'west': { x: -1, y: 0 }
+    };
+    
+    const validDoors = newRoom.doors.filter(doorDir => {
+        // Always keep the door we came from (it's already connected)
+        if (doorDir === excludeDirection) return true;
+        
+        // Calculate adjacent position for this door
+        const offset = directionOffsets[doorDir];
+        if (!offset) return true;
+        
+        const adjacentX = newRoom.x + offset.x;
+        const adjacentY = newRoom.y + offset.y;
+        
+        // Find if there's an existing room at that position
+        const adjacentRoom = findRoomAtPosition(revealedRooms, adjacentX, adjacentY, newRoom.floor);
+        
+        // No room there - keep the door (can discover new room later)
+        if (!adjacentRoom) return true;
+        
+        // There's a room - check if it has a matching door
+        const oppositeDir = getOppositeDoor(doorDir);
+        const adjacentHasDoor = adjacentRoom.doors && adjacentRoom.doors.includes(oppositeDir);
+        
+        if (!adjacentHasDoor) {
+            // Adjacent room has wall, not door - remove this door
+            console.log(`[Room] Removing door '${doorDir}' from ${newRoom.name} - connects to wall of ${adjacentRoom.name}`);
+            return false;
+        }
+        
+        // Adjacent room has matching door - keep door
+        return true;
+    });
+    
+    return validDoors;
+}
+
+/**
  * Handle room discovery - add new room to map and move player
  * @param {HTMLElement} mountEl
  * @param {string} roomNameEn - English name of the room to add
@@ -2854,12 +2923,15 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         tokens: roomDef.tokens ? [...roomDef.tokens] : [] // Copy tokens from room definition
     };
     
+    // Remove doors that connect to walls of existing adjacent rooms
+    const oppositeDir = getOppositeDoor(roomDiscoveryModal.direction);
+    newRoom.doors = removeDoorsToWalls(newRoom, revealedRooms, oppositeDir);
+    
     // Add room to revealed rooms
     currentGameState.map.revealedRooms[newRoomId] = newRoom;
     
     // Add connections (bidirectional)
     const direction = roomDiscoveryModal.direction;
-    const oppositeDir = getOppositeDoor(direction);
     
     if (!currentGameState.map.connections[currentRoomId]) {
         currentGameState.map.connections[currentRoomId] = {};
