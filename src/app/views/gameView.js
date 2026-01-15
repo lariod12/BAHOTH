@@ -3058,6 +3058,71 @@ function getCardsByType(type) {
 }
 
 /**
+ * Get all card IDs that have been drawn/used in the game
+ * Includes cards in player inventories and cards drawn in current token drawing session
+ * @returns {{ omens: string[]; events: string[]; items: string[] }}
+ */
+function getUsedCardIds() {
+    const used = { omens: [], events: [], items: [] };
+    
+    if (!currentGameState) return used;
+    
+    // Collect cards from all players' inventories
+    const allPlayerCards = currentGameState.playerState?.playerCards || {};
+    for (const playerId in allPlayerCards) {
+        const playerCards = allPlayerCards[playerId];
+        if (playerCards.omens) used.omens.push(...playerCards.omens);
+        if (playerCards.events) used.events.push(...playerCards.events);
+        if (playerCards.items) used.items.push(...playerCards.items);
+    }
+    
+    // Also include cards selected in current token drawing session (not yet confirmed)
+    if (tokenDrawingModal && tokenDrawingModal.tokensToDrawn) {
+        tokenDrawingModal.tokensToDrawn.forEach((token, idx) => {
+            // Only count cards from previous tokens in current session (not current one being selected)
+            if (idx < tokenDrawingModal.currentIndex && token.selectedCard) {
+                const cardType = token.type === 'omen' ? 'omens' : token.type === 'event' ? 'events' : 'items';
+                used[cardType].push(token.selectedCard);
+            }
+        });
+    }
+    
+    return used;
+}
+
+/**
+ * Get available cards for selection (excluding already used cards)
+ * Exception: 'anh_phan_chieu' can appear up to 2 times
+ * @param {'omen'|'event'|'item'} type
+ * @returns {any[]}
+ */
+function getAvailableCards(type) {
+    const allCards = getCardsByType(type);
+    const usedCards = getUsedCardIds();
+    const usedList = type === 'omen' ? usedCards.omens : type === 'event' ? usedCards.events : usedCards.items;
+    
+    // Count occurrences of each used card
+    const usedCount = {};
+    usedList.forEach(cardId => {
+        usedCount[cardId] = (usedCount[cardId] || 0) + 1;
+    });
+    
+    // Filter out cards that have reached their max usage
+    return allCards.filter(card => {
+        const count = usedCount[card.id] || 0;
+        
+        // Special case: 'anh_phan_chieu' can be used up to 2 times
+        if (card.id === 'anh_phan_chieu' || card.id === 'anh_phan_chieu_2') {
+            // Each variant can only be used once, but both can exist in game
+            return count < 1;
+        }
+        
+        // All other cards can only be used once
+        return count < 1;
+    });
+}
+
+/**
  * Initialize token drawing modal when entering room with tokens
  * @param {HTMLElement} mountEl
  * @param {string[]} tokens - Array of token types from room
@@ -3103,7 +3168,12 @@ function handleRandomCardDraw(mountEl) {
     const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
     if (!current) return;
     
-    const cards = getCardsByType(current.type);
+    // Use getAvailableCards to only pick from unused cards
+    const cards = getAvailableCards(current.type);
+    if (cards.length === 0) {
+        console.log(`[Token] No available ${current.type} cards left`);
+        return;
+    }
     const randomCard = cards[Math.floor(Math.random() * cards.length)];
     
     current.selectedCard = randomCard.id;
@@ -3216,7 +3286,8 @@ function renderTokenDrawingModal() {
     const totalTokens = tokenDrawingModal.tokensToDrawn.length;
     const currentNum = tokenDrawingModal.currentIndex + 1;
     
-    const cards = getCardsByType(current.type);
+    // Use getAvailableCards to filter out already used cards
+    const cards = getAvailableCards(current.type);
     
     // Card list for dropdown
     const cardListHtml = cards.map(card => {
