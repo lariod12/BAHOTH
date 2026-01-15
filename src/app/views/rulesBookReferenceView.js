@@ -1,4 +1,5 @@
 import { TRANSLATION_SECTIONS } from '../data/rulesBookVietnameseEnglishTableData.js';
+import { ITEMS, EVENTS, OMENS } from '../data/cardsData.js';
 import { marked } from 'marked';
 import rulesContent from '../../../boardgame_rules.md?raw';
 
@@ -279,6 +280,74 @@ function attachEventListeners({ mountEl, onNavigate, render }) {
             });
         }
     }
+
+    // Cards Tab
+    if (activeTab === 'cards') {
+        // Sub-tab switching
+        const subTabButtons = mountEl.querySelectorAll('.cards-subtab');
+        subTabButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const newSubTab = e.target.dataset.cardsSubtab;
+                if (cardsSubTab !== newSubTab) {
+                    cardsSubTab = newSubTab;
+                    cardsSearchQuery = ''; // Reset search when switching tabs
+                    render();
+                }
+            });
+        });
+
+        // Cards search
+        const cardsSearchInput = mountEl.querySelector('[data-field="cards-search"]');
+        if (cardsSearchInput) {
+            cardsSearchInput.focus();
+            cardsSearchInput.addEventListener('input', (e) => {
+                cardsSearchQuery = e.target.value;
+                // Re-render cards list only
+                const cardsList = mountEl.querySelector('[data-role="cards-list"]');
+                if (cardsList) {
+                    const cards = getCardsForSubTab(cardsSubTab);
+                    const filtered = filterCardsBySearch(cards, cardsSearchQuery);
+                    cardsList.innerHTML = filtered.length > 0 
+                        ? filtered.map(card => renderCardItem(card, cardsSubTab)).join('')
+                        : '<div style="text-align: center; color: rgba(255,255,255,0.5); padding: 2rem;">Khong tim thay card nao</div>';
+                    // Re-attach toggle listeners
+                    attachCardToggleListeners(cardsList);
+                }
+            });
+        }
+
+        // Card expand/collapse
+        const cardsList = mountEl.querySelector('[data-role="cards-list"]');
+        if (cardsList) {
+            attachCardToggleListeners(cardsList);
+        }
+    }
+}
+
+/**
+ * Attach toggle listeners to card items
+ * @param {HTMLElement} container
+ */
+function attachCardToggleListeners(container) {
+    container.querySelectorAll('[data-action="toggle-card"]').forEach(header => {
+        header.addEventListener('click', () => {
+            const card = header.closest('.rb-card');
+            if (card) {
+                const body = card.querySelector('.rb-card-body');
+                const toggle = card.querySelector('.rb-card-toggle');
+                const isExpanded = body.style.display === 'block';
+                
+                // Toggle body visibility
+                if (body) {
+                    body.style.display = isExpanded ? 'none' : 'block';
+                }
+                // Update toggle icon
+                if (toggle) {
+                    toggle.textContent = isExpanded ? '+' : '-';
+                }
+            }
+        });
+    });
 }
 
 function renderRulesBookReferenceMarkup(currentTab) {
@@ -300,7 +369,7 @@ function renderRulesBookReferenceMarkup(currentTab) {
                 ${parsedRules}
             </div>
         `;
-    } else {
+    } else if (currentTab === 'reference') {
         const sections = TRANSLATION_SECTIONS.map(renderTranslationSection).join('');
         content = `
             <div class="reference-search">
@@ -328,6 +397,8 @@ function renderRulesBookReferenceMarkup(currentTab) {
                 </div>
             </div>
         `;
+    } else if (currentTab === 'cards') {
+        content = renderCardsTabContent();
     }
 
     return `
@@ -337,6 +408,7 @@ function renderRulesBookReferenceMarkup(currentTab) {
                 <div class="tabs-header">
                     <button class="tab-button ${currentTab === 'rules' ? 'active' : ''}" data-tab="rules">Rules</button>
                     <button class="tab-button ${currentTab === 'reference' ? 'active' : ''}" data-tab="reference">Reference Table</button>
+                    <button class="tab-button ${currentTab === 'cards' ? 'active' : ''}" data-tab="cards">Cards</button>
                 </div>
                 
                 <div class="tab-content" style="position: relative;">
@@ -540,6 +612,235 @@ function renderTranslationSection(section) {
                         ${renderTranslationTableRows(section)}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    `;
+}
+
+// ===== CARDS TAB FUNCTIONS =====
+
+let cardsSubTab = 'item'; // 'item' | 'event' | 'omen'
+let cardsSearchQuery = '';
+
+/**
+ * Render cards tab content with sub-tabs for Item, Event, Omen
+ * @returns {string}
+ */
+function renderCardsTabContent() {
+    const cardsList = getCardsForSubTab(cardsSubTab);
+    const filteredCards = filterCardsBySearch(cardsList, cardsSearchQuery);
+    
+    const cardsHtml = filteredCards.map(card => renderCardItem(card, cardsSubTab)).join('');
+    
+    return `
+        <div class="cards-tab">
+            <div class="cards-subtabs">
+                <button class="cards-subtab ${cardsSubTab === 'item' ? 'active' : ''}" data-cards-subtab="item">
+                    Item (${ITEMS.length})
+                </button>
+                <button class="cards-subtab ${cardsSubTab === 'event' ? 'active' : ''}" data-cards-subtab="event">
+                    Event (${EVENTS.length})
+                </button>
+                <button class="cards-subtab ${cardsSubTab === 'omen' ? 'active' : ''}" data-cards-subtab="omen">
+                    Omen (${OMENS.length})
+                </button>
+            </div>
+            
+            <div class="cards-search">
+                <input 
+                    type="text" 
+                    class="cards-search-input" 
+                    placeholder="Tim kiem card..." 
+                    data-field="cards-search"
+                    value="${escapeHtml(cardsSearchQuery)}"
+                />
+            </div>
+            
+            <div class="cards-list" data-role="cards-list">
+                ${cardsHtml || '<div class="cards-empty">Khong tim thay card nao</div>'}
+            </div>
+        </div>
+        
+        <style>
+            .cards-tab {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+            .cards-subtabs {
+                display: flex;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+            }
+            .cards-subtab {
+                padding: 0.5rem 1rem;
+                background: rgba(255,255,255,0.1);
+                border: 1px solid rgba(255,255,255,0.2);
+                border-radius: 4px;
+                color: rgba(255,255,255,0.7);
+                cursor: pointer;
+                font-family: inherit;
+                font-size: 0.9rem;
+                transition: all 0.2s;
+            }
+            .cards-subtab:hover {
+                background: rgba(255,255,255,0.15);
+                color: #fff;
+            }
+            .cards-subtab.active {
+                background: rgba(255,255,255,0.2);
+                color: #fff;
+                border-color: rgba(255,255,255,0.4);
+            }
+            .cards-subtab.active[data-cards-subtab="item"] {
+                background: rgba(100, 149, 237, 0.3);
+                border-color: rgba(100, 149, 237, 0.6);
+            }
+            .cards-subtab.active[data-cards-subtab="event"] {
+                background: rgba(255, 165, 0, 0.3);
+                border-color: rgba(255, 165, 0, 0.6);
+            }
+            .cards-subtab.active[data-cards-subtab="omen"] {
+                background: rgba(220, 20, 60, 0.3);
+                border-color: rgba(220, 20, 60, 0.6);
+            }
+            .cards-search {
+                margin-bottom: 0.5rem;
+            }
+            .cards-search-input {
+                width: 100%;
+                padding: 0.8rem;
+                background: rgba(0,0,0,0.3);
+                border: 1px solid rgba(255,255,255,0.2);
+                border-radius: 4px;
+                color: white;
+                font-family: inherit;
+            }
+            .cards-list {
+                max-height: 50vh;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+            .cards-empty {
+                text-align: center;
+                color: rgba(255,255,255,0.5);
+                padding: 2rem;
+            }
+            .card-item {
+                background: rgba(0,0,0,0.3);
+                border: 1px solid rgba(255,255,255,0.15);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            .card-item--item {
+                border-left: 3px solid rgba(100, 149, 237, 0.8);
+            }
+            .card-item--event {
+                border-left: 3px solid rgba(255, 165, 0, 0.8);
+            }
+            .card-item--omen {
+                border-left: 3px solid rgba(220, 20, 60, 0.8);
+            }
+            .card-item__header {
+                padding: 0.75rem 1rem;
+                background: rgba(255,255,255,0.05);
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                min-height: 44px;
+            }
+            .card-item__header:hover {
+                background: rgba(255,255,255,0.1);
+            }
+            .card-item__name {
+                font-weight: 600;
+                color: #fff;
+                flex: 1;
+                word-break: break-word;
+            }
+            .card-item__toggle {
+                color: rgba(255,255,255,0.5);
+                font-size: 0.8rem;
+                transition: transform 0.2s;
+                margin-left: 0.5rem;
+            }
+            .card-item.is-expanded .card-item__toggle {
+                transform: rotate(90deg);
+            }
+            .card-item__body {
+                padding: 0.75rem 1rem;
+                display: none;
+                border-top: 1px solid rgba(255,255,255,0.1);
+            }
+            .card-item.is-expanded .card-item__body {
+                display: block;
+            }
+            .card-item__text {
+                color: rgba(255,255,255,0.85);
+                line-height: 1.6;
+                white-space: pre-line;
+                font-size: 0.9rem;
+            }
+        </style>
+    `;
+}
+
+/**
+ * Get cards array for current sub-tab
+ * @param {'item'|'event'|'omen'} subTab
+ * @returns {any[]}
+ */
+function getCardsForSubTab(subTab) {
+    if (subTab === 'item') return ITEMS;
+    if (subTab === 'event') return EVENTS;
+    if (subTab === 'omen') return OMENS;
+    return [];
+}
+
+/**
+ * Filter cards by search query
+ * @param {any[]} cards
+ * @param {string} query
+ * @returns {any[]}
+ */
+function filterCardsBySearch(cards, query) {
+    if (!query || query.length < 2) return cards;
+    
+    const normalizedQuery = normalizeText(query);
+    return cards.filter(card => {
+        const name = card.name?.vi || card.id || '';
+        const text = card.text?.vi || '';
+        return normalizeText(name).includes(normalizedQuery) || 
+               normalizeText(text).includes(normalizedQuery);
+    });
+}
+
+/**
+ * Render single card item
+ * @param {any} card
+ * @param {'item'|'event'|'omen'} type
+ * @returns {string}
+ */
+function renderCardItem(card, type) {
+    const name = card.name?.vi || card.id || 'Unknown';
+    const text = card.text?.vi || 'No description';
+    
+    // Use inline styles to avoid CSS conflicts
+    const borderColor = type === 'item' ? 'rgba(100, 149, 237, 0.8)' 
+                      : type === 'event' ? 'rgba(255, 165, 0, 0.8)' 
+                      : 'rgba(220, 20, 60, 0.8)';
+    
+    return `
+        <div class="rb-card" data-card-id="${card.id}" data-card-type="${type}" style="background: rgba(30,30,30,0.9); border: 1px solid rgba(255,255,255,0.2); border-left: 4px solid ${borderColor}; border-radius: 8px; margin-bottom: 10px;">
+            <div class="rb-card-header" data-action="toggle-card" style="padding: 14px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03);">
+                <span style="font-weight: 600; color: #ffffff; font-size: 15px;">${escapeHtml(name)}</span>
+                <span class="rb-card-toggle" style="color: #888; font-size: 18px; font-weight: bold;">+</span>
+            </div>
+            <div class="rb-card-body" style="padding: 14px 16px; display: none; border-top: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                <p style="color: #dddddd; line-height: 1.7; white-space: pre-line; font-size: 14px; margin: 0;">${escapeHtml(text)}</p>
             </div>
         </div>
     `;
