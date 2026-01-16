@@ -69,15 +69,73 @@ function filterVisibleRooms(rooms, centerX, centerY, radius, currentFloor) {
 }
 
 /**
+ * Get opposite direction
+ * @param {'north' | 'south' | 'east' | 'west'} dir
+ * @returns {'north' | 'south' | 'east' | 'west'}
+ */
+function getOppositeDir(dir) {
+    const opposites = { north: 'south', south: 'north', east: 'west', west: 'east' };
+    return opposites[dir];
+}
+
+/**
+ * Get adjacent position based on direction
+ * @param {number} x
+ * @param {number} y
+ * @param {'north' | 'south' | 'east' | 'west'} dir
+ * @returns {{ x: number, y: number }}
+ */
+function getAdjacentPosition(x, y, dir) {
+    switch (dir) {
+        case 'north': return { x, y: y + 1 };
+        case 'south': return { x, y: y - 1 };
+        case 'east': return { x: x + 1, y };
+        case 'west': return { x: x - 1, y };
+        default: return { x, y };
+    }
+}
+
+/**
+ * Check if a door connects to a wall (adjacent room exists but has no matching door)
+ * @param {Room} room - Current room
+ * @param {'north' | 'south' | 'east' | 'west'} dir - Door direction
+ * @param {Record<string, Room>} allRooms - All revealed rooms
+ * @returns {boolean} - True if door connects to wall
+ */
+function isDoorToWall(room, dir, allRooms) {
+    const adjPos = getAdjacentPosition(room.x, room.y, dir);
+    
+    // Find room at adjacent position on same floor
+    const adjacentRoom = Object.values(allRooms).find(r => 
+        r.x === adjPos.x && r.y === adjPos.y && r.floor === room.floor
+    );
+    
+    // If no adjacent room, door is open (not to wall)
+    if (!adjacentRoom) return false;
+    
+    // If adjacent room exists, check if it has a matching door
+    const oppositeDir = getOppositeDir(dir);
+    const hasMatchingDoor = adjacentRoom.doors && adjacentRoom.doors.includes(oppositeDir);
+    
+    // If adjacent room has no matching door, this door connects to wall
+    return !hasMatchingDoor;
+}
+
+/**
  * Render door indicators for a room
  * @param {('north' | 'south' | 'east' | 'west')[]} doors
  * @param {Record<string, string>} connections - direction -> roomId
+ * @param {Room} room - Current room
+ * @param {Record<string, Room>} allRooms - All revealed rooms
  * @returns {string}
  */
-function renderDoors(doors, connections) {
+function renderDoors(doors, connections, room, allRooms) {
     const doorHtml = [];
 
     for (const dir of doors) {
+        // Skip door if it connects to a wall
+        if (isDoorToWall(room, dir, allRooms)) continue;
+        
         const isConnected = !!connections[dir];
         const doorClass = isConnected ? 'map-door--connected' : 'map-door--open';
         doorHtml.push(`<div class="map-door map-door--${dir} ${doorClass}"></div>`);
@@ -173,9 +231,10 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, myId) {
  * @param {number} centerX - Player's X coord (for relative positioning)
  * @param {number} centerY - Player's Y coord (for relative positioning)
  * @param {number} radius - Viewport radius
+ * @param {Record<string, Room>} allRooms - All revealed rooms
  * @returns {string}
  */
-function renderRoomTile(room, connections, playerPositions, playerNames, myId, centerX, centerY, radius) {
+function renderRoomTile(room, connections, playerPositions, playerNames, myId, centerX, centerY, radius, allRooms) {
     const floorClass = `map-room--${room.floor}`;
     
     // Check if current player is in this room
@@ -205,7 +264,7 @@ function renderRoomTile(room, connections, playerPositions, playerNames, myId, c
                 <span class="map-room__name">${room.name}</span>
                 ${vaultDivider}
                 ${renderTokens(room.tokens)}
-                ${renderDoors(room.doors, connections)}
+                ${renderDoors(room.doors, connections, room, allRooms)}
                 ${renderPawnMarkers(room.id, playerPositions, playerNames, myId)}
             </div>
         </div>
@@ -261,7 +320,8 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
             myId,
             centerX,
             centerY,
-            VIEWPORT_RADIUS
+            VIEWPORT_RADIUS,
+            rooms
         );
     }).join('');
 
