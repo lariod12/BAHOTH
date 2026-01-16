@@ -1332,6 +1332,7 @@ function renderGameScreen(gameState, myId) {
         const mapState = gameState.map || null;
         const playerState = gameState.playerState || {};
         const playerPositions = playerState.playerPositions || {};
+        const playerEntryDirections = playerState.playerEntryDirections || {};
         const players = gameState.players || [];
         const playerNames = buildPlayerNamesMap(players, getCharacterName);
         const playerColors = buildPlayerColorsMap(players, getCharacterColor);
@@ -1391,7 +1392,7 @@ function renderGameScreen(gameState, myId) {
                 <div class="game-main">
                     ${renderTurnOrder(gameState, myId)}
                     <div class="game-area">
-                        ${renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview)}
+                        ${renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview, playerEntryDirections)}
                     </div>
                 </div>
             </div>
@@ -2666,6 +2667,12 @@ function handleDebugMove(mountEl, direction) {
                     currentGameState.playerState.playerPositions[playerId] = existingRoomId;
                     currentGameState.playerMoves[playerId] = moves - 1;
                     
+                    // Track entry direction (opposite of door direction = which side player entered from)
+                    if (!currentGameState.playerState.playerEntryDirections) {
+                        currentGameState.playerState.playerEntryDirections = {};
+                    }
+                    currentGameState.playerState.playerEntryDirections[playerId] = oppositeDir;
+                    
                     // Apply Vault spawn position if entering Vault room
                     applyVaultSpawnPosition(playerId, existingRoom, currentGameState);
                     
@@ -2717,6 +2724,13 @@ function handleDebugMove(mountEl, direction) {
     
     // Move to target room
     currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+    
+    // Track entry direction (opposite of door direction = which side player entered from)
+    if (!currentGameState.playerState.playerEntryDirections) {
+        currentGameState.playerState.playerEntryDirections = {};
+    }
+    const oppositeDir = getOppositeDoor(doorDirection);
+    currentGameState.playerState.playerEntryDirections[playerId] = oppositeDir;
     
     // Decrease moves
     currentGameState.playerMoves[playerId] = moves - 1;
@@ -2801,6 +2815,12 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
     
     // Move to target room (stairs)
     currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+    
+    // Clear entry direction when using stairs (no specific door entry)
+    if (!currentGameState.playerState.playerEntryDirections) {
+        currentGameState.playerState.playerEntryDirections = {};
+    }
+    currentGameState.playerState.playerEntryDirections[playerId] = null;
     
     // Decrease moves (using stairs costs 1 move)
     currentGameState.playerMoves[playerId] = moves - 1;
@@ -3185,6 +3205,12 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     
     // Move player to new room
     currentGameState.playerState.playerPositions[playerId] = newRoomId;
+    
+    // Track entry direction (opposite of discovery direction = which side player entered from)
+    if (!currentGameState.playerState.playerEntryDirections) {
+        currentGameState.playerState.playerEntryDirections = {};
+    }
+    currentGameState.playerState.playerEntryDirections[playerId] = oppositeDir;
     
     // Apply Vault spawn position if entering Vault room
     applyVaultSpawnPosition(playerId, newRoom, currentGameState);

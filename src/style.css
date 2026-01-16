@@ -3794,37 +3794,41 @@ select.field__input option {
 }
 
 /* Pawn in Vault - positioned based on near-door zone */
-/* Door at top: player spawns in top half (near door) */
+/* Door at top: player spawns in top half (near door) - horizontal layout */
 .map-pawns.map-pawns--door-top {
     top: 20%;
     bottom: auto;
     left: 50%;
     transform: translate(-50%, 0);
+    flex-direction: row;
 }
 
-/* Door at bottom: player spawns in bottom half (near door) */
+/* Door at bottom: player spawns in bottom half (near door) - horizontal layout */
 .map-pawns.map-pawns--door-bottom {
     top: auto;
     bottom: 20%;
     left: 50%;
     transform: translate(-50%, 0);
+    flex-direction: row;
 }
 
-/* Door at left: player spawns in left half (near door) */
+/* Door at left: player spawns in left half (near door) - vertical layout */
 .map-pawns.map-pawns--door-left {
     top: 50%;
     bottom: auto;
     left: 15%;
     transform: translate(0, -50%);
+    flex-direction: column;
 }
 
-/* Door at right: player spawns in right half (near door) */
+/* Door at right: player spawns in right half (near door) - vertical layout */
 .map-pawns.map-pawns--door-right {
     top: 50%;
     bottom: auto;
     left: auto;
     right: 15%;
     transform: translate(0, -50%);
+    flex-direction: column;
 }
 
 /* ============================================================
@@ -3908,6 +3912,41 @@ select.field__input option {
     color: #bb66ff;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
             drop-shadow(0 0 4px rgba(187, 102, 255, 0.6));
+}
+
+/* Entry direction positioning - container positioned near the door player entered from */
+/* North/South: horizontal layout (row), East/West: vertical layout (column) */
+.map-pawns.map-pawns--entry-north {
+    bottom: auto;
+    top: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+}
+
+.map-pawns.map-pawns--entry-south {
+    bottom: 8%;
+    top: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+}
+
+.map-pawns.map-pawns--entry-west {
+    bottom: auto;
+    top: 50%;
+    left: 8%;
+    transform: translateY(-50%);
+    flex-direction: column;
+}
+
+.map-pawns.map-pawns--entry-east {
+    bottom: auto;
+    top: 50%;
+    left: auto;
+    right: 8%;
+    transform: translateY(-50%);
+    flex-direction: column;
 }
 
 /* Larger rooms for better visibility */
