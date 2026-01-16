@@ -4,6 +4,7 @@ import * as socketClient from '../services/socketClient.js';
 import { renderGameMap, buildPlayerNamesMap, buildPlayerColorsMap } from '../components/GameMap.js';
 import { ROOMS } from '../data/mapsData.js';
 import { ITEMS, EVENTS, OMENS } from '../data/cardsData.js';
+import { calculateVaultLayout, calculatePlayerSpawnPosition } from '../utils/vaultLayout.js';
 
 // Room discovery modal state
 /** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number; selectedFloor: string | null; needsFloorSelection: boolean } | null} */
@@ -298,6 +299,44 @@ function getCharacterSpeed(characterId) {
     if (!char) return 4; // default
     const speedTrait = char.traits.speed;
     return speedTrait.track[speedTrait.startIndex];
+}
+
+/**
+ * Check if a room is Vault and apply spawn position to player state
+ * When player enters Vault room, calculate and store spawn position in near-door zone
+ * @param {string} playerId - Player ID
+ * @param {Object} targetRoom - Target room object
+ * @param {Object} gameState - Current game state
+ */
+function applyVaultSpawnPosition(playerId, targetRoom, gameState) {
+    if (!targetRoom || !gameState) return;
+    
+    // Check if target room is Vault
+    const isVault = targetRoom.name === 'Vault' || targetRoom.id === 'vault';
+    if (!isVault) return;
+    
+    // Initialize playerSpawnPositions if not exists
+    if (!gameState.playerState.playerSpawnPositions) {
+        gameState.playerState.playerSpawnPositions = {};
+    }
+    
+    // Calculate Vault layout
+    const rotation = targetRoom.rotation || 0;
+    const vaultLayout = targetRoom.vaultLayout || calculateVaultLayout(rotation);
+    
+    // Calculate spawn position (using default room bounds)
+    // Room bounds are relative to room tile (100x100 for standard room)
+    const roomBounds = { width: 100, height: 100 };
+    const spawnPosition = calculatePlayerSpawnPosition(vaultLayout, roomBounds);
+    
+    // Store spawn position in player state
+    gameState.playerState.playerSpawnPositions[playerId] = {
+        roomId: targetRoom.id,
+        zone: vaultLayout.nearDoorZone,
+        position: spawnPosition
+    };
+    
+    console.log(`[Vault] Player ${playerId} spawn position set to ${vaultLayout.nearDoorZone}`, spawnPosition);
 }
 
 /**
@@ -2466,6 +2505,9 @@ function handleDebugMove(mountEl, direction) {
                     currentGameState.playerState.playerPositions[playerId] = existingRoomId;
                     currentGameState.playerMoves[playerId] = moves - 1;
                     
+                    // Apply Vault spawn position if entering Vault room
+                    applyVaultSpawnPosition(playerId, existingRoom, currentGameState);
+                    
                     // Check if turn ended
                     if (currentGameState.playerMoves[playerId] <= 0) {
                         currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
@@ -2517,8 +2559,11 @@ function handleDebugMove(mountEl, direction) {
     // Decrease moves
     currentGameState.playerMoves[playerId] = moves - 1;
     
-    // Check if target room has tokens and hasn't been drawn yet
+    // Apply Vault spawn position if entering Vault room
     const targetRoom = revealedRooms[targetRoomId];
+    applyVaultSpawnPosition(playerId, targetRoom, currentGameState);
+    
+    // Check if target room has tokens and hasn't been drawn yet
     if (targetRoom && targetRoom.tokens && targetRoom.tokens.length > 0) {
         // Initialize drawnRooms tracking if not exists
         if (!currentGameState.playerState.drawnRooms) {
@@ -2597,8 +2642,11 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
     // Decrease moves (using stairs costs 1 move)
     currentGameState.playerMoves[playerId] = moves - 1;
     
-    // Check if target room has tokens and hasn't been drawn yet
+    // Apply Vault spawn position if entering Vault room
     const targetRoom = revealedRooms[targetRoomId];
+    applyVaultSpawnPosition(playerId, targetRoom, currentGameState);
+    
+    // Check if target room has tokens and hasn't been drawn yet
     if (targetRoom && targetRoom.tokens && targetRoom.tokens.length > 0) {
         // Initialize drawnRooms tracking if not exists
         if (!currentGameState.playerState.drawnRooms) {
@@ -2946,6 +2994,11 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         tokens: roomDef.tokens ? [...roomDef.tokens] : [] // Copy tokens from room definition
     };
     
+    // Add Vault layout if this is a Vault room
+    if (roomDef.name.en === 'Vault' && roomDef.specialLayout) {
+        newRoom.vaultLayout = calculateVaultLayout(rotation);
+    }
+    
     // Remove doors that connect to walls of existing adjacent rooms
     const oppositeDir = getOppositeDoor(roomDiscoveryModal.direction);
     newRoom.doors = removeDoorsToWalls(newRoom, revealedRooms, oppositeDir);
@@ -2968,6 +3021,9 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     
     // Move player to new room
     currentGameState.playerState.playerPositions[playerId] = newRoomId;
+    
+    // Apply Vault spawn position if entering Vault room
+    applyVaultSpawnPosition(playerId, newRoom, currentGameState);
     
     // Discovering a room costs 1 move (same as normal movement)
     const moves = currentGameState.playerMoves[playerId] || 0;

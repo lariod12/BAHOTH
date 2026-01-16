@@ -1,6 +1,8 @@
 // GameMap Component - Renders the revealed rooms and player positions
 // Uses focused viewport centered on player position
 
+import { calculateVaultLayout, getDividerOrientation } from '../utils/vaultLayout.js';
+
 /**
  * @typedef {{
  *   id: string;
@@ -10,6 +12,8 @@
  *   doors: ('north' | 'south' | 'east' | 'west')[];
  *   floor: 'ground' | 'upper' | 'basement';
  *   tokens?: ('omen' | 'event' | 'item')[];
+ *   rotation?: number;
+ *   vaultLayout?: import('../utils/vaultLayout.js').VaultLayout;
  * }} Room
  *
  * @typedef {{
@@ -147,10 +151,16 @@ function renderDoors(doors, connections, room, allRooms) {
 /**
  * Render token indicators for a room
  * @param {('omen' | 'event' | 'item')[]} tokens
+ * @param {Object} [vaultLayout] - Optional Vault layout for special positioning
  * @returns {string}
  */
-function renderTokens(tokens) {
+function renderTokens(tokens, vaultLayout = null) {
     if (!tokens || tokens.length === 0) return '';
+    
+    // If Vault layout provided, use zone-based positioning
+    if (vaultLayout) {
+        return renderVaultTokens(tokens, vaultLayout);
+    }
     
     // Group tokens by type
     const tokensByType = { omen: [], event: [], item: [] };
@@ -182,15 +192,99 @@ function renderTokens(tokens) {
 }
 
 /**
+ * Render tokens for Vault room with zone-based positioning
+ * Event token in near-door zone corner, item tokens in far-door zone corner
+ * @param {('omen' | 'event' | 'item')[]} tokens
+ * @param {Object} vaultLayout - Vault layout from calculateVaultLayout()
+ * @returns {string}
+ */
+function renderVaultTokens(tokens, vaultLayout) {
+    const tokenHtml = [];
+    const { nearDoorZone, farDoorZone, dividerOrientation } = vaultLayout;
+    
+    // Corner position mappings for event token (near-door zone)
+    // Event token goes to the corner of near-door zone
+    const eventCornerPositions = {
+        'top-half': { top: '4px', right: '4px' },      // Top-right corner of top half
+        'bottom-half': { bottom: '4px', right: '4px' }, // Bottom-right corner of bottom half
+        'left-half': { top: '4px', left: '4px' },       // Top-left corner of left half
+        'right-half': { top: '4px', right: '4px' }      // Top-right corner of right half
+    };
+    
+    // Corner position mappings for item tokens (far-door zone)
+    const itemCornerPositions = {
+        'top-half': { top: '4px', left: '4px' },        // Top-left corner of top half
+        'bottom-half': { bottom: '4px', left: '4px' },  // Bottom-left corner of bottom half
+        'left-half': { bottom: '4px', left: '4px' },    // Bottom-left corner of left half
+        'right-half': { bottom: '4px', right: '4px' }   // Bottom-right corner of right half
+    };
+    
+    const eventPos = eventCornerPositions[nearDoorZone];
+    const itemPos = itemCornerPositions[farDoorZone];
+    
+    // Event token in near-door zone corner
+    const eventTokens = tokens.filter(t => t === 'event');
+    eventTokens.forEach(() => {
+        const posStyle = Object.entries(eventPos).map(([k, v]) => `${k}: ${v}`).join('; ');
+        tokenHtml.push(`
+            <div class="map-token map-token--event map-token--vault-zone" 
+                 style="${posStyle};" 
+                 title="event (near door)"></div>
+        `);
+    });
+    
+    // Item tokens in far-door zone corner (stacked)
+    const itemTokens = tokens.filter(t => t === 'item');
+    const isHorizontalDivider = dividerOrientation === 'horizontal';
+    
+    itemTokens.forEach((_, i) => {
+        const offset = i * 10; // 10px spacing between items
+        let posStyle = Object.entries(itemPos).map(([k, v]) => `${k}: ${v}`).join('; ');
+        
+        // Stack items horizontally or vertically based on divider orientation
+        if (isHorizontalDivider) {
+            // Horizontal divider = stack items horizontally
+            if (itemPos.left) {
+                posStyle = posStyle.replace(/left:\s*\d+px/, `left: ${4 + offset}px`);
+            } else if (itemPos.right) {
+                posStyle = posStyle.replace(/right:\s*\d+px/, `right: ${4 + offset}px`);
+            }
+        } else {
+            // Vertical divider = stack items vertically
+            if (itemPos.top) {
+                posStyle = posStyle.replace(/top:\s*\d+px/, `top: ${4 + offset}px`);
+            } else if (itemPos.bottom) {
+                posStyle = posStyle.replace(/bottom:\s*\d+px/, `bottom: ${4 + offset}px`);
+            }
+        }
+        
+        tokenHtml.push(`
+            <div class="map-token map-token--item map-token--vault-zone" 
+                 style="${posStyle};" 
+                 title="item (far from door)"></div>
+        `);
+    });
+    
+    // Omen tokens (if any) - default positioning at top-right
+    const omenTokens = tokens.filter(t => t === 'omen');
+    omenTokens.forEach((_, i) => {
+        tokenHtml.push(`<div class="map-token map-token--omen" style="top: 4px; right: ${4 + i * 10}px;" title="omen"></div>`);
+    });
+    
+    return `<div class="map-tokens map-tokens--vault">${tokenHtml.join('')}</div>`;
+}
+
+/**
  * Render pawn icons for all players in this room
  * @param {string} roomId - Current room ID
  * @param {Record<string, string>} playerPositions - socketId -> roomId
  * @param {Record<string, string>} playerNames - socketId -> character name
  * @param {Record<string, string>} playerColors - socketId -> color
  * @param {string} myId - Current player's socket ID
+ * @param {Object} [vaultLayout] - Optional Vault layout for spawn positioning
  * @returns {string}
  */
-function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, myId) {
+function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, myId, vaultLayout = null) {
     // Find all players in this room
     const playersInRoom = [];
     for (const [playerId, playerRoomId] of Object.entries(playerPositions)) {
@@ -221,7 +315,10 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
         `;
     }).join('');
     
-    return `<div class="map-pawns">${pawnsHtml}</div>`;
+    // Add door-side class for Vault room spawn positioning
+    const vaultSpawnClass = vaultLayout ? `map-pawns--door-${vaultLayout.doorSide}` : '';
+    
+    return `<div class="map-pawns ${vaultSpawnClass}">${pawnsHtml}</div>`;
 }
 
 /**
@@ -264,25 +361,37 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
     // Special rooms with divider (like Vault)
     const isVault = room.name === 'Vault' || room.id === 'vault';
     const vaultClass = isVault ? 'map-room--vault' : '';
+    
+    // Calculate Vault layout if applicable
+    let vaultLayout = null;
+    let dividerOrientationClass = '';
+    if (isVault) {
+        const rotation = room.rotation || 0;
+        vaultLayout = room.vaultLayout || calculateVaultLayout(rotation);
+        dividerOrientationClass = `map-room--divider-${vaultLayout.dividerOrientation}`;
+    }
 
     // Calculate grid position relative to viewport (1-indexed for CSS grid)
     // Viewport is (2*radius + 1) x (2*radius + 1)
     const gridCol = (room.x - centerX) + radius + 1;
     const gridRow = -(room.y - centerY) + radius + 1; // Invert Y for CSS
     
-    // Vault divider line
-    const vaultDivider = isVault ? '<div class="map-room__divider"></div>' : '';
+    // Vault divider line with orientation
+    let vaultDivider = '';
+    if (isVault && vaultLayout) {
+        vaultDivider = `<div class="map-room__divider map-room__divider--${vaultLayout.dividerOrientation}"></div>`;
+    }
 
     return `
-        <div class="map-room ${floorClass} ${currentClass} ${tokensClass} ${vaultClass}" 
+        <div class="map-room ${floorClass} ${currentClass} ${tokensClass} ${vaultClass} ${dividerOrientationClass}" 
              data-room-id="${room.id}"
              style="grid-column: ${gridCol}; grid-row: ${gridRow};">
             <div class="map-room__inner">
                 <span class="map-room__name">${room.name}</span>
                 ${vaultDivider}
-                ${renderTokens(room.tokens)}
+                ${renderTokens(room.tokens, vaultLayout)}
                 ${renderDoors(room.doors, connections, room, allRooms)}
-                ${renderPawnMarkers(room.id, playerPositions, playerNames, playerColors, myId)}
+                ${renderPawnMarkers(room.id, playerPositions, playerNames, playerColors, myId, vaultLayout)}
             </div>
         </div>
     `;

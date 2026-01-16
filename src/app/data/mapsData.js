@@ -11,6 +11,16 @@
  * @typedef {'omen'|'event'|'item'} TokenType
  *
  * @typedef {{ side: DoorSide; kind: 'door'; note?: string }} DoorDef
+ * 
+ * @typedef {{
+ *   type: 'divided';
+ *   dividerOrientation: 'parallel-to-door';
+ *   zones: {
+ *     nearDoor: { tokens: TokenType[]; playerSpawn: boolean };
+ *     farDoor: { tokens: TokenType[] };
+ *   };
+ * }} SpecialLayout
+ * 
  * @typedef {{
  *   name: { en: string; vi?: string };
  *   floorsAllowed: FloorKey[];
@@ -18,6 +28,7 @@
  *   tokens: TokenType[];
  *   text: { en?: string; vi?: string };
  *   notes?: string[];
+ *   specialLayout?: SpecialLayout;
  * }} RoomDef
  */
 
@@ -232,6 +243,20 @@ export const ROOMS = [
       en: 'You can attempt a Knowledge roll of 6+ to open and empty the vault.',
       vi: 'Bạn có thể thử roll Knowledge 6+ để mở và lấy hết trong két.',
     },
+    // Special layout: event token near door, divider line parallel to door
+    specialLayout: {
+      type: 'divided',
+      dividerOrientation: 'parallel-to-door', // Line parallel to door side
+      zones: {
+        nearDoor: {
+          tokens: ['event'],      // Event token in near-door zone
+          playerSpawn: true       // Player spawns here
+        },
+        farDoor: {
+          tokens: ['item', 'item'] // Item tokens in far-door zone
+        }
+      }
+    }
   },
   {
     name: { en: 'Research Laboratory', vi: 'Phòng thí nghiệm nghiên cứu (Research Laboratory)' },

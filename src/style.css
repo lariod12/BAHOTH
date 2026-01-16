@@ -3566,20 +3566,78 @@ select.field__input option {
    VAULT ROOM - Special divided room
    ============================================================ */
 
+/* Base divider styles */
 .map-room--vault .map-room__divider {
     position: absolute;
+    background: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+}
+
+/* Vertical divider (door at left or right) */
+.map-room--vault .map-room__divider--vertical {
     top: 10%;
     bottom: 10%;
     left: 50%;
     width: 2px;
-    background: rgba(255, 255, 255, 0.4);
     transform: translateX(-50%);
-    box-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
 }
 
-/* Pawn in Vault - positioned on right side (near door) */
-.map-room--vault .map-pawn {
-    left: 75%;
+/* Horizontal divider (door at top or bottom) */
+.map-room--vault .map-room__divider--horizontal {
+    left: 10%;
+    right: 10%;
+    top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+}
+
+/* Vault tokens - zone-based positioning */
+.map-tokens--vault {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.map-token--vault-zone {
+    position: absolute;
+    pointer-events: auto;
+}
+
+/* Pawn in Vault - positioned based on near-door zone */
+/* Door at top: player spawns in top half (near door) */
+.map-pawns.map-pawns--door-top {
+    top: 20%;
+    bottom: auto;
+    left: 50%;
+    transform: translate(-50%, 0);
+}
+
+/* Door at bottom: player spawns in bottom half (near door) */
+.map-pawns.map-pawns--door-bottom {
+    top: auto;
+    bottom: 20%;
+    left: 50%;
+    transform: translate(-50%, 0);
+}
+
+/* Door at left: player spawns in left half (near door) */
+.map-pawns.map-pawns--door-left {
+    top: 50%;
+    bottom: auto;
+    left: 15%;
+    transform: translate(0, -50%);
+}
+
+/* Door at right: player spawns in right half (near door) */
+.map-pawns.map-pawns--door-right {
+    top: 50%;
+    bottom: auto;
+    left: auto;
+    right: 15%;
+    transform: translate(0, -50%);
 }
 
 /* ============================================================

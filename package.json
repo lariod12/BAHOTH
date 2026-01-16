@@ -7,10 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "vitest --run",
+    "test:watch": "vitest",
     "clear-data": "node -e \"const fs=require('fs');const path='server/data';fs.readdirSync(path).forEach(f=>fs.writeFileSync(path+'/'+f,'[]'))\" && echo Data cleared!"
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "fast-check": "^4.5.3",
+    "vite": "^5.0.0",
+    "vitest": "^4.0.17"
   },
   "dependencies": {
     "marked": "^17.0.1",
