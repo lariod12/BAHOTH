@@ -51,6 +51,7 @@ export const TRAIT_KEYS = /** @type {const} */ (['speed', 'might', 'sanity', 'kn
  *   bio: CharacterBioLocalized;
  *   traits: Record<TraitKey, TraitTrack>;
  *   profile?: CharacterProfileLocalized;
+ *   color: 'red' | 'blue' | 'green' | 'yellow' | 'white' | 'purple';
  * }} CharacterDef
  */
 
@@ -59,6 +60,7 @@ export const CHARACTERS = [
     {
         id: 'professor-longfellow',
         name: { en: 'Josiah Longfellow', vi: 'Giáo sư Josiah Longfellow', nickname: 'Professor Longfellow' },
+        color: 'white',
         bio: {
             en: {
                 age: 57,
@@ -109,6 +111,7 @@ export const CHARACTERS = [
     {
         id: 'heather-granville',
         name: { en: 'Heather Granville', vi: 'Heather Granville' },
+        color: 'purple',
         bio: {
             en: {
                 age: 18,
@@ -157,6 +160,7 @@ export const CHARACTERS = [
     {
         id: 'father-rhinehardt',
         name: { en: 'Reginald Rhinehardt', vi: 'Cha Reginald Rhinehardt', nickname: 'Father Rhinehardt' },
+        color: 'white',
         bio: {
             en: {
                 age: 62,
@@ -207,6 +211,7 @@ export const CHARACTERS = [
     {
         id: 'jenny-leclerc',
         name: { en: 'Jenny LeClerc', vi: 'Jenny LeClerc' },
+        color: 'purple',
         bio: {
             en: {
                 age: 21,
@@ -253,6 +258,7 @@ export const CHARACTERS = [
     {
         id: 'darrin-flash-williams',
         name: { en: 'Darrin Williams', vi: 'Darrin "Flash" Williams', nickname: 'Flash' },
+        color: 'red',
         bio: {
             en: {
                 age: 20,
@@ -299,6 +305,7 @@ export const CHARACTERS = [
     {
         id: 'vivian-lopez',
         name: { en: 'Vivian Lopez', vi: 'Vivian Lopez' },
+        color: 'blue',
         bio: {
             en: {
                 age: 42,
@@ -345,6 +352,7 @@ export const CHARACTERS = [
     {
         id: 'ox-bellows',
         name: { en: 'Ox Bellows', vi: 'Ox Bellows' },
+        color: 'red',
         bio: {
             en: {
                 age: 23,
@@ -391,6 +399,7 @@ export const CHARACTERS = [
     {
         id: 'madame-zostra',
         name: { en: 'Belladina Zostra', vi: 'Bà Belladina Zostra', nickname: 'Madame Zostra' },
+        color: 'blue',
         bio: {
             en: {
                 age: 37,
@@ -441,6 +450,7 @@ export const CHARACTERS = [
     {
         id: 'peter-akimoto',
         name: { en: 'Peter Akimoto', vi: 'Peter Akimoto' },
+        color: 'green',
         bio: {
             en: {
                 age: 13,
@@ -487,6 +497,7 @@ export const CHARACTERS = [
     {
         id: 'missy-dubourde',
         name: { en: 'Missy Dubourde', vi: 'Missy Dubourde' },
+        color: 'yellow',
         bio: {
             en: {
                 age: 9,
@@ -533,6 +544,7 @@ export const CHARACTERS = [
     {
         id: 'brandon-jaspers',
         name: { en: 'Brandon Jaspers', vi: 'Brandon Jaspers' },
+        color: 'green',
         bio: {
             en: {
                 age: 12,
@@ -579,6 +591,7 @@ export const CHARACTERS = [
     {
         id: 'zoe-ingstrom',
         name: { en: 'Zoe Ingstrom', vi: 'Zoe Ingstrom' },
+        color: 'yellow',
         bio: {
             en: {
                 age: 8,

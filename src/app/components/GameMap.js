@@ -186,10 +186,11 @@ function renderTokens(tokens) {
  * @param {string} roomId - Current room ID
  * @param {Record<string, string>} playerPositions - socketId -> roomId
  * @param {Record<string, string>} playerNames - socketId -> character name
+ * @param {Record<string, string>} playerColors - socketId -> color
  * @param {string} myId - Current player's socket ID
  * @returns {string}
  */
-function renderPawnMarkers(roomId, playerPositions, playerNames, myId) {
+function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, myId) {
     // Find all players in this room
     const playersInRoom = [];
     for (const [playerId, playerRoomId] of Object.entries(playerPositions)) {
@@ -197,6 +198,7 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, myId) {
             playersInRoom.push({
                 id: playerId,
                 name: playerNames[playerId] || 'Unknown',
+                color: playerColors[playerId] || 'white',
                 isMe: playerId === myId
             });
         }
@@ -207,9 +209,10 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, myId) {
     // Render each player pawn (no offset needed - flexbox handles spacing)
     const pawnsHtml = playersInRoom.map((player) => {
         const meClass = player.isMe ? 'map-pawn--me' : '';
+        const colorClass = `map-pawn--${player.color}`;
         
         return `
-            <div class="map-pawn ${meClass}" title="${player.name}">
+            <div class="map-pawn ${meClass} ${colorClass}" title="${player.name}">
                 <svg class="map-pawn__icon" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="12" cy="5" r="3.5"/>
                     <path d="M12 10c-3.5 0-7 2.5-7 6v4h14v-4c0-3.5-3.5-6-7-6z"/>
@@ -234,7 +237,21 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, myId) {
  * @param {Record<string, Room>} allRooms - All revealed rooms
  * @returns {string}
  */
-function renderRoomTile(room, connections, playerPositions, playerNames, myId, centerX, centerY, radius, allRooms) {
+/**
+ * Render a single room tile with relative positioning
+ * @param {Room} room
+ * @param {Record<string, string>} connections
+ * @param {Record<string, string>} playerPositions
+ * @param {Record<string, string>} playerNames
+ * @param {Record<string, string>} playerColors
+ * @param {string} myId
+ * @param {number} centerX - Player's X coord (for relative positioning)
+ * @param {number} centerY - Player's Y coord (for relative positioning)
+ * @param {number} radius - Viewport radius
+ * @param {Record<string, Room>} allRooms - All revealed rooms
+ * @returns {string}
+ */
+function renderRoomTile(room, connections, playerPositions, playerNames, playerColors, myId, centerX, centerY, radius, allRooms) {
     const floorClass = `map-room--${room.floor}`;
     
     // Check if current player is in this room
@@ -265,7 +282,7 @@ function renderRoomTile(room, connections, playerPositions, playerNames, myId, c
                 ${vaultDivider}
                 ${renderTokens(room.tokens)}
                 ${renderDoors(room.doors, connections, room, allRooms)}
-                ${renderPawnMarkers(room.id, playerPositions, playerNames, myId)}
+                ${renderPawnMarkers(room.id, playerPositions, playerNames, playerColors, myId)}
             </div>
         </div>
     `;
@@ -276,12 +293,13 @@ function renderRoomTile(room, connections, playerPositions, playerNames, myId, c
  * @param {MapState | null} mapState
  * @param {Record<string, string>} playerPositions - socketId -> roomId
  * @param {Record<string, string>} playerNames - socketId -> character name
+ * @param {Record<string, string>} playerColors - socketId -> color
  * @param {string} myId
  * @param {string | undefined} myPosition
  * @param {Object | null} roomPreview - Preview room data { name, doors, rotation, x, y, isValid }
  * @returns {string}
  */
-export function renderGameMap(mapState, playerPositions, playerNames, myId, myPosition, roomPreview = null) {
+export function renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview = null) {
     if (!mapState || !mapState.revealedRooms) {
         return `
             <div class="game-map game-map--empty">
@@ -317,6 +335,7 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
             roomConnections,
             playerPositions,
             playerNames,
+            playerColors,
             myId,
             centerX,
             centerY,
@@ -373,6 +392,24 @@ export function buildPlayerNamesMap(players, getCharacterName) {
             map[player.id] = getCharacterName(player.characterId);
         } else {
             map[player.id] = player.name || 'Unknown';
+        }
+    }
+    return map;
+}
+
+/**
+ * Get character color from player data
+ * @param {any[]} players - Array of player objects
+ * @param {(characterId: string) => string} getCharacterColor
+ * @returns {Record<string, string>}
+ */
+export function buildPlayerColorsMap(players, getCharacterColor) {
+    const map = {};
+    for (const player of players) {
+        if (player.characterId) {
+            map[player.id] = getCharacterColor(player.characterId);
+        } else {
+            map[player.id] = 'white';
         }
     }
     return map;

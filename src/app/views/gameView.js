@@ -1,7 +1,7 @@
 // Game View - Dice rolling phase and main gameplay
 import { CHARACTER_BY_ID, CHARACTERS } from '../data/charactersData.js';
 import * as socketClient from '../services/socketClient.js';
-import { renderGameMap, buildPlayerNamesMap } from '../components/GameMap.js';
+import { renderGameMap, buildPlayerNamesMap, buildPlayerColorsMap } from '../components/GameMap.js';
 import { ROOMS } from '../data/mapsData.js';
 import { ITEMS, EVENTS, OMENS } from '../data/cardsData.js';
 
@@ -341,6 +341,17 @@ function getCharacterName(characterId) {
     const char = CHARACTER_BY_ID[characterId];
     if (!char) return 'Unknown';
     return char.name.vi || char.name.nickname || char.name.en;
+}
+
+/**
+ * Get character color
+ * @param {string} characterId
+ * @returns {string}
+ */
+function getCharacterColor(characterId) {
+    const char = CHARACTER_BY_ID[characterId];
+    if (!char) return 'white';
+    return char.color || 'white';
 }
 
 /**
@@ -1199,6 +1210,7 @@ function renderGameScreen(gameState, myId) {
         const playerPositions = playerState.playerPositions || {};
         const players = gameState.players || [];
         const playerNames = buildPlayerNamesMap(players, getCharacterName);
+        const playerColors = buildPlayerColorsMap(players, getCharacterColor);
         const myPosition = playerPositions[myId];
         const revealedRooms = mapState?.revealedRooms || {};
         const currentRoom = myPosition ? revealedRooms[myPosition] : null;
@@ -1255,7 +1267,7 @@ function renderGameScreen(gameState, myId) {
                 <div class="game-main">
                     ${renderTurnOrder(gameState, myId)}
                     <div class="game-area">
-                        ${renderGameMap(mapState, playerPositions, playerNames, myId, myPosition, roomPreview)}
+                        ${renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview)}
                     </div>
                 </div>
             </div>

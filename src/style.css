@@ -3628,6 +3628,43 @@ select.field__input option {
     50% { transform: translateY(-2px); }
 }
 
+/* Pawn colors based on character */
+.map-pawn--red .map-pawn__icon {
+    color: #ff4444;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 4px rgba(255, 68, 68, 0.6));
+}
+
+.map-pawn--blue .map-pawn__icon {
+    color: #4488ff;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 4px rgba(68, 136, 255, 0.6));
+}
+
+.map-pawn--green .map-pawn__icon {
+    color: #44dd44;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 4px rgba(68, 221, 68, 0.6));
+}
+
+.map-pawn--yellow .map-pawn__icon {
+    color: #ffdd44;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 4px rgba(255, 221, 68, 0.6));
+}
+
+.map-pawn--white .map-pawn__icon {
+    color: #ffffff;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 4px rgba(255, 255, 255, 0.6));
+}
+
+.map-pawn--purple .map-pawn__icon {
+    color: #bb66ff;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 4px rgba(187, 102, 255, 0.6));
+}
+
 /* Larger rooms for better visibility */
 .game-map__grid {
     grid-template-columns: repeat(var(--grid-size, 5), 220px);
