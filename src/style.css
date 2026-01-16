@@ -2426,12 +2426,12 @@ select.field__input option {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     background: radial-gradient(ellipse at center, rgba(20, 15, 25, 0.9) 0%, rgba(10, 8, 12, 0.95) 100%);
     border: 1px solid rgba(139, 90, 43, 0.2);
     border-radius: 8px;
     padding: 12px;
     gap: 12px;
+    overflow: auto;
 }
 
 .game-map--empty {
@@ -2443,11 +2443,12 @@ select.field__input option {
 
 .game-map__header {
     text-align: center;
+    flex-shrink: 0;
 }
 
 .game-map__location {
     font-family: 'Playfair Display', Georgia, serif;
-    font-size: 1rem;
+    font-size: 1.2rem;
     font-weight: 600;
     color: #c9a55c;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
@@ -2464,6 +2465,7 @@ select.field__input option {
     grid-template-rows: repeat(var(--grid-size, 5), 90px);
     gap: 6px;
     position: relative;
+    flex-shrink: 0;
 }
 
 /* Room Tile */
@@ -2520,11 +2522,12 @@ select.field__input option {
     justify-content: center;
     padding: 8px;
     position: relative;
+    overflow: hidden;
 }
 
 .map-room__name {
     font-family: 'Playfair Display', Georgia, serif;
-    font-size: 0.65rem;
+    font-size: 1rem;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.85);
     text-align: center;
@@ -3580,46 +3583,91 @@ select.field__input option {
 }
 
 /* ============================================================
-   MAP PAWN ICON
+   MAP PAWN ICON - Multiple players support
    ============================================================ */
 
-.map-pawn {
+.map-pawns {
     position: absolute;
-    bottom: 8px;
+    bottom: 4px;
     left: 50%;
     transform: translateX(-50%);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    max-width: 90%;
+}
+
+.map-pawn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     animation: pawnBounce 2s ease-in-out infinite;
+    flex-shrink: 0;
 }
 
 .map-pawn__icon {
-    width: 28px;
-    height: 28px;
+    width: 16px;
+    height: 16px;
+    color: rgba(255, 255, 255, 0.7);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+/* Current player - highlighted with gold glow */
+.map-pawn--me .map-pawn__icon {
     color: #fff;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5))
-            drop-shadow(0 0 10px rgba(201, 165, 92, 0.5));
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+            drop-shadow(0 0 6px rgba(201, 165, 92, 0.8))
+            drop-shadow(0 0 12px rgba(201, 165, 92, 0.4));
 }
 
 @keyframes pawnBounce {
-    0%, 100% { transform: translateX(-50%) translateY(0); }
-    50% { transform: translateX(-50%) translateY(-3px); }
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
 }
 
 /* Larger rooms for better visibility */
 .game-map__grid {
-    grid-template-columns: repeat(var(--grid-size, 5), 110px);
-    grid-template-rows: repeat(var(--grid-size, 5), 110px);
+    grid-template-columns: repeat(var(--grid-size, 5), 220px);
+    grid-template-rows: repeat(var(--grid-size, 5), 220px);
 }
 
 .map-room {
-    width: 110px;
-    height: 110px;
+    width: 220px;
+    height: 220px;
 }
 
 .map-room__name {
-    font-size: 0.7rem;
+    font-size: 1rem;
+}
+
+/* Larger doors for 220px rooms */
+.map-door {
+    background: rgba(201, 165, 92, 0.9);
+    box-shadow: 0 0 6px rgba(201, 165, 92, 0.5);
+}
+
+.map-door--north,
+.map-door--south {
+    width: 30px;
+    height: 8px;
+}
+
+.map-door--east,
+.map-door--west {
+    width: 8px;
+    height: 30px;
+}
+
+.map-door--connected {
+    background: rgba(201, 165, 92, 1);
+    box-shadow: 0 0 12px rgba(201, 165, 92, 0.6);
+}
+
+.map-door--open {
+    background: rgba(139, 90, 43, 0.7);
 }
 
 /* Responsive sidebar and layout */
@@ -3748,27 +3796,27 @@ select.field__input option {
         font-size: 0.5rem;
     }
 
-    .card-slot__count {
+    .card_slot__count {
         font-size: 0.85rem;
     }
 
     .game-map__grid {
-        grid-template-columns: repeat(var(--grid-size, 5), 80px);
-        grid-template-rows: repeat(var(--grid-size, 5), 80px);
+        grid-template-columns: repeat(var(--grid-size, 5), 160px);
+        grid-template-rows: repeat(var(--grid-size, 5), 160px);
     }
 
     .map-room {
-        width: 80px;
-        height: 80px;
+        width: 160px;
+        height: 160px;
     }
 
     .map-room__name {
-        font-size: 0.6rem;
+        font-size: 0.8rem;
     }
 
     .map-pawn__icon {
-        width: 22px;
-        height: 22px;
+        width: 14px;
+        height: 14px;
     }
 }
 
@@ -3879,22 +3927,22 @@ select.field__input option {
     }
 
     .game-map__grid {
-        grid-template-columns: repeat(var(--grid-size, 5), 65px);
-        grid-template-rows: repeat(var(--grid-size, 5), 65px);
+        grid-template-columns: repeat(var(--grid-size, 5), 130px);
+        grid-template-rows: repeat(var(--grid-size, 5), 130px);
     }
 
     .map-room {
-        width: 65px;
-        height: 65px;
+        width: 130px;
+        height: 130px;
     }
 
     .map-room__name {
-        font-size: 0.5rem;
+        font-size: 0.7rem;
     }
 
     .map-pawn__icon {
-        width: 18px;
-        height: 18px;
+        width: 12px;
+        height: 12px;
     }
 }
 
@@ -3938,22 +3986,22 @@ select.field__input option {
     }
 
     .game-map__grid {
-        grid-template-columns: repeat(var(--grid-size, 5), 55px);
-        grid-template-rows: repeat(var(--grid-size, 5), 55px);
+        grid-template-columns: repeat(var(--grid-size, 5), 110px);
+        grid-template-rows: repeat(var(--grid-size, 5), 110px);
     }
 
     .map-room {
-        width: 55px;
-        height: 55px;
+        width: 110px;
+        height: 110px;
     }
 
     .map-room__name {
-        font-size: 0.4rem;
+        font-size: 0.6rem;
     }
 
     .map-pawn__icon {
-        width: 14px;
-        height: 14px;
+        width: 10px;
+        height: 10px;
     }
 }
 
@@ -4609,43 +4657,44 @@ select.field__input option {
 /* Doors on preview - same style as regular rooms */
 .map-room-preview .map-door {
     position: absolute;
-    background: rgba(212, 175, 55, 0.8);
+    background: rgba(212, 175, 55, 0.9);
+    box-shadow: 0 0 6px rgba(212, 175, 55, 0.5);
 }
 
 .map-room-preview .map-door--north {
-    top: -2px;
+    top: -4px;
     left: 50%;
     transform: translateX(-50%);
-    width: 16px;
-    height: 4px;
-    border-radius: 0 0 2px 2px;
+    width: 30px;
+    height: 8px;
+    border-radius: 2px;
 }
 
 .map-room-preview .map-door--south {
-    bottom: -2px;
+    bottom: -4px;
     left: 50%;
     transform: translateX(-50%);
-    width: 16px;
-    height: 4px;
-    border-radius: 2px 2px 0 0;
+    width: 30px;
+    height: 8px;
+    border-radius: 2px;
 }
 
 .map-room-preview .map-door--east {
-    right: -2px;
+    right: -4px;
     top: 50%;
     transform: translateY(-50%);
-    width: 4px;
-    height: 16px;
-    border-radius: 2px 0 0 2px;
+    width: 8px;
+    height: 30px;
+    border-radius: 2px;
 }
 
 .map-room-preview .map-door--west {
-    left: -2px;
+    left: -4px;
     top: 50%;
     transform: translateY(-50%);
-    width: 4px;
-    height: 16px;
-    border-radius: 0 2px 2px 0;
+    width: 8px;
+    height: 30px;
+    border-radius: 2px;
 }
 
 @keyframes previewPulse {

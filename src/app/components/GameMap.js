@@ -124,36 +124,64 @@ function renderTokens(tokens) {
 }
 
 /**
- * Render pawn icon for current player's room only
- * @param {boolean} isMyRoom - Whether this is the current player's room
+ * Render pawn icons for all players in this room
+ * @param {string} roomId - Current room ID
+ * @param {Record<string, string>} playerPositions - socketId -> roomId
+ * @param {Record<string, string>} playerNames - socketId -> character name
+ * @param {string} myId - Current player's socket ID
  * @returns {string}
  */
-function renderPawnMarker(isMyRoom) {
-    if (!isMyRoom) return '';
-
-    return `
-        <div class="map-pawn">
-            <svg class="map-pawn__icon" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="5" r="3.5"/>
-                <path d="M12 10c-3.5 0-7 2.5-7 6v4h14v-4c0-3.5-3.5-6-7-6z"/>
-            </svg>
-        </div>
-    `;
+function renderPawnMarkers(roomId, playerPositions, playerNames, myId) {
+    // Find all players in this room
+    const playersInRoom = [];
+    for (const [playerId, playerRoomId] of Object.entries(playerPositions)) {
+        if (playerRoomId === roomId) {
+            playersInRoom.push({
+                id: playerId,
+                name: playerNames[playerId] || 'Unknown',
+                isMe: playerId === myId
+            });
+        }
+    }
+    
+    if (playersInRoom.length === 0) return '';
+    
+    // Render each player pawn (no offset needed - flexbox handles spacing)
+    const pawnsHtml = playersInRoom.map((player) => {
+        const meClass = player.isMe ? 'map-pawn--me' : '';
+        
+        return `
+            <div class="map-pawn ${meClass}" title="${player.name}">
+                <svg class="map-pawn__icon" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="5" r="3.5"/>
+                    <path d="M12 10c-3.5 0-7 2.5-7 6v4h14v-4c0-3.5-3.5-6-7-6z"/>
+                </svg>
+            </div>
+        `;
+    }).join('');
+    
+    return `<div class="map-pawns">${pawnsHtml}</div>`;
 }
 
 /**
  * Render a single room tile with relative positioning
  * @param {Room} room
  * @param {Record<string, string>} connections
- * @param {boolean} isCurrentRoom
+ * @param {Record<string, string>} playerPositions
+ * @param {Record<string, string>} playerNames
+ * @param {string} myId
  * @param {number} centerX - Player's X coord (for relative positioning)
  * @param {number} centerY - Player's Y coord (for relative positioning)
  * @param {number} radius - Viewport radius
  * @returns {string}
  */
-function renderRoomTile(room, connections, isCurrentRoom, centerX, centerY, radius) {
+function renderRoomTile(room, connections, playerPositions, playerNames, myId, centerX, centerY, radius) {
     const floorClass = `map-room--${room.floor}`;
-    const currentClass = isCurrentRoom ? 'map-room--current' : '';
+    
+    // Check if current player is in this room
+    const isMyRoom = playerPositions[myId] === room.id;
+    const currentClass = isMyRoom ? 'map-room--current' : '';
+    
     const hasTokens = room.tokens && room.tokens.length > 0;
     const tokensClass = hasTokens ? 'map-room--has-tokens' : '';
     
@@ -178,7 +206,7 @@ function renderRoomTile(room, connections, isCurrentRoom, centerX, centerY, radi
                 ${vaultDivider}
                 ${renderTokens(room.tokens)}
                 ${renderDoors(room.doors, connections)}
-                ${renderPawnMarker(isCurrentRoom)}
+                ${renderPawnMarkers(room.id, playerPositions, playerNames, myId)}
             </div>
         </div>
     `;
@@ -221,15 +249,16 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
     // Grid size is (2*radius + 1) x (2*radius + 1)
     const gridSize = VIEWPORT_RADIUS * 2 + 1;
 
-    // Render visible rooms (only show pawn on current player's room)
+    // Render visible rooms (show all players in visible rooms)
     const roomsHtml = visibleRooms.map((room) => {
         const roomConnections = connections[room.id] || {};
-        const isCurrentRoom = room.id === myPosition;
 
         return renderRoomTile(
             room, 
             roomConnections,
-            isCurrentRoom,
+            playerPositions,
+            playerNames,
+            myId,
             centerX,
             centerY,
             VIEWPORT_RADIUS
@@ -261,14 +290,8 @@ export function renderGameMap(mapState, playerPositions, playerNames, myId, myPo
         `;
     }
 
-    // Get current room name for display
-    const locationText = currentRoom ? currentRoom.name : 'Unknown';
-
     return `
         <div class="game-map">
-            <div class="game-map__header">
-                <span class="game-map__location">${locationText}</span>
-            </div>
             <div class="game-map__grid" style="--grid-size: ${gridSize};">
                 ${roomsHtml}
                 ${previewHtml}
