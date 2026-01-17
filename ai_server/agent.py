@@ -1,6 +1,6 @@
 """
-Interactive CLI agent for Chat Completions API.
-API endpoint: http://localhost:8317/v1/chat/completions
+Interactive CLI agent for LM Studio local.
+API endpoint: http://localhost:1234/v1/chat/completions
 """
 
 import json
@@ -12,8 +12,8 @@ import requests
 from dotenv import load_dotenv
 
 
-API_URL = os.getenv("API_URL", "http://localhost:8317/v1/chat/completions")
-MODELS_URL = os.getenv("MODELS_URL", "http://localhost:8317/v1/models")
+API_URL = os.getenv("API_URL", "http://localhost:1234/v1/chat/completions")
+MODELS_URL = os.getenv("MODELS_URL", "http://localhost:1234/v1/models")
 
 
 def load_env():
@@ -25,9 +25,14 @@ def load_env():
     # utf-8-sig handles BOM (common on Windows)
     load_dotenv(dotenv_path=env_path, override=True, encoding="utf-8-sig")
 
+    # Reload URLs after loading .env
+    global API_URL, MODELS_URL
+    API_URL = os.getenv("API_URL", "http://localhost:1234/v1/chat/completions")
+    MODELS_URL = os.getenv("MODELS_URL", "http://localhost:1234/v1/models")
+
     api_key = os.getenv("API_KEY")
-    use_auth = os.getenv("USE_AUTH", "true").strip().lower() in {"1", "true", "yes", "y"}
-    model_name = os.getenv("MODEL_NAME", "gemini-3-flash-preview")
+    use_auth = os.getenv("USE_AUTH", "false").strip().lower() in {"1", "true", "yes", "y"}
+    model_name = os.getenv("MODEL_NAME", "").strip()
 
     # Extra safety: if .env was read with BOM and python-dotenv didn't pick it up
     if not api_key and env_path.exists():
@@ -79,20 +84,58 @@ def extract_assistant_text(data: dict) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
-def maybe_print_available_models(headers: dict):
+def fetch_available_models(headers: dict) -> list[str]:
+    """Fetch available models from LM Studio."""
     try:
-        resp = requests.get(MODELS_URL, headers=headers, timeout=5)
+        resp = requests.get(MODELS_URL, headers=headers, timeout=10)
         if resp.status_code != 200:
-            return
+            return []
         data = resp.json()
-        print("\nAvailable models:")
-        print(json.dumps(data, indent=2, ensure_ascii=False))
-    except Exception:
-        return
+        models = data.get("data", [])
+        return [m.get("id") for m in models if m.get("id")]
+    except requests.exceptions.ConnectionError:
+        print("Error: Could not connect to LM Studio.")
+        print(f"Make sure LM Studio is running at {MODELS_URL}")
+        return []
+    except Exception as e:
+        print(f"Error fetching models: {e}")
+        return []
+
+
+def select_model(models: list[str], env_model: str) -> str | None:
+    """Let user select a model from available models."""
+    if not models:
+        return None
+
+    # If env has a valid model, use it
+    if env_model and env_model in models:
+        print(f"Using model from .env: {env_model}")
+        return env_model
+
+    print("\nAvailable models:")
+    for i, model in enumerate(models, 1):
+        print(f"  {i}. {model}")
+
+    while True:
+        try:
+            choice = input("\nSelect model (number): ").strip()
+            if not choice:
+                # Default to first model
+                print(f"Using default: {models[0]}")
+                return models[0]
+
+            idx = int(choice) - 1
+            if 0 <= idx < len(models):
+                return models[idx]
+            print(f"Invalid choice. Enter 1-{len(models)}")
+        except ValueError:
+            print("Please enter a number.")
+        except (EOFError, KeyboardInterrupt):
+            return None
 
 
 def run_agent():
-    api_key, use_auth, model_name, env_path = load_env()
+    api_key, use_auth, env_model_name, env_path = load_env()
     headers = build_headers(api_key, use_auth)
 
     if use_auth and not api_key:
@@ -100,8 +143,25 @@ def run_agent():
         print(f"Expected .env at: {env_path}")
         sys.exit(1)
 
-    print("Agent ready.")
-    print(f"- URL: {API_URL}")
+    print("Connecting to LM Studio...")
+    print(f"- API URL: {API_URL}")
+    print(f"- Models URL: {MODELS_URL}")
+
+    # Fetch and select model
+    models = fetch_available_models(headers)
+    if not models:
+        print("\nNo models found. Please:")
+        print("  1. Make sure LM Studio is running")
+        print("  2. Load a model in LM Studio")
+        print("  3. Try again")
+        sys.exit(1)
+
+    model_name = select_model(models, env_model_name)
+    if not model_name:
+        print("No model selected. Exiting.")
+        sys.exit(1)
+
+    print(f"\nAgent ready.")
     print(f"- Model: {model_name}")
     print(f"- Auth: {'on' if use_auth else 'off'}")
     print("Type your message. Use /exit to quit.\n")
@@ -128,11 +188,11 @@ def run_agent():
         try:
             resp = requests.post(API_URL, headers=headers, json=payload, timeout=60)
         except requests.exceptions.ConnectionError:
-            print("Connection error: Could not connect to API server.")
-            print("Make sure the API server is running.")
+            print("Connection error: Could not connect to LM Studio.")
+            print("Make sure LM Studio is running.")
             continue
         except requests.exceptions.Timeout:
-            print("Timeout: API took too long to respond.")
+            print("Timeout: LM Studio took too long to respond.")
             continue
         except requests.exceptions.RequestException as e:
             print(f"Request error: {e}")
@@ -156,11 +216,9 @@ def run_agent():
             print(resp.text)
             continue
 
-        if resp.status_code == 400 and "unknown provider" in resp.text.lower():
-            print("Invalid model/provider (400):")
+        if resp.status_code == 400:
+            print("Bad request (400):")
             print(resp.text)
-            print("\nTip: set env MODEL_NAME to a valid model.")
-            maybe_print_available_models(headers)
             continue
 
         print(f"Request failed ({resp.status_code}):")
@@ -169,5 +227,3 @@ def run_agent():
 
 if __name__ == "__main__":
     run_agent()
-
-
