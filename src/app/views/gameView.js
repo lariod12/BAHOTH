@@ -2194,6 +2194,52 @@ function centerMapOnPlayer(mountEl, smooth = false) {
 }
 
 /**
+ * Center map on room preview position (for room discovery mode)
+ * @param {HTMLElement} mountEl
+ * @param {boolean} smooth - Use smooth scrolling (default: false for instant)
+ */
+function centerMapOnPreview(mountEl, smooth = false) {
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            const gameMap = mountEl.querySelector('.game-map');
+            const grid = mountEl.querySelector('.game-map__grid');
+            if (!gameMap || !grid) return;
+
+            const previewCol = parseInt(gameMap.dataset.previewCol) || 0;
+            const previewRow = parseInt(gameMap.dataset.previewRow) || 0;
+
+            if (previewCol === 0 && previewRow === 0) return;
+
+            // Cell size (90px) + gap (6px)
+            const cellSize = 96;
+
+            // Get computed padding from grid
+            const gridStyle = getComputedStyle(grid);
+            const paddingLeft = parseFloat(gridStyle.paddingLeft) || 0;
+            const paddingTop = parseFloat(gridStyle.paddingTop) || 0;
+
+            // Preview cell position within grid content area (0-indexed)
+            const previewCellX = (previewCol - 1) * cellSize;
+            const previewCellY = (previewRow - 1) * cellSize;
+
+            // Absolute position in scrollable area (padding + cell position + half cell to center)
+            const targetX = paddingLeft + previewCellX + (cellSize / 2);
+            const targetY = paddingTop + previewCellY + (cellSize / 2);
+
+            // Scroll to center the preview in viewport
+            const scrollX = targetX - (gameMap.clientWidth / 2);
+            const scrollY = targetY - (gameMap.clientHeight / 2);
+
+            gameMap.scrollTo({
+                left: Math.max(0, scrollX),
+                top: Math.max(0, scrollY),
+                behavior: smooth ? 'smooth' : 'instant'
+            });
+        });
+    });
+}
+
+/**
  * Update game UI
  */
 async function updateGameUI(mountEl, gameState, myId) {
@@ -2221,8 +2267,14 @@ async function updateGameUI(mountEl, gameState, myId) {
     const html = renderGameScreen(gameState, myId);
     mountEl.innerHTML = html;
 
-    // Center map on player position after render
-    centerMapOnPlayer(mountEl);
+    // Center map based on current mode
+    if (roomDiscoveryModal?.isOpen && roomDiscoveryModal?.selectedRoom) {
+        // When room discovery modal is open with a selected room, focus on preview
+        centerMapOnPreview(mountEl);
+    } else {
+        // Otherwise focus on player position
+        centerMapOnPlayer(mountEl);
+    }
 }
 
 /**

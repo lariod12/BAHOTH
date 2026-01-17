@@ -538,8 +538,16 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
     const playerGridCol = playerCoords.x - bounds.minX + 1;
     const playerGridRow = bounds.maxY - playerCoords.y + 1;
 
+    // Calculate preview grid position if present
+    let previewDataAttrs = '';
+    if (roomPreview) {
+        const previewGridCol = roomPreview.x - bounds.minX + 1;
+        const previewGridRow = bounds.maxY - roomPreview.y + 1;
+        previewDataAttrs = `data-preview-col="${previewGridCol}" data-preview-row="${previewGridRow}"`;
+    }
+
     return `
-        <div class="game-map" data-player-col="${playerGridCol}" data-player-row="${playerGridRow}">
+        <div class="game-map" data-player-col="${playerGridCol}" data-player-row="${playerGridRow}" ${previewDataAttrs}>
             <div class="game-map__grid" style="--grid-width: ${gridWidth}; --grid-height: ${gridHeight};">
                 ${roomsHtml}
                 ${previewHtml}
