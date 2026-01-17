@@ -34,6 +34,7 @@ let sidebarOpen = false;
 let introShown = false;
 let introTimeout = null;
 let turnOrderExpanded = false; // Turn order collapsed by default
+let skipMapCentering = false; // Flag to skip map centering on next updateGameUI
 let tutorialOpen = false; // Tutorial modal state
 /** @type {Set<string>} Track expanded player IDs in sidebar */
 let expandedPlayers = new Set();
@@ -1550,9 +1551,10 @@ function attachDebugEventListeners(mountEl) {
         if (turnOrderExpanded) {
             const turnOrder = mountEl.querySelector('.turn-order');
             const isClickInsideTurnOrder = turnOrder?.contains(target);
-            
+
             if (!isClickInsideTurnOrder) {
                 turnOrderExpanded = false;
+                skipMapCentering = true; // Don't jump to player when closing turn order
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
         }
@@ -1560,6 +1562,7 @@ function attachDebugEventListeners(mountEl) {
         // Toggle turn order expand/collapse
         if (action === 'toggle-turn-order') {
             turnOrderExpanded = !turnOrderExpanded;
+            skipMapCentering = true; // Don't jump to player when toggling turn order
             updateGameUI(mountEl, currentGameState, mySocketId);
             return;
         }
@@ -1573,6 +1576,7 @@ function attachDebugEventListeners(mountEl) {
                     debugCurrentPlayerIndex = playerIdx;
                     // Set mySocketId to the actual player ID from game state
                     mySocketId = currentGameState.players[playerIdx].id;
+                    skipMapCentering = true; // Don't jump to player when switching in turn order
                     updateGameUI(mountEl, currentGameState, mySocketId);
                 }
             }
@@ -1972,9 +1976,10 @@ function attachEventListeners(mountEl, roomId) {
         if (turnOrderExpanded) {
             const turnOrder = mountEl.querySelector('.turn-order');
             const isClickInsideTurnOrder = turnOrder?.contains(target);
-            
+
             if (!isClickInsideTurnOrder) {
                 turnOrderExpanded = false;
+                skipMapCentering = true; // Don't jump to player when closing turn order
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
         }
@@ -1982,6 +1987,7 @@ function attachEventListeners(mountEl, roomId) {
         // Toggle turn order expand/collapse
         if (action === 'toggle-turn-order') {
             turnOrderExpanded = !turnOrderExpanded;
+            skipMapCentering = true; // Don't jump to player when toggling turn order
             updateGameUI(mountEl, currentGameState, mySocketId);
             return;
         }
@@ -2266,6 +2272,12 @@ async function updateGameUI(mountEl, gameState, myId) {
 
     const html = renderGameScreen(gameState, myId);
     mountEl.innerHTML = html;
+
+    // Skip centering if flag is set (e.g., when toggling turn order)
+    if (skipMapCentering) {
+        skipMapCentering = false;
+        return;
+    }
 
     // Center map based on current mode
     if (roomDiscoveryModal?.isOpen && roomDiscoveryModal?.selectedRoom) {
