@@ -1,0 +1,118 @@
+{
+  "session_id": "362e2c38",
+  "saved_at": "2026-01-18T02:21:24.688545",
+  "game_state": {
+    "phase": "exploration",
+    "total_players": 3,
+    "agent_position": 1,
+    "agent_character": "professor-longfellow",
+    "turn_number": 2,
+    "agent_stats": {
+      "speed": {
+        "index": 3,
+        "value": 4
+      },
+      "might": {
+        "index": 2,
+        "value": 3
+      },
+      "sanity": {
+        "index": 2,
+        "value": 3
+      },
+      "knowledge": {
+        "index": 3,
+        "value": 5
+      }
+    },
+    "agent_items": [],
+    "agent_omens": [],
+    "agent_room": "ballroom",
+    "agent_floor": "ground",
+    "haunt_started": false,
+    "is_traitor": false,
+    "other_players": [
+      {
+        "name": "s",
+        "character": "ox-bellows",
+        "character_name": "Ox Bellows",
+        "room": "entrance-hall",
+        "floor": "ground"
+      },
+      {
+        "name": "e",
+        "character": "brandon-jaspers",
+        "character_name": "Brandon Jaspers",
+        "room": "entrance-hall",
+        "floor": "ground"
+      }
+    ],
+    "discovered_rooms": [
+      "entrance-hall",
+      "foyer",
+      "grand-staircase",
+      "upper-landing",
+      "ballroom"
+    ]
+  },
+  "turn_history": [
+    {
+      "turn": 1,
+      "actions": [
+        {
+          "type": "start",
+          "room": "entrance-hall"
+        },
+        {
+          "type": "explore",
+          "direction": "left",
+          "room": "ballroom"
+        },
+        {
+          "type": "draw",
+          "token_type": "event",
+          "card_name": "Cầu thang bí mật"
+        }
+      ],
+      "end_state": {
+        "room": "ballroom",
+        "stats": {
+          "speed": {
+            "index": 3,
+            "value": 4
+          },
+          "might": {
+            "index": 2,
+            "value": 3
+          },
+          "sanity": {
+            "index": 2,
+            "value": 3
+          },
+          "knowledge": {
+            "index": 3,
+            "value": 5
+          }
+        },
+        "items": [],
+        "omens": [],
+        "other_players": [
+          {
+            "name": "s",
+            "character": "ox-bellows",
+            "character_name": "Ox Bellows",
+            "room": "entrance-hall",
+            "floor": "ground"
+          },
+          {
+            "name": "e",
+            "character": "brandon-jaspers",
+            "character_name": "Brandon Jaspers",
+            "room": "entrance-hall",
+            "floor": "ground"
+          }
+        ]
+      }
+    }
+  ]
+}
