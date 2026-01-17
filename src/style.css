@@ -3516,6 +3516,164 @@ select.field__input option {
     cursor: not-allowed;
 }
 
+/* Dice Event Modal */
+.dice-event-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.dice-event-modal {
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 320px;
+    overflow: hidden;
+}
+
+.dice-event-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dice-event-modal__title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    color: #c9a55c;
+}
+
+.dice-event-modal__close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.dice-event-modal__close:hover {
+    color: #fff;
+}
+
+.dice-event-modal__body {
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.dice-event-modal__input-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dice-event-modal__label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dice-event-modal__input {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 1.2rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.dice-event-modal__input:focus {
+    border-color: #c9a55c;
+}
+
+.dice-event-modal__input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.dice-event-modal__actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.dice-event-modal__btn {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dice-event-modal__btn--confirm {
+    background: #c9a55c;
+    color: #1a1a1a;
+}
+
+.dice-event-modal__btn--confirm:hover {
+    background: #d4b46a;
+}
+
+.dice-event-modal__btn--random {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dice-event-modal__btn--random:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.dice-event-modal__btn--close {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dice-event-modal__btn--close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.dice-event-modal__result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.dice-event-modal__result-label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dice-event-modal__result-value {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #c9a55c;
+}
+
 .game-sidebar.is-my-turn {
     border-color: rgba(201, 165, 92, 0.5);
 }

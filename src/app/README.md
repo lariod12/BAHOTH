@@ -1084,6 +1084,7 @@ export function renderRoomView({ mountEl, onNavigate, roomId })
 - **Token drawing**: Draw omen/event/item cards
 - **Character stats tracking**: Display and modify traits
 - **Stat adjustment modal**: +/- buttons for trait changes
+- **Dice event modal**: Manual input or random roll (0-16)
 - **Game map rendering**: Via `GameMap` component
 - **Player sidebar**: Character info and stats
 - **Turn order bar**: Click to see detailed turn order
@@ -1114,11 +1115,12 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode })
 ```
 
 **Modal States**:
-- `isRoomPlacementMode` - Placing a new room
-- `isTokenDrawMode` - Drawing cards
-- `isStatAdjustmentMode` - Modifying character traits
-- `isCardsViewMode` - Viewing collected cards
-- `isTurnOrderDetailMode` - Viewing turn order details
+- `roomDiscoveryModal` - Placing a new room
+- `tokenDrawingModal` - Drawing cards
+- `statAdjustModal` - Modifying character traits
+- `cardsViewModal` - Viewing collected cards
+- `diceEventModal` - Manual dice input or random roll (0-16)
+- `tutorialOpen` - Viewing tutorial modal
 
 **Key Functions** (internal):
 ```javascript
@@ -1126,8 +1128,9 @@ function renderGameScreen()               // Main game UI
 function renderDiceRollOverlay()          // Turn order phase
 function renderRoomPlacementModal()       // Room placement
 function renderTokenDrawModal()           // Card drawing
-function renderStatAdjustmentModal()      // Trait modification
+function renderStatAdjustModal()          // Trait modification
 function renderCardsViewModal()           // Card browser
+function renderDiceEventModal()           // Dice event (0-16 input/random)
 function renderSidebar()                  // Character stats panel
 function renderPlayerBar()                // Turn order bar
 function handleMove(direction)            // Player movement
@@ -1795,7 +1798,7 @@ function renderComponent(props) {
 
 ---
 
-**Last Updated**: 2026-01-17 @ 19:45 (based on commit `48bd460`)
+**Last Updated**: 2026-01-17 @ 21:30 (based on commit `8ed05fd`)
 
 **Maintainers**: See [package.json](../../package.json) for contact info
 

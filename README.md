@@ -117,6 +117,7 @@ http://localhost:5173/#/game/debug
 - Special room layouts (Vault với zone-based tokens)
 - Floor transitions (stairs giữa các tầng)
 - Active player indicator (mũi tên chỉ người chơi hiện tại)
+- Dice event modal (nhập số hoặc random 0-16)
 - Debug mode cho local testing
 - Real-time multiplayer synchronization
 

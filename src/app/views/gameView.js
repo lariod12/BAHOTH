@@ -22,6 +22,10 @@ let cardsViewModal = null;
 /** @type {{ isOpen: boolean; stat: 'speed'|'might'|'sanity'|'knowledge'; playerId: string; tempIndex: number; originalIndex: number } | null} */
 let statAdjustModal = null;
 
+// Dice event modal state
+/** @type {{ isOpen: boolean; inputValue: string; result: number | null } | null} */
+let diceEventModal = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -716,6 +720,68 @@ function renderStatAdjustModal() {
 }
 
 /**
+ * Render dice event modal - allows manual input or random roll (0-16)
+ * @returns {string} HTML string
+ */
+function renderDiceEventModal() {
+    if (!diceEventModal?.isOpen) return '';
+
+    const { inputValue, result } = diceEventModal;
+    const hasResult = result !== null;
+
+    return `
+        <div class="dice-event-overlay" data-action="close-dice-event">
+            <div class="dice-event-modal" data-modal-content="true">
+                <header class="dice-event-modal__header">
+                    <h3 class="dice-event-modal__title">Tung xuc xac</h3>
+                    <button class="dice-event-modal__close" type="button" data-action="close-dice-event">×</button>
+                </header>
+                <div class="dice-event-modal__body">
+                    ${hasResult ? `
+                        <div class="dice-event-modal__result">
+                            <span class="dice-event-modal__result-label">Ket qua:</span>
+                            <span class="dice-event-modal__result-value">${result}</span>
+                        </div>
+                    ` : `
+                        <div class="dice-event-modal__input-group">
+                            <label class="dice-event-modal__label">Nhap so (0-16):</label>
+                            <input
+                                type="number"
+                                class="dice-event-modal__input"
+                                min="0"
+                                max="16"
+                                value="${inputValue}"
+                                data-input="dice-event-value"
+                                placeholder="0-16"
+                            />
+                        </div>
+                        <div class="dice-event-modal__actions">
+                            <button class="dice-event-modal__btn dice-event-modal__btn--confirm"
+                                    type="button"
+                                    data-action="dice-event-confirm">
+                                Xac nhan
+                            </button>
+                            <button class="dice-event-modal__btn dice-event-modal__btn--random"
+                                    type="button"
+                                    data-action="dice-event-random">
+                                Ngau nhien
+                            </button>
+                        </div>
+                    `}
+                    ${hasResult ? `
+                        <button class="dice-event-modal__btn dice-event-modal__btn--close"
+                                type="button"
+                                data-action="close-dice-event">
+                            Dong
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render character modal (reused from roomView)
  */
 function renderCharacterModal() {
@@ -1239,7 +1305,7 @@ function renderGameControls(gameState, myId) {
                     ▼
                 </button>
             </div>
-            <button class="dice-event-btn" type="button" data-action="dice-event" disabled title="Chi kich hoat khi co su kien">
+            <button class="dice-event-btn" type="button" data-action="dice-event" title="Tung xuc xac (0-16)">
                 <svg class="dice-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="4" y="4" width="40" height="40" rx="6" stroke="currentColor" stroke-width="2.5" fill="none"/>
                     <circle cx="14" cy="14" r="3.5" fill="currentColor"/>
@@ -1415,6 +1481,7 @@ function renderGameScreen(gameState, myId) {
             ${renderTokenDrawingModal()}
             ${renderCardsViewModal()}
             ${renderStatAdjustModal()}
+            ${renderDiceEventModal()}
             ${renderTutorialModal()}
         `;
     } else {
@@ -1890,6 +1957,59 @@ function attachDebugEventListeners(mountEl) {
             return;
         }
 
+        // Dice event - open modal
+        if (action === 'dice-event') {
+            diceEventModal = {
+                isOpen: true,
+                inputValue: '',
+                result: null
+            };
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Dice event confirm (manual input)
+        if (action === 'dice-event-confirm') {
+            const input = mountEl.querySelector('[data-input="dice-event-value"]');
+            const value = parseInt(input?.value, 10);
+            if (!isNaN(value) && value >= 0 && value <= 16) {
+                diceEventModal = {
+                    ...diceEventModal,
+                    result: value
+                };
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Dice event random roll
+        if (action === 'dice-event-random') {
+            const randomValue = Math.floor(Math.random() * 17); // 0-16
+            diceEventModal = {
+                ...diceEventModal,
+                result: randomValue
+            };
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Close dice event modal
+        if (action === 'close-dice-event') {
+            // Don't close if clicking inside modal content (except close button)
+            const isInsideModalContent = target.closest('[data-modal-content="true"]');
+            const isCloseButton = target.closest('.dice-event-modal__close') || target.closest('.dice-event-modal__btn--close');
+            if (isInsideModalContent && !isCloseButton) {
+                return;
+            }
+            diceEventModal = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
         // View character detail
         if (action === 'view-character-detail') {
             const charId = actionEl?.dataset.characterId;
@@ -2091,9 +2211,56 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
-        // Dice event (disabled for now)
+        // Dice event - open modal
         if (action === 'dice-event') {
-            // Placeholder for future events
+            diceEventModal = {
+                isOpen: true,
+                inputValue: '',
+                result: null
+            };
+            skipMapCentering = true;
+            updateGameUI(mountEl, onNavigate);
+            return;
+        }
+
+        // Dice event confirm (manual input)
+        if (action === 'dice-event-confirm') {
+            const input = mountEl.querySelector('[data-input="dice-event-value"]');
+            const value = parseInt(input?.value, 10);
+            if (!isNaN(value) && value >= 0 && value <= 16) {
+                diceEventModal = {
+                    ...diceEventModal,
+                    result: value
+                };
+                skipMapCentering = true;
+                updateGameUI(mountEl, onNavigate);
+            }
+            return;
+        }
+
+        // Dice event random roll
+        if (action === 'dice-event-random') {
+            const randomValue = Math.floor(Math.random() * 17); // 0-16
+            diceEventModal = {
+                ...diceEventModal,
+                result: randomValue
+            };
+            skipMapCentering = true;
+            updateGameUI(mountEl, onNavigate);
+            return;
+        }
+
+        // Close dice event modal
+        if (action === 'close-dice-event') {
+            // Don't close if clicking inside modal content (except close button)
+            const isInsideModalContent = target.closest('[data-modal-content="true"]');
+            const isCloseButton = target.closest('.dice-event-modal__close') || target.closest('.dice-event-modal__btn--close');
+            if (isInsideModalContent && !isCloseButton) {
+                return;
+            }
+            diceEventModal = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, onNavigate);
             return;
         }
 
@@ -2270,12 +2437,31 @@ async function updateGameUI(mountEl, gameState, myId) {
         // Note: Intro is now controlled by checkAllPlayersActive, not by timeout
     }
 
+    // Save scroll position before re-render if we need to preserve it
+    let savedScrollLeft = 0;
+    let savedScrollTop = 0;
+    if (skipMapCentering) {
+        const gameMap = mountEl.querySelector('.game-map');
+        if (gameMap) {
+            savedScrollLeft = gameMap.scrollLeft;
+            savedScrollTop = gameMap.scrollTop;
+        }
+    }
+
     const html = renderGameScreen(gameState, myId);
     mountEl.innerHTML = html;
 
-    // Skip centering if flag is set (e.g., when toggling turn order)
+    // Skip centering if flag is set (e.g., when toggling turn order, closing modals)
     if (skipMapCentering) {
         skipMapCentering = false;
+        // Restore scroll position after DOM update
+        requestAnimationFrame(() => {
+            const gameMap = mountEl.querySelector('.game-map');
+            if (gameMap) {
+                gameMap.scrollLeft = savedScrollLeft;
+                gameMap.scrollTop = savedScrollTop;
+            }
+        });
         return;
     }
 
