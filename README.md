@@ -116,6 +116,7 @@ http://localhost:5173/#/game/debug
 - Character trait tracking và adjustment
 - Special room layouts (Vault với zone-based tokens)
 - Floor transitions (stairs giữa các tầng)
+- Active player indicator (mũi tên chỉ người chơi hiện tại)
 - Debug mode cho local testing
 - Real-time multiplayer synchronization
 
@@ -168,4 +169,4 @@ Dự án này được tạo cho mục đích giáo dục và giải trí.
 
 ---
 
-**Last Updated**: 2026-01-17
+**Last Updated**: 2026-01-17 @ 19:45

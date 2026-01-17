@@ -281,11 +281,12 @@ function renderVaultTokens(tokens, vaultLayout) {
  * @param {Record<string, string>} playerNames - socketId -> character name
  * @param {Record<string, string>} playerColors - socketId -> color
  * @param {string} myId - Current player's socket ID
+ * @param {string | null} activePlayerId - ID of the active player (current turn)
  * @param {Object} [vaultLayout] - Optional Vault layout for spawn positioning
  * @param {Record<string, string>} [playerEntryDirections] - socketId -> entry direction (north/south/east/west)
  * @returns {string}
  */
-function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, myId, vaultLayout = null, playerEntryDirections = {}) {
+function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, myId, activePlayerId, vaultLayout = null, playerEntryDirections = {}) {
     // Find all players in this room
     const playersInRoom = [];
     for (const [playerId, playerRoomId] of Object.entries(playerPositions)) {
@@ -295,13 +296,14 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
                 name: playerNames[playerId] || 'Unknown',
                 color: playerColors[playerId] || 'white',
                 isMe: playerId === myId,
+                isActive: playerId === activePlayerId,
                 entryDirection: playerEntryDirections[playerId] || null
             });
         }
     }
-    
+
     if (playersInRoom.length === 0) return '';
-    
+
     // Group players by entry direction for positioning
     const playersByDirection = {};
     playersInRoom.forEach(player => {
@@ -309,15 +311,24 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
         if (!playersByDirection[dir]) playersByDirection[dir] = [];
         playersByDirection[dir].push(player);
     });
-    
+
     // Render each group of players at their entry position
     const groupsHtml = Object.entries(playersByDirection).map(([direction, players]) => {
         const pawnsHtml = players.map((player) => {
             const meClass = player.isMe ? 'map-pawn--me' : '';
+            const activeClass = player.isActive ? 'map-pawn--active' : '';
             const colorClass = `map-pawn--${player.color}`;
-            
+
+            // Active player indicator arrow
+            const activeIndicator = player.isActive ? `
+                <svg class="map-pawn__active-indicator" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 10l5 5 5-5z"/>
+                </svg>
+            ` : '';
+
             return `
-                <div class="map-pawn ${meClass} ${colorClass}" title="${player.name}">
+                <div class="map-pawn ${meClass} ${activeClass} ${colorClass}" title="${player.name}">
+                    ${activeIndicator}
                     <svg class="map-pawn__icon" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="5" r="3.5"/>
                         <path d="M12 10c-3.5 0-7 2.5-7 6v4h14v-4c0-3.5-3.5-6-7-6z"/>
@@ -325,15 +336,15 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
                 </div>
             `;
         }).join('');
-        
+
         // Vault room positioning takes priority
         const vaultSpawnClass = vaultLayout ? `map-pawns--door-${vaultLayout.doorSide}` : '';
         const entryClass = direction !== 'default' ? `map-pawns--entry-${direction}` : '';
         const positionClass = vaultSpawnClass || entryClass;
-        
+
         return `<div class="map-pawns ${positionClass}">${pawnsHtml}</div>`;
     }).join('');
-    
+
     return groupsHtml;
 }
 
@@ -358,6 +369,7 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
  * @param {Record<string, string>} playerNames
  * @param {Record<string, string>} playerColors
  * @param {string} myId
+ * @param {string | null} activePlayerId - ID of the active player (current turn)
  * @param {number} centerX - Player's X coord (for relative positioning)
  * @param {number} centerY - Player's Y coord (for relative positioning)
  * @param {number} radius - Viewport radius
@@ -365,7 +377,7 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
  * @param {Record<string, string>} [playerEntryDirections] - socketId -> entry direction
  * @returns {string}
  */
-function renderRoomTile(room, connections, playerPositions, playerNames, playerColors, myId, centerX, centerY, radius, allRooms, playerEntryDirections = {}) {
+function renderRoomTile(room, connections, playerPositions, playerNames, playerColors, myId, activePlayerId, centerX, centerY, radius, allRooms, playerEntryDirections = {}) {
     const floorClass = `map-room--${room.floor}`;
     
     // Check if current player is in this room
@@ -400,7 +412,7 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
     }
 
     return `
-        <div class="map-room ${floorClass} ${currentClass} ${tokensClass} ${vaultClass} ${dividerOrientationClass}" 
+        <div class="map-room ${floorClass} ${currentClass} ${tokensClass} ${vaultClass} ${dividerOrientationClass}"
              data-room-id="${room.id}"
              style="grid-column: ${gridCol}; grid-row: ${gridRow};">
             <div class="map-room__inner">
@@ -408,7 +420,7 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
                 ${vaultDivider}
                 ${renderTokens(room.tokens, vaultLayout)}
                 ${renderDoors(room.doors, connections, room, allRooms)}
-                ${renderPawnMarkers(room.id, playerPositions, playerNames, playerColors, myId, vaultLayout, playerEntryDirections)}
+                ${renderPawnMarkers(room.id, playerPositions, playerNames, playerColors, myId, activePlayerId, vaultLayout, playerEntryDirections)}
             </div>
         </div>
     `;
@@ -424,9 +436,10 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
  * @param {string | undefined} myPosition
  * @param {Object | null} roomPreview - Preview room data { name, doors, rotation, x, y, isValid }
  * @param {Record<string, string>} [playerEntryDirections] - socketId -> entry direction
+ * @param {string | null} [activePlayerId] - ID of the active player (current turn)
  * @returns {string}
  */
-export function renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview = null, playerEntryDirections = {}) {
+export function renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview = null, playerEntryDirections = {}, activePlayerId = null) {
     if (!mapState || !mapState.revealedRooms) {
         return `
             <div class="game-map game-map--empty">
@@ -458,12 +471,13 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
         const roomConnections = connections[room.id] || {};
 
         return renderRoomTile(
-            room, 
+            room,
             roomConnections,
             playerPositions,
             playerNames,
             playerColors,
             myId,
+            activePlayerId,
             centerX,
             centerY,
             VIEWPORT_RADIUS,

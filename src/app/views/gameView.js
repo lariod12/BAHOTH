@@ -1349,6 +1349,9 @@ function renderGameScreen(gameState, myId) {
         const myPosition = playerPositions[myId];
         const revealedRooms = mapState?.revealedRooms || {};
         const currentRoom = myPosition ? revealedRooms[myPosition] : null;
+
+        // Get active player ID from turn order
+        const activePlayerId = gameState.turnOrder?.[gameState.currentTurnIndex] || null;
         
         // Room discovery modal
         let roomDiscoveryHtml = '';
@@ -1402,7 +1405,7 @@ function renderGameScreen(gameState, myId) {
                 <div class="game-main">
                     ${renderTurnOrder(gameState, myId)}
                     <div class="game-area">
-                        ${renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview, playerEntryDirections)}
+                        ${renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview, playerEntryDirections, activePlayerId)}
                     </div>
                 </div>
             </div>

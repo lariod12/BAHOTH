@@ -429,17 +429,22 @@ window.location.hash = '#/game/BAH-ABC123';
 - **Door rendering**: Visual indicators for connections with wall detection
 - **Token positioning**: Omen/event/item markers on rooms
 - **Player pawns**: Character markers with color-coding and directional positioning
+- **Active player indicator**: Yellow arrow pointing down at the current turn player's pawn
 - **Vault special layout**: Zone-based token positioning for divided rooms
 - **Room preview**: Shows placement preview during room placement mode
 
 **Key Functions**:
 ```javascript
 export function renderGameMap({
-  rooms,           // Array of revealed room objects
-  players,         // Array of player objects
-  currentFloor,    // 'basement' | 'ground' | 'upper'
-  activePlayerId,  // ID of active player (for viewport centering)
-  previewRoom      // Optional: room being placed (preview mode)
+  mapState,              // Map state with revealedRooms
+  playerPositions,       // socketId -> roomId
+  playerNames,           // socketId -> character name
+  playerColors,          // socketId -> color
+  myId,                  // Current player's socket ID
+  myPosition,            // Current player's room ID
+  roomPreview,           // Optional: room being placed (preview mode)
+  playerEntryDirections, // socketId -> entry direction
+  activePlayerId         // ID of active player (current turn) - NEW
 })
 
 export function buildPlayerNamesMap(players)
@@ -479,7 +484,8 @@ document.querySelector('.map-container').innerHTML = mapHTML;
 ├─────┼─────┼─────┼─────┼─────┤
 │     │ 🔮  │ ⭐️ │ 📜  │     │  🔮 = Omen | ⭐️ = Event | 📜 = Item
 ├─────┼─────┼─────┼─────┼─────┤
-│     │     │     │     │     │
+│     │     │  ▼  │     │     │  ▼ = Active player indicator (NEW)
+│     │     │ 👤  │     │     │  👤 = Player pawn
 ├─────┼─────┼─────┼─────┼─────┤
 │     │     │     │     │     │
 └─────┴─────┴─────┴─────┴─────┘
@@ -1789,7 +1795,7 @@ function renderComponent(props) {
 
 ---
 
-**Last Updated**: 2026-01-17 (based on commit `48bd460`)
+**Last Updated**: 2026-01-17 @ 19:45 (based on commit `48bd460`)
 
 **Maintainers**: See [package.json](../../package.json) for contact info
 
