@@ -474,8 +474,18 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
     // Filter rooms by floor only (no viewport limitation)
     const visibleRooms = filterRoomsByFloor(rooms, currentFloor);
 
-    // Calculate map bounds for grid positioning
-    const bounds = calculateMapBounds(visibleRooms);
+    // Calculate map bounds for grid positioning (include roomPreview if present)
+    let bounds = calculateMapBounds(visibleRooms);
+
+    // Expand bounds to include room preview position if present
+    if (roomPreview) {
+        bounds = {
+            minX: Math.min(bounds.minX, roomPreview.x),
+            maxX: Math.max(bounds.maxX, roomPreview.x),
+            minY: Math.min(bounds.minY, roomPreview.y),
+            maxY: Math.max(bounds.maxY, roomPreview.y)
+        };
+    }
 
     // Grid size based on actual map bounds
     const gridWidth = bounds.maxX - bounds.minX + 1;
