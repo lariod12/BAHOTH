@@ -51,6 +51,40 @@ let unsubscribePlayersActive = null;
 let isDebugMode = false;
 let debugCurrentPlayerIndex = 0; // Which of the 3 local players is "active"
 
+// Rooms that require dice rolls (from mapsData.js text containing "roll")
+const DICE_ROLL_ROOMS = new Set([
+    'Catacombs',           // Sanity roll 6+ to cross
+    'Chasm',               // Speed roll 3+ to cross
+    'Pentagram Chamber',   // Knowledge roll 4+ when exiting
+    'Collapsed Room',      // Speed roll 5+ to avoid falling
+    'Graveyard',           // Sanity roll 4+ when exiting
+    'Junk Room',           // Might roll 3+ when exiting
+    'Vault',               // Knowledge roll 6+ to open
+    'Tower',               // Might roll 3+ to cross
+    'Attic',               // Speed roll 3+ when exiting
+    'Mystic Elevator',     // Roll 2 dice for floor
+]);
+
+/**
+ * Check if current room requires dice roll
+ * @param {Object} gameState - Game state
+ * @param {string} myId - Player ID
+ * @returns {boolean} Whether dice roll button should be active
+ */
+function roomRequiresDiceRoll(gameState, myId) {
+    if (!gameState || !myId) return false;
+
+    const playerPositions = gameState?.playerState?.playerPositions || {};
+    const currentRoomId = playerPositions[myId];
+    if (!currentRoomId) return false;
+
+    const revealedRooms = gameState?.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[currentRoomId];
+    if (!currentRoom) return false;
+
+    return DICE_ROLL_ROOMS.has(currentRoom.name);
+}
+
 /**
  * Convert door side from mapsData format to map format
  * @param {'top'|'right'|'bottom'|'left'} side
@@ -1284,6 +1318,9 @@ function renderGameControls(gameState, myId) {
         </button>`;
     }).join('');
 
+    // Check if current room requires dice roll
+    const diceEventActive = roomRequiresDiceRoll(gameState, myId);
+
     return `
         <div class="game-controls">
             <div class="movement-controls">
@@ -1305,7 +1342,7 @@ function renderGameControls(gameState, myId) {
                     ▼
                 </button>
             </div>
-            <button class="dice-event-btn" type="button" data-action="dice-event" title="Tung xuc xac (0-16)">
+            <button class="dice-event-btn" type="button" data-action="dice-event" title="Tung xuc xac (0-16)" ${!diceEventActive ? 'disabled' : ''}>
                 <svg class="dice-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="4" y="4" width="40" height="40" rx="6" stroke="currentColor" stroke-width="2.5" fill="none"/>
                     <circle cx="14" cy="14" r="3.5" fill="currentColor"/>
