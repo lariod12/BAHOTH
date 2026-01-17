@@ -1624,6 +1624,8 @@ function attachDebugEventListeners(mountEl) {
             const toggleBtn = target.closest('.sidebar-toggle');
             if (toggleBtn?.hasAttribute('disabled')) return;
             toggleSidebar(mountEl);
+            // Also center map on player with smooth scroll
+            centerMapOnPlayer(mountEl, true);
             return;
         }
 
@@ -2032,6 +2034,8 @@ function attachEventListeners(mountEl, roomId) {
                 return;
             }
             toggleSidebar(mountEl);
+            // Also center map on player with smooth scroll
+            centerMapOnPlayer(mountEl, true);
             return;
         }
 
@@ -2143,6 +2147,53 @@ function attachEventListeners(mountEl, roomId) {
 let movesInitializedForTurn = -1;
 
 /**
+ * Center map on player's current position
+ * @param {HTMLElement} mountEl
+ * @param {boolean} smooth - Use smooth scrolling (default: false for instant)
+ */
+function centerMapOnPlayer(mountEl, smooth = false) {
+    // Use double requestAnimationFrame to ensure DOM layout is fully complete
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            const gameMap = mountEl.querySelector('.game-map');
+            const grid = mountEl.querySelector('.game-map__grid');
+            if (!gameMap || !grid) return;
+
+            const playerCol = parseInt(gameMap.dataset.playerCol) || 0;
+            const playerRow = parseInt(gameMap.dataset.playerRow) || 0;
+
+            if (playerCol === 0 && playerRow === 0) return;
+
+            // Cell size (90px) + gap (6px)
+            const cellSize = 96;
+
+            // Get computed padding from grid (which is calc(50vh - 45px) calc(50vw - 45px))
+            const gridStyle = getComputedStyle(grid);
+            const paddingLeft = parseFloat(gridStyle.paddingLeft) || 0;
+            const paddingTop = parseFloat(gridStyle.paddingTop) || 0;
+
+            // Player cell position within grid content area (0-indexed)
+            const playerCellX = (playerCol - 1) * cellSize;
+            const playerCellY = (playerRow - 1) * cellSize;
+
+            // Absolute position in scrollable area (padding + cell position + half cell to center)
+            const targetX = paddingLeft + playerCellX + (cellSize / 2);
+            const targetY = paddingTop + playerCellY + (cellSize / 2);
+
+            // Scroll to center the player in viewport
+            const scrollX = targetX - (gameMap.clientWidth / 2);
+            const scrollY = targetY - (gameMap.clientHeight / 2);
+
+            gameMap.scrollTo({
+                left: Math.max(0, scrollX),
+                top: Math.max(0, scrollY),
+                behavior: smooth ? 'smooth' : 'instant'
+            });
+        });
+    });
+}
+
+/**
  * Update game UI
  */
 async function updateGameUI(mountEl, gameState, myId) {
@@ -2169,6 +2220,9 @@ async function updateGameUI(mountEl, gameState, myId) {
 
     const html = renderGameScreen(gameState, myId);
     mountEl.innerHTML = html;
+
+    // Center map on player position after render
+    centerMapOnPlayer(mountEl);
 }
 
 /**
@@ -3754,12 +3808,15 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         
         // Initial render
         mountEl.innerHTML = renderGameScreen(currentGameState, mySocketId);
-        
+
+        // Center map on player
+        centerMapOnPlayer(mountEl);
+
         // Auto-hide intro after 5 seconds (same as main game behavior)
         introTimeout = setTimeout(() => {
             hideIntro(mountEl);
         }, 5000);
-        
+
         // Attach debug event listeners
         attachDebugEventListeners(mountEl);
         

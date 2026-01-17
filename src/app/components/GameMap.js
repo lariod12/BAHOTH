@@ -46,30 +46,46 @@ function getPlayerCoords(rooms, myPosition) {
 }
 
 /**
- * Filter rooms to only those visible in viewport AND on same floor
+ * Filter rooms by floor only (no viewport limitation)
  * @param {Record<string, Room>} rooms
- * @param {number} centerX
- * @param {number} centerY
- * @param {number} radius
  * @param {string} currentFloor - Current floor to filter by
  * @returns {Room[]}
  */
-function filterVisibleRooms(rooms, centerX, centerY, radius, currentFloor) {
+function filterRoomsByFloor(rooms, currentFloor) {
     const visible = [];
     for (const room of Object.values(rooms)) {
         // Only show rooms on the same floor
         if (room.floor !== currentFloor) continue;
-        
+
         // Don't show elevator shafts (empty elevator positions)
         if (room.isElevatorShaft) continue;
-        
-        const dx = Math.abs(room.x - centerX);
-        const dy = Math.abs(room.y - centerY);
-        if (dx <= radius && dy <= radius) {
-            visible.push(room);
-        }
+
+        visible.push(room);
     }
     return visible;
+}
+
+/**
+ * Calculate map bounds (min/max x/y coordinates)
+ * @param {Room[]} rooms
+ * @returns {{ minX: number, maxX: number, minY: number, maxY: number }}
+ */
+function calculateMapBounds(rooms) {
+    if (rooms.length === 0) {
+        return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+    }
+
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
+    for (const room of rooms) {
+        if (room.x < minX) minX = room.x;
+        if (room.x > maxX) maxX = room.x;
+        if (room.y < minY) minY = room.y;
+        if (room.y > maxY) maxY = room.y;
+    }
+
+    return { minX, maxX, minY, maxY };
 }
 
 /**
@@ -362,7 +378,7 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
  * @returns {string}
  */
 /**
- * Render a single room tile with relative positioning
+ * Render a single room tile with absolute positioning based on map bounds
  * @param {Room} room
  * @param {Record<string, string>} connections
  * @param {Record<string, string>} playerPositions
@@ -370,14 +386,12 @@ function renderPawnMarkers(roomId, playerPositions, playerNames, playerColors, m
  * @param {Record<string, string>} playerColors
  * @param {string} myId
  * @param {string | null} activePlayerId - ID of the active player (current turn)
- * @param {number} centerX - Player's X coord (for relative positioning)
- * @param {number} centerY - Player's Y coord (for relative positioning)
- * @param {number} radius - Viewport radius
+ * @param {{ minX: number, maxX: number, minY: number, maxY: number }} bounds - Map bounds
  * @param {Record<string, Room>} allRooms - All revealed rooms
  * @param {Record<string, string>} [playerEntryDirections] - socketId -> entry direction
  * @returns {string}
  */
-function renderRoomTile(room, connections, playerPositions, playerNames, playerColors, myId, activePlayerId, centerX, centerY, radius, allRooms, playerEntryDirections = {}) {
+function renderRoomTile(room, connections, playerPositions, playerNames, playerColors, myId, activePlayerId, bounds, allRooms, playerEntryDirections = {}) {
     const floorClass = `map-room--${room.floor}`;
     
     // Check if current player is in this room
@@ -400,10 +414,9 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
         dividerOrientationClass = `map-room--divider-${vaultLayout.dividerOrientation}`;
     }
 
-    // Calculate grid position relative to viewport (1-indexed for CSS grid)
-    // Viewport is (2*radius + 1) x (2*radius + 1)
-    const gridCol = (room.x - centerX) + radius + 1;
-    const gridRow = -(room.y - centerY) + radius + 1; // Invert Y for CSS
+    // Calculate grid position based on map bounds (1-indexed for CSS grid)
+    const gridCol = room.x - bounds.minX + 1;
+    const gridRow = bounds.maxY - room.y + 1; // Invert Y for CSS (top = maxY)
     
     // Vault divider line with orientation
     let vaultDivider = '';
@@ -455,18 +468,20 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
     const currentRoom = myPosition ? rooms[myPosition] : null;
     const currentFloor = currentRoom?.floor || 'ground';
 
-    // Get player position to center viewport
+    // Get player position for focus feature
     const playerCoords = getPlayerCoords(rooms, myPosition);
-    const centerX = playerCoords.x;
-    const centerY = playerCoords.y;
 
-    // Filter rooms within viewport AND on same floor
-    const visibleRooms = filterVisibleRooms(rooms, centerX, centerY, VIEWPORT_RADIUS, currentFloor);
+    // Filter rooms by floor only (no viewport limitation)
+    const visibleRooms = filterRoomsByFloor(rooms, currentFloor);
 
-    // Grid size is (2*radius + 1) x (2*radius + 1)
-    const gridSize = VIEWPORT_RADIUS * 2 + 1;
+    // Calculate map bounds for grid positioning
+    const bounds = calculateMapBounds(visibleRooms);
 
-    // Render visible rooms (show all players in visible rooms)
+    // Grid size based on actual map bounds
+    const gridWidth = bounds.maxX - bounds.minX + 1;
+    const gridHeight = bounds.maxY - bounds.minY + 1;
+
+    // Render all rooms on current floor
     const roomsHtml = visibleRooms.map((room) => {
         const roomConnections = connections[room.id] || {};
 
@@ -478,9 +493,7 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
             playerColors,
             myId,
             activePlayerId,
-            centerX,
-            centerY,
-            VIEWPORT_RADIUS,
+            bounds,
             rooms,
             playerEntryDirections
         );
@@ -489,17 +502,17 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
     // Render room preview if in placement mode
     let previewHtml = '';
     if (roomPreview) {
-        const gridCol = (roomPreview.x - centerX) + VIEWPORT_RADIUS + 1;
-        const gridRow = -(roomPreview.y - centerY) + VIEWPORT_RADIUS + 1;
+        const gridCol = roomPreview.x - bounds.minX + 1;
+        const gridRow = bounds.maxY - roomPreview.y + 1;
         const validClass = roomPreview.isValid ? 'map-room-preview--valid' : 'map-room-preview--invalid';
-        
+
         // Render doors for preview (already rotated)
         const previewDoorsHtml = roomPreview.doors.map(dir => {
             return `<div class="map-door map-door--${dir}"></div>`;
         }).join('');
-        
+
         previewHtml = `
-            <div class="map-room-preview ${validClass}" 
+            <div class="map-room-preview ${validClass}"
                  data-action="rotate-room"
                  style="grid-column: ${gridCol}; grid-row: ${gridRow};">
                 <div class="map-room-preview__inner">
@@ -511,9 +524,13 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
         `;
     }
 
+    // Calculate player grid position for focus button
+    const playerGridCol = playerCoords.x - bounds.minX + 1;
+    const playerGridRow = bounds.maxY - playerCoords.y + 1;
+
     return `
-        <div class="game-map">
-            <div class="game-map__grid" style="--grid-size: ${gridSize};">
+        <div class="game-map" data-player-col="${playerGridCol}" data-player-row="${playerGridRow}">
+            <div class="game-map__grid" style="--grid-width: ${gridWidth}; --grid-height: ${gridHeight};">
                 ${roomsHtml}
                 ${previewHtml}
             </div>
