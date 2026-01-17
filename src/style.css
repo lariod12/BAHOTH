@@ -2891,6 +2891,55 @@ select.field__input option {
     color: #e0c080;
 }
 
+/* Character color variants for sidebar toggle */
+.sidebar-toggle--red .sidebar-toggle__icon {
+    color: #ff4444;
+}
+
+.sidebar-toggle--red:hover .sidebar-toggle__icon {
+    color: #ff6666;
+}
+
+.sidebar-toggle--blue .sidebar-toggle__icon {
+    color: #4488ff;
+}
+
+.sidebar-toggle--blue:hover .sidebar-toggle__icon {
+    color: #6699ff;
+}
+
+.sidebar-toggle--green .sidebar-toggle__icon {
+    color: #44dd44;
+}
+
+.sidebar-toggle--green:hover .sidebar-toggle__icon {
+    color: #66ee66;
+}
+
+.sidebar-toggle--yellow .sidebar-toggle__icon {
+    color: #ffdd44;
+}
+
+.sidebar-toggle--yellow:hover .sidebar-toggle__icon {
+    color: #ffee66;
+}
+
+.sidebar-toggle--white .sidebar-toggle__icon {
+    color: #ffffff;
+}
+
+.sidebar-toggle--white:hover .sidebar-toggle__icon {
+    color: #f0f0f0;
+}
+
+.sidebar-toggle--purple .sidebar-toggle__icon {
+    color: #bb66ff;
+}
+
+.sidebar-toggle--purple:hover .sidebar-toggle__icon {
+    color: #cc88ff;
+}
+
 /* Disabled state for sidebar toggle */
 .sidebar-toggle:disabled,
 .sidebar-toggle.is-disabled {

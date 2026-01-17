@@ -567,11 +567,21 @@ function renderDiceRollOverlay(gameState, myId) {
 /**
  * Render sidebar toggle button
  */
-function renderSidebarToggle() {
+function renderSidebarToggle(gameState, myId) {
+    // Get current player's character color
+    let colorClass = '';
+    if (gameState && myId) {
+        const me = gameState.players?.find(p => p.id === myId);
+        if (me?.characterId) {
+            const color = getCharacterColor(me.characterId);
+            colorClass = `sidebar-toggle--${color}`;
+        }
+    }
+
     return `
-        <button class="sidebar-toggle" 
-                type="button" 
-                data-action="toggle-sidebar" 
+        <button class="sidebar-toggle ${colorClass}"
+                type="button"
+                data-action="toggle-sidebar"
                 title="Toggle Players">
             <svg class="sidebar-toggle__icon" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="6" r="4"/>
@@ -1386,7 +1396,7 @@ function renderGameScreen(gameState, myId) {
         
         content = `
             ${renderGameIntro()}
-            ${renderSidebarToggle()}
+            ${renderSidebarToggle(gameState, myId)}
             <div class="game-layout">
                 ${renderSidebar(gameState, myId)}
                 <div class="game-main">
