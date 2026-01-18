@@ -1,7 +1,7 @@
 """
 Main MCP Server for Betrayal at House on the Hill game data.
 
-This server provides read-only access to game data through various tools.
+This server provides game data access and gameplay tools for AI players.
 """
 
 import json
@@ -10,6 +10,8 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 from .tools import cards_tools, characters_tools, maps_tools, rules_tools, haunt_tools
+from .tools import session_tools, turn_tools, movement_tools, dice_tools
+from .tools import turn_order_tools, context_tools
 
 # Create the MCP server instance
 server = Server("bahoth-game-info")
@@ -232,6 +234,496 @@ async def list_tools() -> list[Tool]:
             description="Get a list of all omens with their keys, Vietnamese labels, and aliases.",
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
+        # ========== GAMEPLAY TOOLS ==========
+        # Session Management Tools
+        Tool(
+            name="create_game_session",
+            description="Create a new game session with specified players. AI will be one of the players.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "players": {
+                        "type": "array",
+                        "description": "List of players with characterId, name (optional), isAI (boolean)",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "characterId": {"type": "string"},
+                                "name": {"type": "string"},
+                                "isAI": {"type": "boolean"},
+                            },
+                            "required": ["characterId"],
+                        },
+                    }
+                },
+                "required": ["players"],
+            },
+        ),
+        Tool(
+            name="load_game_session",
+            description="Load an existing game session by its ID.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID to load"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="get_game_state",
+            description="Get current game state summary or specific sections.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "include": {
+                        "type": "array",
+                        "description": "Sections to include: players, map, turnState, inventory, actionLog",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="delete_game_session",
+            description="Delete a game session.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID to delete"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="list_game_sessions",
+            description="List all available game sessions.",
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
+        # Turn Management Tools
+        Tool(
+            name="start_turn",
+            description="Start the AI player's turn. Calculates movement points from Speed stat.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="end_turn",
+            description="End the AI player's turn and advance to next player.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="get_turn_state",
+            description="Get current turn state: whose turn, phase, movement remaining.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="get_available_actions",
+            description="Get list of actions the AI player can currently take.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        # Movement Tools
+        Tool(
+            name="get_movement_options",
+            description="Get available movement directions from current room.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="move_direction",
+            description="Move the AI player in a direction (up/down/left/right).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "direction": {"type": "string", "description": "Direction: up, down, left, right"},
+                },
+                "required": ["session_id", "direction"],
+            },
+        ),
+        Tool(
+            name="reveal_room",
+            description="Place a revealed room tile on the map when entering unexplored area.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "room_name": {"type": "string", "description": "Name of the room tile drawn"},
+                    "rotation": {"type": "integer", "description": "Rotation in degrees: 0, 90, 180, 270"},
+                },
+                "required": ["session_id", "room_name"],
+            },
+        ),
+        Tool(
+            name="use_stairs",
+            description="Use stairs to move between floors.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "target_floor": {"type": "string", "description": "Target floor: upper, ground, basement"},
+                },
+                "required": ["session_id", "target_floor"],
+            },
+        ),
+        Tool(
+            name="get_room_effects",
+            description="Get effects/rules for current or specified room.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "room_id": {"type": "string", "description": "Optional room ID (defaults to current room)"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        # Dice Tools
+        Tool(
+            name="request_dice_roll",
+            description="Request a dice roll for stat check, attack, or other purpose.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "purpose": {"type": "string", "description": "Reason: stat_check, attack, room_effect, item_use, haunt_roll, event"},
+                    "stat": {"type": "string", "description": "Stat to use: speed, might, knowledge, sanity"},
+                    "dice_count": {"type": "integer", "description": "Optional override for number of dice"},
+                    "target": {"type": "integer", "description": "Optional target number to beat"},
+                },
+                "required": ["session_id", "purpose"],
+            },
+        ),
+        Tool(
+            name="record_dice_result",
+            description="Record the result of a dice roll from the user.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "roll_id": {"type": "string", "description": "The roll request ID"},
+                    "result": {"type": "integer", "description": "The total roll result"},
+                },
+                "required": ["session_id", "roll_id", "result"],
+            },
+        ),
+        Tool(
+            name="get_pending_rolls",
+            description="Get all pending dice rolls that need results.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        # ========== PHASE 2 TOOLS ==========
+        # Turn Order Tools
+        Tool(
+            name="set_turn_order",
+            description="Set the turn order for the game. User provides player sequence.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "player_order": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of player IDs in turn order",
+                    },
+                },
+                "required": ["session_id", "player_order"],
+            },
+        ),
+        Tool(
+            name="get_turn_order",
+            description="Get current turn order and AI's position in sequence.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="advance_turn",
+            description="Advance to the next player's turn.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="get_players_before_ai",
+            description="Get list of players who play before AI in current round.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="get_current_player_info",
+            description="Get detailed info about whose turn it currently is.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        # Context Tools
+        Tool(
+            name="request_other_player_context",
+            description="Request context about another player's turn (AI asks user).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "player_id": {"type": "string", "description": "Player to ask about"},
+                    "questions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Questions about the player's turn",
+                    },
+                },
+                "required": ["session_id", "player_id", "questions"],
+            },
+        ),
+        Tool(
+            name="record_player_context",
+            description="Record answers to context questions (user responds).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "request_id": {"type": "string", "description": "Context request ID"},
+                    "answers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Answers to the questions",
+                    },
+                },
+                "required": ["session_id", "request_id", "answers"],
+            },
+        ),
+        Tool(
+            name="get_player_context",
+            description="Get recorded context for a player or all players.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "player_id": {"type": "string", "description": "Optional player ID"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="record_other_player_action",
+            description="Record a specific action taken by another player.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "player_id": {"type": "string", "description": "Player who acted"},
+                    "action": {"type": "string", "description": "Action type"},
+                    "details": {"type": "object", "description": "Action details"},
+                },
+                "required": ["session_id", "player_id", "action"],
+            },
+        ),
+        Tool(
+            name="get_all_player_positions",
+            description="Get current positions of all players.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="ask_question",
+            description="AI asks a free-form question to the user.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "question": {"type": "string", "description": "The question to ask"},
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional suggested answers",
+                    },
+                },
+                "required": ["session_id", "question"],
+            },
+        ),
+        Tool(
+            name="answer_question",
+            description="User answers a pending question from AI.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "question_id": {"type": "string", "description": "Question ID"},
+                    "answer": {"type": "string", "description": "The answer"},
+                },
+                "required": ["session_id", "question_id", "answer"],
+            },
+        ),
+        Tool(
+            name="get_pending_questions",
+            description="Get all pending questions that need answers.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="get_pending_context_requests",
+            description="Get all pending context requests that need answers.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"}
+                },
+                "required": ["session_id"],
+            },
+        ),
+        # Enhanced Movement Tools
+        Tool(
+            name="get_room_doors_detailed",
+            description="Get detailed door information for a room.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "room_id": {"type": "string", "description": "Optional room ID"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="calculate_valid_rotations",
+            description="Calculate valid rotations for placing a new room (door-to-door rule).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "room_name": {"type": "string", "description": "Room to place"},
+                    "entry_direction": {"type": "string", "description": "Direction entering from"},
+                },
+                "required": ["session_id", "room_name", "entry_direction"],
+            },
+        ),
+        Tool(
+            name="get_door_connections",
+            description="Get detailed connection info for all doors in a room.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "room_id": {"type": "string", "description": "Optional room ID"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="set_pending_room_reveal",
+            description="Set direction for pending room reveal.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "direction": {"type": "string", "description": "Direction to reveal"},
+                },
+                "required": ["session_id", "direction"],
+            },
+        ),
+        # Enhanced Dice Tools
+        Tool(
+            name="get_roll_requirements",
+            description="Get dice roll requirements for a room or item.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "room_id": {"type": "string", "description": "Optional room ID"},
+                    "item_id": {"type": "string", "description": "Optional item ID"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="interpret_roll_result",
+            description="Interpret the result of a dice roll based on game rules.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "roll_id": {"type": "string", "description": "Optional roll ID"},
+                    "result": {"type": "integer", "description": "Roll result"},
+                    "context": {"type": "string", "description": "Roll context"},
+                },
+                "required": ["session_id"],
+            },
+        ),
+        Tool(
+            name="get_dice_roll_history",
+            description="Get recent dice roll history.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "session_id": {"type": "string", "description": "The session ID"},
+                    "limit": {"type": "integer", "description": "Max rolls to return"},
+                },
+                "required": ["session_id"],
+            },
+        ),
     ]
 
 
@@ -332,6 +824,229 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     elif name == "get_all_omens":
         result = haunt_tools.get_all_omens()
+        return _json_response(result)
+
+    # ========== GAMEPLAY TOOLS ==========
+    # Session Management Tools
+    elif name == "create_game_session":
+        result = session_tools.create_game_session(arguments["players"])
+        return _json_response(result)
+
+    elif name == "load_game_session":
+        result = session_tools.load_game_session(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "get_game_state":
+        include = arguments.get("include")
+        result = session_tools.get_game_state(arguments["session_id"], include)
+        return _json_response(result)
+
+    elif name == "delete_game_session":
+        result = session_tools.delete_game_session(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "list_game_sessions":
+        result = session_tools.list_game_sessions()
+        return _json_response(result)
+
+    # Turn Management Tools
+    elif name == "start_turn":
+        result = turn_tools.start_turn(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "end_turn":
+        result = turn_tools.end_turn(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "get_turn_state":
+        result = turn_tools.get_turn_state(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "get_available_actions":
+        result = turn_tools.get_available_actions(arguments["session_id"])
+        return _json_response(result)
+
+    # Movement Tools
+    elif name == "get_movement_options":
+        result = movement_tools.get_movement_options(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "move_direction":
+        result = movement_tools.move_direction(arguments["session_id"], arguments["direction"])
+        return _json_response(result)
+
+    elif name == "reveal_room":
+        rotation = arguments.get("rotation", 0)
+        result = movement_tools.reveal_room(arguments["session_id"], arguments["room_name"], rotation)
+        return _json_response(result)
+
+    elif name == "use_stairs":
+        result = movement_tools.use_stairs(arguments["session_id"], arguments["target_floor"])
+        return _json_response(result)
+
+    elif name == "get_room_effects":
+        room_id = arguments.get("room_id")
+        result = movement_tools.get_room_effects(arguments["session_id"], room_id)
+        return _json_response(result)
+
+    # Dice Tools
+    elif name == "request_dice_roll":
+        result = dice_tools.request_dice_roll(
+            arguments["session_id"],
+            arguments["purpose"],
+            arguments.get("stat"),
+            arguments.get("dice_count"),
+            arguments.get("target"),
+        )
+        return _json_response(result)
+
+    elif name == "record_dice_result":
+        result = dice_tools.record_dice_result(
+            arguments["session_id"],
+            arguments["roll_id"],
+            arguments["result"],
+        )
+        return _json_response(result)
+
+    elif name == "get_pending_rolls":
+        result = dice_tools.get_pending_rolls(arguments["session_id"])
+        return _json_response(result)
+
+    # ========== PHASE 2 TOOL HANDLERS ==========
+    # Turn Order Tools
+    elif name == "set_turn_order":
+        result = turn_order_tools.set_turn_order(
+            arguments["session_id"],
+            arguments["player_order"],
+        )
+        return _json_response(result)
+
+    elif name == "get_turn_order":
+        result = turn_order_tools.get_turn_order(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "advance_turn":
+        result = turn_order_tools.advance_turn(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "get_players_before_ai":
+        result = turn_order_tools.get_players_before_ai(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "get_current_player_info":
+        result = turn_order_tools.get_current_player_info(arguments["session_id"])
+        return _json_response(result)
+
+    # Context Tools
+    elif name == "request_other_player_context":
+        result = context_tools.request_other_player_context(
+            arguments["session_id"],
+            arguments["player_id"],
+            arguments["questions"],
+        )
+        return _json_response(result)
+
+    elif name == "record_player_context":
+        result = context_tools.record_player_context(
+            arguments["session_id"],
+            arguments["request_id"],
+            arguments["answers"],
+        )
+        return _json_response(result)
+
+    elif name == "get_player_context":
+        player_id = arguments.get("player_id")
+        result = context_tools.get_player_context(arguments["session_id"], player_id)
+        return _json_response(result)
+
+    elif name == "record_other_player_action":
+        details = arguments.get("details")
+        result = context_tools.record_other_player_action(
+            arguments["session_id"],
+            arguments["player_id"],
+            arguments["action"],
+            details,
+        )
+        return _json_response(result)
+
+    elif name == "get_all_player_positions":
+        result = context_tools.get_all_player_positions(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "ask_question":
+        options = arguments.get("options")
+        result = context_tools.ask_question(
+            arguments["session_id"],
+            arguments["question"],
+            options,
+        )
+        return _json_response(result)
+
+    elif name == "answer_question":
+        result = context_tools.answer_question(
+            arguments["session_id"],
+            arguments["question_id"],
+            arguments["answer"],
+        )
+        return _json_response(result)
+
+    elif name == "get_pending_questions":
+        result = context_tools.get_pending_questions(arguments["session_id"])
+        return _json_response(result)
+
+    elif name == "get_pending_context_requests":
+        result = context_tools.get_pending_context_requests(arguments["session_id"])
+        return _json_response(result)
+
+    # Enhanced Movement Tools
+    elif name == "get_room_doors_detailed":
+        room_id = arguments.get("room_id")
+        result = movement_tools.get_room_doors(arguments["session_id"], room_id)
+        return _json_response(result)
+
+    elif name == "calculate_valid_rotations":
+        result = movement_tools.calculate_valid_rotations(
+            arguments["session_id"],
+            arguments["room_name"],
+            arguments["entry_direction"],
+        )
+        return _json_response(result)
+
+    elif name == "get_door_connections":
+        room_id = arguments.get("room_id")
+        result = movement_tools.get_door_connections(arguments["session_id"], room_id)
+        return _json_response(result)
+
+    elif name == "set_pending_room_reveal":
+        result = movement_tools.set_pending_room_reveal(
+            arguments["session_id"],
+            arguments["direction"],
+        )
+        return _json_response(result)
+
+    # Enhanced Dice Tools
+    elif name == "get_roll_requirements":
+        room_id = arguments.get("room_id")
+        item_id = arguments.get("item_id")
+        result = dice_tools.get_roll_requirements(
+            arguments["session_id"],
+            room_id,
+            item_id,
+        )
+        return _json_response(result)
+
+    elif name == "interpret_roll_result":
+        result = dice_tools.interpret_roll_result(
+            arguments["session_id"],
+            arguments.get("roll_id"),
+            arguments.get("result"),
+            arguments.get("context"),
+        )
+        return _json_response(result)
+
+    elif name == "get_dice_roll_history":
+        limit = arguments.get("limit", 10)
+        result = dice_tools.get_dice_roll_history(arguments["session_id"], limit)
         return _json_response(result)
 
     else:
