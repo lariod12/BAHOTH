@@ -26,6 +26,10 @@ let statAdjustModal = null;
 /** @type {{ isOpen: boolean; inputValue: string; result: number | null } | null} */
 let diceEventModal = null;
 
+// End turn confirmation modal state
+/** @type {{ isOpen: boolean } | null} */
+let endTurnModal = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -754,6 +758,43 @@ function renderStatAdjustModal() {
 }
 
 /**
+ * Render end turn confirmation modal
+ * @returns {string} HTML string
+ */
+function renderEndTurnModal() {
+    if (!endTurnModal?.isOpen) return '';
+
+    const movesLeft = currentGameState?.playerMoves?.[mySocketId] ?? 0;
+
+    return `
+        <div class="end-turn-overlay" data-action="close-end-turn">
+            <div class="end-turn-modal" data-modal-content="true">
+                <header class="end-turn-modal__header">
+                    <h3 class="end-turn-modal__title">Ket thuc luot</h3>
+                    <button class="end-turn-modal__close" type="button" data-action="close-end-turn">×</button>
+                </header>
+                <div class="end-turn-modal__body">
+                    <p class="end-turn-modal__message">Ban con <strong>${movesLeft}</strong> buoc di.</p>
+                    <p class="end-turn-modal__question">Ban muon lam gi?</p>
+                    <div class="end-turn-modal__actions">
+                        <button class="end-turn-modal__btn end-turn-modal__btn--continue"
+                                type="button"
+                                data-action="continue-turn">
+                            Tiep tuc di
+                        </button>
+                        <button class="end-turn-modal__btn end-turn-modal__btn--end"
+                                type="button"
+                                data-action="confirm-end-turn">
+                            Ket thuc luot
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render dice event modal - allows manual input or random roll (0-16)
  * @returns {string} HTML string
  */
@@ -1331,7 +1372,7 @@ function renderGameControls(gameState, myId) {
                     <button class="move-btn move-btn--left" type="button" data-action="move" data-direction="left" ${!canMoveLeft ? 'disabled' : ''}>
                         ◀
                     </button>
-                    <div class="move-center">
+                    <div class="move-center" data-action="open-end-turn" title="Click de ket thuc luot">
                         <span class="moves-remaining">${movesLeft}</span>
                     </div>
                     <button class="move-btn move-btn--right" type="button" data-action="move" data-direction="right" ${!canMoveRight ? 'disabled' : ''}>
@@ -1519,6 +1560,7 @@ function renderGameScreen(gameState, myId) {
             ${renderCardsViewModal()}
             ${renderStatAdjustModal()}
             ${renderDiceEventModal()}
+            ${renderEndTurnModal()}
             ${renderTutorialModal()}
         `;
     } else {
@@ -2047,6 +2089,48 @@ function attachDebugEventListeners(mountEl) {
             return;
         }
 
+        // Open end turn modal
+        if (action === 'open-end-turn') {
+            const myTurn = isMyTurn(currentGameState, mySocketId);
+            const movesLeft = currentGameState?.playerMoves?.[mySocketId] ?? 0;
+            // Only show modal if it's my turn and I have moves left
+            if (myTurn && movesLeft > 0) {
+                endTurnModal = { isOpen: true };
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Close end turn modal
+        if (action === 'close-end-turn') {
+            // Don't close if clicking inside modal content (except close button)
+            const isInsideModalContent = target.closest('[data-modal-content="true"]');
+            const isCloseButton = target.closest('.end-turn-modal__close');
+            if (isInsideModalContent && !isCloseButton) {
+                return;
+            }
+            endTurnModal = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Continue turn (close modal and continue playing)
+        if (action === 'continue-turn') {
+            endTurnModal = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Confirm end turn (skip remaining moves)
+        if (action === 'confirm-end-turn') {
+            endTurnModal = null;
+            handleDebugEndTurn(mountEl);
+            return;
+        }
+
         // View character detail
         if (action === 'view-character-detail') {
             const charId = actionEl?.dataset.characterId;
@@ -2298,6 +2382,49 @@ function attachEventListeners(mountEl, roomId) {
             diceEventModal = null;
             skipMapCentering = true;
             updateGameUI(mountEl, onNavigate);
+            return;
+        }
+
+        // Open end turn modal
+        if (action === 'open-end-turn') {
+            const myTurn = isMyTurn(currentGameState, mySocketId);
+            const movesLeft = currentGameState?.playerMoves?.[mySocketId] ?? 0;
+            // Only show modal if it's my turn and I have moves left
+            if (myTurn && movesLeft > 0) {
+                endTurnModal = { isOpen: true };
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Close end turn modal
+        if (action === 'close-end-turn') {
+            // Don't close if clicking inside modal content (except close button)
+            const isInsideModalContent = target.closest('[data-modal-content="true"]');
+            const isCloseButton = target.closest('.end-turn-modal__close');
+            if (isInsideModalContent && !isCloseButton) {
+                return;
+            }
+            endTurnModal = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Continue turn (close modal and continue playing)
+        if (action === 'continue-turn') {
+            endTurnModal = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Confirm end turn (skip remaining moves)
+        if (action === 'confirm-end-turn') {
+            endTurnModal = null;
+            // In normal mode, emit to server
+            await socketClient.endTurn();
             return;
         }
 
@@ -3381,7 +3508,47 @@ function handleDebugUseElevator(mountEl, targetFloor) {
     
     // Using elevator does NOT cost a move (free action)
     // Player can continue moving after using elevator
-    
+
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle debug mode end turn early - skip remaining moves
+ * @param {HTMLElement} mountEl
+ */
+function handleDebugEndTurn(mountEl) {
+    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
+
+    const playerId = mySocketId;
+    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+
+    // Only allow if it's this player's turn
+    if (playerId !== currentTurnPlayer) {
+        console.log(`Not ${playerId}'s turn`);
+        return;
+    }
+
+    // Set moves to 0 to end turn
+    currentGameState.playerMoves[playerId] = 0;
+
+    // Move to next player
+    currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+
+    const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+    const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+    if (nextPlayer) {
+        const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
+        const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+        currentGameState.playerMoves[nextPlayerId] = speed;
+    }
+
+    // Auto switch to next player
+    const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+    if (nextIdx !== -1) {
+        debugCurrentPlayerIndex = nextIdx;
+        mySocketId = nextPlayerId;
+    }
+
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
@@ -4081,6 +4248,7 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
     movesInitializedForTurn = -1;
     expandedPlayers.clear();
     activePlayers.clear();
+    endTurnModal = null;
     
     if (debugMode) {
         // Initialize debug game state
@@ -4119,8 +4287,9 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
             movesInitializedForTurn = -1;
             expandedPlayers.clear();
             activePlayers.clear();
+            endTurnModal = null;
         }, { once: true });
-        
+
         return;
     }
     
@@ -4175,5 +4344,6 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         movesInitializedForTurn = -1;
         expandedPlayers.clear();
         activePlayers.clear();
+        endTurnModal = null;
     }, { once: true });
 }

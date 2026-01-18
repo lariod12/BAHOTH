@@ -3674,6 +3674,133 @@ select.field__input option {
     color: #c9a55c;
 }
 
+/* End Turn Confirmation Modal */
+.end-turn-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.end-turn-modal {
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 320px;
+    overflow: hidden;
+}
+
+.end-turn-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.end-turn-modal__title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    color: #c9a55c;
+}
+
+.end-turn-modal__close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.end-turn-modal__close:hover {
+    color: #fff;
+}
+
+.end-turn-modal__body {
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.end-turn-modal__message {
+    margin: 0;
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: center;
+}
+
+.end-turn-modal__message strong {
+    color: #c9a55c;
+    font-size: 1.2rem;
+}
+
+.end-turn-modal__question {
+    margin: 0;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+}
+
+.end-turn-modal__actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.end-turn-modal__btn {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.end-turn-modal__btn--continue {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.end-turn-modal__btn--continue:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.end-turn-modal__btn--end {
+    background: #c9a55c;
+    color: #1a1a1a;
+}
+
+.end-turn-modal__btn--end:hover {
+    background: #d4b46a;
+}
+
+/* Make move-center clickable */
+.move-center {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.move-center:hover {
+    background: rgba(201, 165, 92, 0.2);
+    border-color: rgba(201, 165, 92, 0.5);
+}
+
 .game-sidebar.is-my-turn {
     border-color: rgba(201, 165, 92, 0.5);
 }

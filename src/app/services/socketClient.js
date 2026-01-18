@@ -423,6 +423,23 @@ export function getGameState(roomId) {
 }
 
 /**
+ * End turn early (skip remaining moves)
+ * @returns {Promise<{ success: boolean }>}
+ */
+export function endTurn() {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false });
+            return;
+        }
+
+        socket.emit('game:end-turn', {}, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
  * Set player active status
  * @param {boolean} isActive
  * @returns {Promise<{ success: boolean }>}
