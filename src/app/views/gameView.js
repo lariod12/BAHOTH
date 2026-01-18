@@ -86,6 +86,9 @@ let unsubscribePlayersActive = null;
 let isDebugMode = false;
 let debugCurrentPlayerIndex = 0; // Which of the 3 local players is "active"
 
+// Track if event listeners are already attached (prevent duplicate)
+let eventListenersAttached = false;
+
 // Rooms that require dice rolls (from mapsData.js text containing "roll")
 const DICE_ROLL_ROOMS = new Set([
     'Catacombs',           // Sanity roll 6+ to cross
@@ -1979,6 +1982,8 @@ function renderGameControls(gameState, myId) {
     const canMoveDown = canMove && availableDirs.south;
     const canMoveLeft = canMove && availableDirs.west;
     const canMoveRight = canMove && availableDirs.east;
+
+    console.log('[Controls] myTurn:', myTurn, 'movesLeft:', movesLeft, 'canMove:', canMove, 'availableDirs:', availableDirs);
     
     // Elevator floor buttons - sorted: upper on top, ground middle, basement bottom
     const floorNames = { upper: 'Tang tren', ground: 'Tang tret', basement: 'Tang ham' };
@@ -2306,6 +2311,13 @@ function checkAllPlayersActive(activePlayerIds, allPlayers, mountEl) {
  * @param {HTMLElement} mountEl
  */
 function attachDebugEventListeners(mountEl) {
+    // Prevent attaching listeners multiple times
+    if (eventListenersAttached) {
+        console.log('[DebugEventListeners] Already attached, skipping');
+        return;
+    }
+    eventListenersAttached = true;
+
     mountEl.addEventListener('click', (e) => {
         const target = /** @type {HTMLElement} */ (e.target);
         const actionEl = target.closest('[data-action]');
@@ -2469,27 +2481,30 @@ function attachDebugEventListeners(mountEl) {
             return;
         }
 
-        // Move (debug)
-        if (action === 'move') {
+        // Move (debug mode only - multiplayer uses socketClient.move below)
+        if (action === 'move' && isDebugMode) {
             const moveTarget = target.closest('[data-direction]');
-            const direction = moveTarget?.dataset.direction;
+            const uiDirection = moveTarget?.dataset.direction;
+            // Convert UI direction to cardinal direction
+            const directionMap = { up: 'north', down: 'south', left: 'west', right: 'east' };
+            const direction = directionMap[uiDirection];
             if (direction) {
-                handleDebugMove(mountEl, direction);
+                handleMove(mountEl, direction);
             }
             return;
         }
 
         // Use stairs (debug)
-        if (action === 'use-stairs') {
+        if (action === 'use-stairs' && isDebugMode) {
             const targetRoom = actionEl?.dataset.target;
             if (targetRoom) {
                 handleDebugUseStairs(mountEl, targetRoom);
             }
             return;
         }
-        
+
         // Use Mystic Elevator (debug)
-        if (action === 'use-elevator') {
+        if (action === 'use-elevator' && isDebugMode) {
             const targetFloor = actionEl?.dataset.floor;
             if (targetFloor) {
                 handleDebugUseElevator(mountEl, targetFloor);
@@ -2945,7 +2960,7 @@ function attachDebugEventListeners(mountEl) {
         // Confirm end turn (skip remaining moves)
         if (action === 'confirm-end-turn') {
             endTurnModal = null;
-            handleDebugEndTurn(mountEl);
+            handleEndTurn(mountEl);
             return;
         }
 
@@ -3010,10 +3025,18 @@ function attachDebugEventListeners(mountEl) {
  * Attach event listeners
  */
 function attachEventListeners(mountEl, roomId) {
+    // Prevent attaching listeners multiple times
+    if (eventListenersAttached) {
+        console.log('[EventListeners] Already attached, skipping');
+        return;
+    }
+    eventListenersAttached = true;
+
     // Roll dice manually
     mountEl.addEventListener('click', async (e) => {
         const target = /** @type {HTMLElement} */ (e.target);
         const action = target.dataset.action || target.closest('[data-action]')?.dataset.action;
+        console.log('[EventListeners] Click - action:', action, 'target:', target.tagName, target.className);
 
         // Click outside sidebar to close it
         if (sidebarOpen) {
@@ -3140,13 +3163,264 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
-        // Move
+        // Move - use same logic as debug mode for consistency
         if (action === 'move') {
             const moveTarget = target.closest('[data-direction]');
-            const direction = moveTarget?.dataset.direction;
+            const uiDirection = moveTarget?.dataset.direction;
+            // Convert UI direction (up/down/left/right) to cardinal direction (north/south/west/east)
+            const directionMap = { up: 'north', down: 'south', left: 'west', right: 'east' };
+            const direction = directionMap[uiDirection];
+            console.log('[Move] Action:', action, 'UI Direction:', uiDirection, 'Cardinal:', direction);
             if (direction) {
-                await socketClient.move(direction);
+                // Use same logic as debug mode - handleMove will check for room discovery, tokens, etc.
+                handleMove(mountEl, direction);
             }
+            return;
+        }
+
+        // === Room Discovery Modal Actions (same as debug mode) ===
+
+        // Confirm room selection (go to rotation step)
+        if (action === 'confirm-room-select') {
+            const hiddenInput = mountEl.querySelector('#room-select-value');
+            const selectedRoom = hiddenInput?.value;
+            if (selectedRoom && roomDiscoveryModal) {
+                // Find first valid rotation
+                const roomDef = ROOMS.find(r => r.name.en === selectedRoom);
+                if (roomDef) {
+                    const initialRotation = findFirstValidRotation(roomDef, roomDiscoveryModal.doorSide);
+                    roomDiscoveryModal.selectedRoom = selectedRoom;
+                    roomDiscoveryModal.currentRotation = initialRotation;
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+            } else {
+                alert('Vui long chon mot phong');
+            }
+            return;
+        }
+
+        // Rotate room preview
+        if (action === 'rotate-room') {
+            if (roomDiscoveryModal && roomDiscoveryModal.selectedRoom) {
+                roomDiscoveryModal.currentRotation = (roomDiscoveryModal.currentRotation + 90) % 360;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Confirm room placement with rotation
+        if (action === 'confirm-room-placement') {
+            if (roomDiscoveryModal?.selectedRoom) {
+                const rotation = roomDiscoveryModal.currentRotation || 0;
+                handleRoomDiscovery(mountEl, roomDiscoveryModal.selectedRoom, rotation);
+            }
+            return;
+        }
+
+        // Back to room selection
+        if (action === 'back-to-room-select') {
+            if (roomDiscoveryModal) {
+                roomDiscoveryModal.selectedRoom = null;
+                roomDiscoveryModal.currentRotation = 0;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Select room from list
+        if (target.closest('.room-discovery__item') && target.closest('#room-list')) {
+            const item = /** @type {HTMLElement} */ (target.closest('.room-discovery__item'));
+            const roomName = item.dataset.roomName;
+            const searchInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-search-input'));
+            const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
+
+            if (searchInput) searchInput.value = item.textContent || '';
+            if (hiddenInput) hiddenInput.value = roomName || '';
+
+            mountEl.querySelectorAll('#room-list .room-discovery__item').forEach(el => el.classList.remove('is-selected'));
+            item.classList.add('is-selected');
+            return;
+        }
+
+        // Random room selection
+        if (action === 'random-room') {
+            handleRandomRoomDiscovery(mountEl);
+            return;
+        }
+
+        // Cancel room discovery
+        if (action === 'cancel-room-discovery') {
+            cancelRoomDiscovery(mountEl);
+            return;
+        }
+
+        // === Token Drawing Actions (same as debug mode) ===
+
+        if (action === 'token-draw-random') {
+            handleRandomCardDraw(mountEl);
+            return;
+        }
+
+        if (action === 'token-draw-next') {
+            handleTokenDrawNext(mountEl);
+            return;
+        }
+
+        // Select card from token list
+        if (target.closest('.token-card__item') && target.closest('#token-card-list')) {
+            const item = /** @type {HTMLElement} */ (target.closest('.token-card__item'));
+            const cardId = item.dataset.cardId;
+            if (cardId && tokenDrawingModal) {
+                const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
+                if (current) {
+                    current.selectedCard = cardId;
+                    current.drawn = true;
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+            }
+            return;
+        }
+
+        // === Stairs/Elevator Actions (same as debug mode) ===
+
+        if (action === 'use-stairs') {
+            const targetRoom = actionEl?.dataset.targetRoom;
+            if (targetRoom) {
+                handleDebugUseStairs(mountEl, targetRoom);
+            }
+            return;
+        }
+
+        if (action === 'use-elevator') {
+            const targetFloor = actionEl?.dataset.targetFloor;
+            if (targetFloor) {
+                handleDebugUseElevator(mountEl, targetFloor);
+            }
+            return;
+        }
+
+        // === Event Dice Modal Actions (immediate roll for event cards) ===
+
+        // Event dice confirm (manual input)
+        if (action === 'event-dice-confirm') {
+            if (!eventDiceModal) return;
+            const input = mountEl.querySelector('[data-input="event-dice-value"]');
+            const value = parseInt(input?.value, 10);
+            if (!isNaN(value) && value >= 0 && value <= 16) {
+                eventDiceModal.result = value;
+                eventDiceModal.inputValue = value.toString();
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Event dice random roll
+        if (action === 'event-dice-random') {
+            if (!eventDiceModal) return;
+            const diceCount = eventDiceModal.eventCard?.fixedDice || eventDiceModal.diceCount || 1;
+            // Roll diceCount dice (each 0-2) and sum
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+            eventDiceModal.result = total;
+            eventDiceModal.inputValue = total.toString();
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Event dice continue/apply result
+        if (action === 'event-dice-continue') {
+            if (!eventDiceModal) return;
+
+            const { eventCard, result, currentRollIndex, selectedStat } = eventDiceModal;
+            const isMultiRoll = eventCard?.rollStats && Array.isArray(eventCard.rollStats);
+            const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || eventCard.rollStat);
+
+            if (isMultiRoll) {
+                // Save current result
+                eventDiceModal.allResults.push({ stat: currentStat, result: result });
+
+                // Check if more rolls needed
+                if (currentRollIndex < eventCard.rollStats.length - 1) {
+                    // Move to next roll
+                    const nextStat = eventCard.rollStats[currentRollIndex + 1];
+                    eventDiceModal.currentRollIndex++;
+                    eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, nextStat);
+                    eventDiceModal.inputValue = '';
+                    eventDiceModal.result = null;
+                    skipMapCentering = true;
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                    return;
+                }
+
+                // All rolls done - apply multi-roll results
+                console.log('[EventDice] Multi-roll complete:', eventDiceModal.allResults);
+                const allRollResults = [...eventDiceModal.allResults, { stat: currentStat, result: result }];
+
+                // Apply results for each stat
+                allRollResults.forEach(r => {
+                    const outcome = findMatchingOutcome(eventCard.rollResults, r.result);
+                    if (outcome && outcome.effect === 'loseStat') {
+                        applyStatChange(mySocketId, r.stat, -(outcome.amount || 1));
+                    }
+                });
+
+                // Close modal
+                eventDiceModal = null;
+                skipMapCentering = true;
+
+                // Sync state with server in multiplayer mode
+                if (!isDebugMode) {
+                    syncGameStateToServer();
+                }
+
+                updateGameUI(mountEl, currentGameState, mySocketId);
+                return;
+            }
+
+            // Single roll - apply result using the same function as debug mode
+            applyEventDiceResult(mountEl, result, currentStat);
+            return;
+        }
+
+        // Event dice stat selection (for con_nhen)
+        if (action === 'event-dice-select-stat') {
+            if (!eventDiceModal) return;
+            const stat = actionEl?.dataset.stat;
+            if (stat) {
+                eventDiceModal.selectedStat = stat;
+                eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, stat);
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // === Damage Dice Modal Actions ===
+
+        if (action === 'damage-dice-confirm') {
+            if (!damageDiceModal) return;
+            const input = mountEl.querySelector('[data-input="damage-dice-value"]');
+            const value = parseInt(input?.value, 10);
+            if (!isNaN(value) && value >= 0 && value <= 16) {
+                damageDiceModal.result = value;
+                applyDamageResult(mountEl, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'damage-dice-random') {
+            if (!damageDiceModal) return;
+            const diceCount = damageDiceModal.diceCount || 1;
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3);
+            }
+            damageDiceModal.result = total;
+            applyDamageResult(mountEl, mySocketId);
             return;
         }
 
@@ -3158,7 +3432,7 @@ function attachEventListeners(mountEl, roomId) {
                 result: null
             };
             skipMapCentering = true;
-            updateGameUI(mountEl, onNavigate);
+            updateGameUI(mountEl, currentGameState, mySocketId);
             return;
         }
 
@@ -3172,7 +3446,7 @@ function attachEventListeners(mountEl, roomId) {
                     result: value
                 };
                 skipMapCentering = true;
-                updateGameUI(mountEl, onNavigate);
+                updateGameUI(mountEl, currentGameState, mySocketId);
             }
             return;
         }
@@ -3185,7 +3459,7 @@ function attachEventListeners(mountEl, roomId) {
                 result: randomValue
             };
             skipMapCentering = true;
-            updateGameUI(mountEl, onNavigate);
+            updateGameUI(mountEl, currentGameState, mySocketId);
             return;
         }
 
@@ -3199,7 +3473,7 @@ function attachEventListeners(mountEl, roomId) {
             }
             diceEventModal = null;
             skipMapCentering = true;
-            updateGameUI(mountEl, onNavigate);
+            updateGameUI(mountEl, currentGameState, mySocketId);
             return;
         }
 
@@ -3241,8 +3515,7 @@ function attachEventListeners(mountEl, roomId) {
         // Confirm end turn (skip remaining moves)
         if (action === 'confirm-end-turn') {
             endTurnModal = null;
-            // In normal mode, emit to server
-            await socketClient.endTurn();
+            handleEndTurn(mountEl);
             return;
         }
 
@@ -3881,17 +4154,17 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
 }
 
 /**
- * Handle debug mode move - uses same logic as main game (map connections)
+ * Handle move - unified logic for both debug and multiplayer modes
  * @param {HTMLElement} mountEl
- * @param {string} direction
+ * @param {string} direction - cardinal direction (north/south/east/west)
  */
-function handleDebugMove(mountEl, direction) {
+function handleMove(mountEl, direction) {
     if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
 
     // Use mySocketId which is set to current player's actual ID
     const playerId = mySocketId;
     const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-    
+
     // Only allow move if it's this player's turn
     if (playerId !== currentTurnPlayer) {
         console.log(`Not ${playerId}'s turn, current turn: ${currentTurnPlayer}`);
@@ -3961,37 +4234,59 @@ function handleDebugMove(mountEl, direction) {
                     if (!mapConnections[existingRoomId]) mapConnections[existingRoomId] = {};
                     mapConnections[currentRoomId][doorDirection] = existingRoomId;
                     mapConnections[existingRoomId][oppositeDir] = currentRoomId;
-                    
+
                     // Move player
                     currentGameState.playerState.playerPositions[playerId] = existingRoomId;
                     currentGameState.playerMoves[playerId] = moves - 1;
-                    
+
                     // Track entry direction (opposite of door direction = which side player entered from)
                     if (!currentGameState.playerState.playerEntryDirections) {
                         currentGameState.playerState.playerEntryDirections = {};
                     }
                     currentGameState.playerState.playerEntryDirections[playerId] = oppositeDir;
-                    
+
                     // Apply Vault spawn position if entering Vault room
                     applyVaultSpawnPosition(playerId, existingRoom, currentGameState);
-                    
-                    // Check if turn ended
-                    if (currentGameState.playerMoves[playerId] <= 0) {
-                        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-                        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-                        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-                        if (nextPlayer) {
-                            const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-                            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-                            currentGameState.playerMoves[nextPlayerId] = speed;
+
+                    // Check if target room has tokens and hasn't been drawn yet
+                    if (existingRoom.tokens && existingRoom.tokens.length > 0) {
+                        if (!currentGameState.playerState.drawnRooms) {
+                            currentGameState.playerState.drawnRooms = [];
                         }
-                        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-                        if (nextIdx !== -1) {
-                            debugCurrentPlayerIndex = nextIdx;
-                            mySocketId = nextPlayerId;
+                        if (!currentGameState.playerState.drawnRooms.includes(existingRoomId)) {
+                            currentGameState.playerState.drawnRooms.push(existingRoomId);
+                            initTokenDrawing(mountEl, existingRoom.tokens);
+                            updateGameUI(mountEl, currentGameState, mySocketId);
+                            return; // Don't end turn yet
                         }
                     }
-                    
+
+                    // Check if turn ended
+                    if (currentGameState.playerMoves[playerId] <= 0) {
+                        if (isDebugMode) {
+                            // Debug mode: auto-switch to next player locally
+                            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+                            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+                            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+                            if (nextPlayer) {
+                                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
+                                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+                                currentGameState.playerMoves[nextPlayerId] = speed;
+                            }
+                            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+                            if (nextIdx !== -1) {
+                                debugCurrentPlayerIndex = nextIdx;
+                                mySocketId = nextPlayerId;
+                            }
+                        }
+                        // Multiplayer mode: server will handle turn progression via game:state broadcast
+                    }
+
+                    // Sync state with server in multiplayer mode
+                    if (!isDebugMode) {
+                        syncGameStateToServer();
+                    }
+
                     updateGameUI(mountEl, currentGameState, mySocketId);
                     return;
                 }
@@ -4059,27 +4354,55 @@ function handleDebugMove(mountEl, direction) {
     
     // Check if turn ended
     if (currentGameState.playerMoves[playerId] <= 0) {
-        // Move to next player
-        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-        
-        // Set moves for next player
-        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-        if (nextPlayer) {
-            const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-            currentGameState.playerMoves[nextPlayerId] = speed;
+        if (isDebugMode) {
+            // Debug mode: auto-switch to next player locally
+            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+
+            // Set moves for next player
+            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+            if (nextPlayer) {
+                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
+                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+                currentGameState.playerMoves[nextPlayerId] = speed;
+            }
+
+            // Auto switch UI to next player
+            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+            if (nextIdx !== -1) {
+                debugCurrentPlayerIndex = nextIdx;
+                mySocketId = nextPlayerId;
+            }
         }
-        
-        // Auto switch to next player and update mySocketId
-        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-        if (nextIdx !== -1) {
-            debugCurrentPlayerIndex = nextIdx;
-            mySocketId = nextPlayerId;
-        }
+        // Multiplayer mode: server will handle turn progression via game:state broadcast
     }
-    
+
+    // Sync state with server in multiplayer mode
+    if (!isDebugMode) {
+        syncGameStateToServer();
+    }
+
     updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Sync local game state changes to server (multiplayer mode)
+ */
+async function syncGameStateToServer() {
+    if (isDebugMode) return;
+
+    try {
+        // Send updated state to server
+        const result = await socketClient.syncGameState({
+            playerMoves: currentGameState.playerMoves,
+            playerPositions: currentGameState.playerState?.playerPositions,
+            map: currentGameState.map,
+            drawnRooms: currentGameState.playerState?.drawnRooms
+        });
+        console.log('[Sync] Game state synced to server:', result);
+    } catch (error) {
+        console.error('[Sync] Failed to sync game state:', error);
+    }
 }
 
 /**
@@ -4149,23 +4472,32 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
     
     // Check if turn ended
     if (currentGameState.playerMoves[playerId] <= 0) {
-        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-        
-        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-        if (nextPlayer) {
-            const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-            currentGameState.playerMoves[nextPlayerId] = speed;
+        if (isDebugMode) {
+            // Debug mode: auto-switch to next player locally
+            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+
+            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+            if (nextPlayer) {
+                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
+                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+                currentGameState.playerMoves[nextPlayerId] = speed;
+            }
+
+            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+            if (nextIdx !== -1) {
+                debugCurrentPlayerIndex = nextIdx;
+                mySocketId = nextPlayerId;
+            }
         }
-        
-        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-        if (nextIdx !== -1) {
-            debugCurrentPlayerIndex = nextIdx;
-            mySocketId = nextPlayerId;
-        }
+        // Multiplayer mode: server will handle turn progression via game:state broadcast
     }
-    
+
+    // Sync state with server in multiplayer mode
+    if (!isDebugMode) {
+        syncGameStateToServer();
+    }
+
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
@@ -4323,18 +4655,23 @@ function handleDebugUseElevator(mountEl, targetFloor) {
     
     // Update connections
     currentGameState.map.connections[currentRoomId] = newConnections;
-    
+
     // Using elevator does NOT cost a move (free action)
     // Player can continue moving after using elevator
+
+    // Sync state with server in multiplayer mode
+    if (!isDebugMode) {
+        syncGameStateToServer();
+    }
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**
- * Handle debug mode end turn early - skip remaining moves
+ * Handle end turn early - skip remaining moves (unified for debug and multiplayer)
  * @param {HTMLElement} mountEl
  */
-function handleDebugEndTurn(mountEl) {
+function handleEndTurn(mountEl) {
     if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
 
     const playerId = mySocketId;
@@ -4349,22 +4686,29 @@ function handleDebugEndTurn(mountEl) {
     // Set moves to 0 to end turn
     currentGameState.playerMoves[playerId] = 0;
 
-    // Move to next player
-    currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+    if (isDebugMode) {
+        // Debug mode: auto-switch to next player locally
+        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
 
-    const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-    const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-    if (nextPlayer) {
-        const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-        const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-        currentGameState.playerMoves[nextPlayerId] = speed;
-    }
+        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
+            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+            currentGameState.playerMoves[nextPlayerId] = speed;
+        }
 
-    // Auto switch to next player
-    const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-    if (nextIdx !== -1) {
-        debugCurrentPlayerIndex = nextIdx;
-        mySocketId = nextPlayerId;
+        // Auto switch to next player
+        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+        if (nextIdx !== -1) {
+            debugCurrentPlayerIndex = nextIdx;
+            mySocketId = nextPlayerId;
+        }
+    } else {
+        // Multiplayer mode: notify server to end turn
+        socketClient.endTurn().then(result => {
+            console.log('[EndTurn] Server response:', result);
+        });
     }
 
     updateGameUI(mountEl, currentGameState, mySocketId);
@@ -4579,25 +4923,33 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     
     // Check if turn ended (no more moves)
     if (currentGameState.playerMoves[playerId] <= 0) {
-        // Move to next player
-        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-        
-        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-        if (nextPlayer) {
-            const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-            currentGameState.playerMoves[nextPlayerId] = speed;
+        if (isDebugMode) {
+            // Debug mode: auto-switch to next player locally
+            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+
+            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+            if (nextPlayer) {
+                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
+                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+                currentGameState.playerMoves[nextPlayerId] = speed;
+            }
+
+            // Auto switch to next player
+            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
+            if (nextIdx !== -1) {
+                debugCurrentPlayerIndex = nextIdx;
+                mySocketId = nextPlayerId;
+            }
         }
-        
-        // Auto switch to next player
-        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-        if (nextIdx !== -1) {
-            debugCurrentPlayerIndex = nextIdx;
-            mySocketId = nextPlayerId;
-        }
+        // Multiplayer mode: server will handle turn progression via game:state broadcast
     }
-    
+
+    // Sync state with server in multiplayer mode
+    if (!isDebugMode) {
+        syncGameStateToServer();
+    }
+
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
@@ -4871,25 +5223,30 @@ function confirmTokenDrawing(mountEl) {
 
     // Check if turn ended (no more moves)
     if (currentGameState.playerMoves[playerId] <= 0) {
-        // Move to next player
-        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-
-        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-        if (nextPlayer) {
-            const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-            currentGameState.playerMoves[nextPlayerId] = speed;
-        }
-
-        // Auto switch to next player in debug mode
         if (isDebugMode) {
+            // Debug mode: auto-switch to next player locally
+            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+
+            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+            if (nextPlayer) {
+                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
+                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+                currentGameState.playerMoves[nextPlayerId] = speed;
+            }
+
             const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
             if (nextIdx !== -1) {
                 debugCurrentPlayerIndex = nextIdx;
                 mySocketId = nextPlayerId;
             }
         }
+        // Multiplayer mode: server will handle turn progression via game:state broadcast
+    }
+
+    // Sync state with server in multiplayer mode
+    if (!isDebugMode) {
+        syncGameStateToServer();
     }
 
     updateGameUI(mountEl, currentGameState, mySocketId);
@@ -5071,10 +5428,18 @@ function renderCardsViewModal() {
  * @param {{ mountEl: HTMLElement; onNavigate: (hash: string) => void; roomId: string | null; debugMode?: boolean }} options
  */
 export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false }) {
+    // Clone and replace mountEl to remove all existing event listeners from previous views
+    const newMountEl = mountEl.cloneNode(false);
+    mountEl.parentNode?.replaceChild(newMountEl, mountEl);
+    mountEl = /** @type {HTMLElement} */ (newMountEl);
+
+    // Reset event listener flag since we have a fresh element
+    eventListenersAttached = false;
+
     // Set debug mode flag
     isDebugMode = debugMode;
     debugCurrentPlayerIndex = 0;
-    
+
     // Reset state for fresh game
     sidebarOpen = false;
     introShown = false;
@@ -5121,6 +5486,7 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
             expandedPlayers.clear();
             activePlayers.clear();
             endTurnModal = null;
+            eventListenersAttached = false; // Reset listener flag for next game
         }, { once: true });
 
         return;
@@ -5178,5 +5544,6 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         expandedPlayers.clear();
         activePlayers.clear();
         endTurnModal = null;
+        eventListenersAttached = false; // Reset listener flag for next game
     }, { once: true });
 }

@@ -395,6 +395,53 @@ export function socketIOPlugin() {
                     }
                 });
 
+                // Sync game state (client-authoritative for room discovery, token drawing)
+                socket.on('game:sync-state', (stateUpdate, callback) => {
+                    const room = roomManager.getRoomBySocket(socket.id);
+
+                    if (!room) {
+                        if (callback) {
+                            callback({ success: false, error: 'Not in a room' });
+                        }
+                        return;
+                    }
+
+                    console.log(`[Socket.IO] Game state sync from ${socket.id}:`, Object.keys(stateUpdate));
+
+                    // Update player positions if provided
+                    if (stateUpdate.playerPositions) {
+                        for (const [playerId, position] of Object.entries(stateUpdate.playerPositions)) {
+                            playerManager.setPlayerPosition(room.id, playerId, position);
+                        }
+                    }
+
+                    // Update player moves if provided
+                    if (stateUpdate.playerMoves) {
+                        for (const [playerId, moves] of Object.entries(stateUpdate.playerMoves)) {
+                            playerManager.setPlayerMoves(room.id, playerId, moves);
+                        }
+                    }
+
+                    // Update map if provided
+                    if (stateUpdate.map) {
+                        mapManager.updateMapState(room.id, stateUpdate.map);
+                    }
+
+                    if (callback) {
+                        callback({ success: true });
+                    }
+
+                    // Broadcast updated game state to all players in the room
+                    const mapState = mapManager.getFullMapState(room.id);
+                    const playerState = playerManager.getFullPlayerState(room.id);
+                    const fullState = {
+                        ...room,
+                        map: mapState,
+                        playerState: playerState,
+                    };
+                    io.to(room.id).emit('game:state', fullState);
+                });
+
                 // ============================================
                 // Debug Mode Events
                 // ============================================

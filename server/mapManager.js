@@ -403,6 +403,37 @@ export function getFullMapState(gameId) {
 }
 
 /**
+ * Update map state from client sync (client-authoritative)
+ * @param {string} gameId
+ * @param {Partial<MapState>} updates
+ */
+export function updateMapState(gameId, updates) {
+    let state = maps.get(gameId);
+    if (!state) {
+        // Initialize if not exists
+        state = { revealedRooms: {}, connections: {} };
+        maps.set(gameId, state);
+    }
+
+    // Merge revealed rooms
+    if (updates.revealedRooms) {
+        state.revealedRooms = { ...state.revealedRooms, ...updates.revealedRooms };
+    }
+
+    // Merge connections
+    if (updates.connections) {
+        for (const [roomId, roomConnections] of Object.entries(updates.connections)) {
+            if (!state.connections[roomId]) {
+                state.connections[roomId] = {};
+            }
+            state.connections[roomId] = { ...state.connections[roomId], ...roomConnections };
+        }
+    }
+
+    saveMaps();
+}
+
+/**
  * Clean up map when game ends
  * @param {string} gameId
  */

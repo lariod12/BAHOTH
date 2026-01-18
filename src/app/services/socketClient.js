@@ -405,6 +405,24 @@ export function setMoves(moves) {
 }
 
 /**
+ * Sync game state to server (client-authoritative for room discovery, token drawing)
+ * @param {Object} stateUpdate - Partial state update to sync
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export function syncGameState(stateUpdate) {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        socket.emit('game:sync-state', stateUpdate, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
  * Get game state
  * @param {string} roomId
  * @returns {Promise<{ success: boolean; room?: any }>}
