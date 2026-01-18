@@ -31,6 +31,36 @@ let diceEventModal = null;
 /** @type {{ isOpen: boolean } | null} */
 let endTurnModal = null;
 
+// Event dice modal state - for immediate roll events
+/** @type {{
+ *   isOpen: boolean;
+ *   eventCard: object;           // Event card data
+ *   rollStat: string|string[];   // Stat(s) to roll (single or array for choice)
+ *   selectedStat: string|null;   // Selected stat when rollStat is array
+ *   diceCount: number;           // Number of dice based on stat
+ *   inputValue: string;
+ *   result: number | null;
+ *   resultsApplied: boolean;     // Prevent double application
+ *   currentRollIndex: number;    // For multi-roll events (nguoi_treo_co)
+ *   allResults: Array<{stat: string, result: number}>; // Store all roll results
+ *   pendingEffect: object|null;  // Effect to apply after damage roll
+ * } | null} */
+let eventDiceModal = null;
+
+// Damage dice modal state - for rolling damage after event effect
+/** @type {{
+ *   isOpen: boolean;
+ *   damageType: 'physical' | 'mental' | 'both';
+ *   physicalDice: number;
+ *   mentalDice: number;
+ *   inputValue: string;
+ *   result: number | null;
+ *   physicalResult: number | null;
+ *   mentalResult: number | null;
+ *   currentPhase: 'physical' | 'mental' | 'done';
+ * } | null} */
+let damageDiceModal = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -471,6 +501,371 @@ function needsToRoll(gameState, myId) {
     return !gameState.diceRolls[myId] && gameState.needsRoll?.includes(myId);
 }
 
+// ===== EVENT DICE ROLL HELPER FUNCTIONS =====
+
+/**
+ * Check if an event requires immediate dice roll
+ * @param {string} cardId - Event card ID
+ * @returns {boolean}
+ */
+function checkEventRequiresImmediateRoll(cardId) {
+    const card = EVENTS.find(e => e.id === cardId);
+    return card?.immediateRoll === true;
+}
+
+/**
+ * Get event card data by ID
+ * @param {string} cardId - Event card ID
+ * @returns {object|null}
+ */
+function getEventCardById(cardId) {
+    return EVENTS.find(e => e.id === cardId) || null;
+}
+
+/**
+ * Get player's current stat value for dice count
+ * @param {string} playerId - Player ID
+ * @param {string} stat - Stat name (speed, might, sanity, knowledge)
+ * @returns {number}
+ */
+function getPlayerStatForDice(playerId, stat) {
+    if (!currentGameState || !playerId || !stat) return 4; // default
+
+    const player = currentGameState.players?.find(p => p.id === playerId);
+    if (!player) return 4;
+
+    const charData = currentGameState.playerState?.characterData?.[playerId];
+    if (!charData || !charData.stats) {
+        // Use starting index from character definition
+        const char = CHARACTER_BY_ID[player.characterId];
+        if (!char) return 4;
+        return char.traits[stat]?.track[char.traits[stat]?.startIndex] || 4;
+    }
+
+    return getStatValue(player.characterId, stat, charData.stats[stat]);
+}
+
+/**
+ * Open event dice modal for immediate roll event
+ * @param {HTMLElement} mountEl
+ * @param {string} cardId - Event card ID
+ */
+function openEventDiceModal(mountEl, cardId) {
+    const card = getEventCardById(cardId);
+    if (!card) {
+        console.error('[EventDice] Card not found:', cardId);
+        return;
+    }
+
+    const playerId = mySocketId;
+
+    // Determine roll stat and dice count
+    let rollStat = card.rollStat || card.rollStats?.[0];
+    let diceCount = card.fixedDice || 0;
+
+    // If not fixed dice, get from player stat
+    if (!card.fixedDice && rollStat && typeof rollStat === 'string') {
+        diceCount = getPlayerStatForDice(playerId, rollStat);
+    }
+
+    eventDiceModal = {
+        isOpen: true,
+        eventCard: card,
+        rollStat: card.rollStat || card.rollStats,
+        selectedStat: null,
+        diceCount: diceCount,
+        inputValue: '',
+        result: null,
+        resultsApplied: false,
+        currentRollIndex: 0,
+        allResults: [],
+        pendingEffect: null,
+    };
+
+    console.log('[EventDice] Opened modal for:', card.name?.vi, 'rollStat:', rollStat, 'diceCount:', diceCount);
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Parse roll result range and check if result matches
+ * @param {string} range - Range string like "4+", "1-3", "0"
+ * @param {number} result - Dice result
+ * @returns {boolean}
+ */
+function matchesRollRange(range, result) {
+    if (!range) return false;
+
+    // Handle "X+" format (X or higher)
+    if (range.endsWith('+')) {
+        const min = parseInt(range.slice(0, -1), 10);
+        return result >= min;
+    }
+
+    // Handle "X-Y" format (range)
+    if (range.includes('-')) {
+        const [minStr, maxStr] = range.split('-');
+        const min = parseInt(minStr, 10);
+        const max = parseInt(maxStr, 10);
+        return result >= min && result <= max;
+    }
+
+    // Handle single number
+    const exact = parseInt(range, 10);
+    return result === exact;
+}
+
+/**
+ * Find matching outcome for dice result
+ * @param {Array} rollResults - Array of roll result outcomes
+ * @param {number} result - Dice result
+ * @returns {object|null}
+ */
+function findMatchingOutcome(rollResults, result) {
+    if (!rollResults || !Array.isArray(rollResults)) return null;
+
+    for (const outcome of rollResults) {
+        if (matchesRollRange(outcome.range, result)) {
+            return outcome;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Open damage dice modal
+ * @param {HTMLElement} mountEl
+ * @param {number} physicalDice - Number of physical damage dice (0 if none)
+ * @param {number} mentalDice - Number of mental damage dice (0 if none)
+ */
+function openDamageDiceModal(mountEl, physicalDice, mentalDice) {
+    let damageType = 'both';
+    let startPhase = 'physical';
+
+    if (physicalDice > 0 && mentalDice === 0) {
+        damageType = 'physical';
+        startPhase = 'physical';
+    } else if (physicalDice === 0 && mentalDice > 0) {
+        damageType = 'mental';
+        startPhase = 'mental';
+    }
+
+    damageDiceModal = {
+        isOpen: true,
+        damageType: damageType,
+        physicalDice: physicalDice,
+        mentalDice: mentalDice,
+        inputValue: '',
+        result: null,
+        physicalResult: null,
+        mentalResult: null,
+        currentPhase: startPhase,
+    };
+
+    console.log('[DamageDice] Opened modal - physical:', physicalDice, 'mental:', mentalDice);
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Apply stat change to player
+ * @param {string} playerId - Player ID
+ * @param {string} stat - Stat name
+ * @param {number} amount - Amount to change (positive to gain, negative to lose)
+ */
+function applyStatChange(playerId, stat, amount) {
+    if (!currentGameState || !playerId || !stat) return;
+
+    const player = currentGameState.players?.find(p => p.id === playerId);
+    if (!player) return;
+
+    // Initialize characterData if needed
+    if (!currentGameState.playerState.characterData) {
+        currentGameState.playerState.characterData = {};
+    }
+    if (!currentGameState.playerState.characterData[playerId]) {
+        const char = CHARACTER_BY_ID[player.characterId];
+        currentGameState.playerState.characterData[playerId] = {
+            characterId: player.characterId,
+            stats: {
+                speed: char?.traits.speed.startIndex || 3,
+                might: char?.traits.might.startIndex || 3,
+                sanity: char?.traits.sanity.startIndex || 3,
+                knowledge: char?.traits.knowledge.startIndex || 3,
+            }
+        };
+    }
+
+    const charData = currentGameState.playerState.characterData[playerId];
+    const currentIndex = charData.stats[stat] || 0;
+    const newIndex = Math.max(0, Math.min(7, currentIndex + amount));
+    charData.stats[stat] = newIndex;
+
+    console.log(`[StatChange] Player ${playerId} ${stat}: ${currentIndex} -> ${newIndex} (${amount > 0 ? '+' : ''}${amount})`);
+}
+
+/**
+ * Apply multiple stat changes
+ * @param {string} playerId - Player ID
+ * @param {object} stats - Object with stat names as keys and amounts as values
+ */
+function applyMultipleStatChanges(playerId, stats) {
+    if (!stats) return;
+    for (const [stat, amount] of Object.entries(stats)) {
+        applyStatChange(playerId, stat, -amount); // negative because "lose" means subtract
+    }
+}
+
+/**
+ * Apply damage to player (reduces physical or mental stats)
+ * @param {string} playerId - Player ID
+ * @param {number} physicalDamage - Physical damage amount
+ * @param {number} mentalDamage - Mental damage amount
+ */
+function applyDamageToPlayer(playerId, physicalDamage, mentalDamage) {
+    // Physical damage reduces Might or Speed (player's choice in real game, here we reduce Might first)
+    if (physicalDamage > 0) {
+        // Split damage between Might and Speed
+        const mightDamage = Math.ceil(physicalDamage / 2);
+        const speedDamage = Math.floor(physicalDamage / 2);
+        applyStatChange(playerId, 'might', -mightDamage);
+        if (speedDamage > 0) {
+            applyStatChange(playerId, 'speed', -speedDamage);
+        }
+    }
+
+    // Mental damage reduces Sanity or Knowledge
+    if (mentalDamage > 0) {
+        const sanityDamage = Math.ceil(mentalDamage / 2);
+        const knowledgeDamage = Math.floor(mentalDamage / 2);
+        applyStatChange(playerId, 'sanity', -sanityDamage);
+        if (knowledgeDamage > 0) {
+            applyStatChange(playerId, 'knowledge', -knowledgeDamage);
+        }
+    }
+
+    console.log(`[Damage] Applied to ${playerId} - physical: ${physicalDamage}, mental: ${mentalDamage}`);
+}
+
+/**
+ * Apply event dice result effect
+ * @param {HTMLElement} mountEl
+ * @param {number} result - Dice result
+ * @param {string} stat - Stat that was rolled (for 'rolled' stat effects)
+ */
+function applyEventDiceResult(mountEl, result, stat) {
+    if (!eventDiceModal || !eventDiceModal.eventCard) return;
+
+    const { eventCard } = eventDiceModal;
+    const outcome = findMatchingOutcome(eventCard.rollResults, result);
+
+    console.log('[EventDice] Result:', result, 'Outcome:', outcome);
+
+    if (!outcome) {
+        console.warn('[EventDice] No matching outcome found for result:', result);
+        closeEventDiceModal(mountEl);
+        return;
+    }
+
+    const playerId = mySocketId;
+
+    // Handle different effect types
+    switch (outcome.effect) {
+        case 'nothing':
+            console.log('[EventDice] Effect: nothing');
+            closeEventDiceModal(mountEl);
+            break;
+
+        case 'gainStat':
+            const gainStat = outcome.stat === 'rolled' ? stat : outcome.stat;
+            applyStatChange(playerId, gainStat, outcome.amount || 1);
+            closeEventDiceModal(mountEl);
+            break;
+
+        case 'loseStat':
+            const loseStat = outcome.stat === 'rolled' ? stat : outcome.stat;
+            applyStatChange(playerId, loseStat, -(outcome.amount || 1));
+            closeEventDiceModal(mountEl);
+            break;
+
+        case 'loseStats':
+            applyMultipleStatChanges(playerId, outcome.stats);
+            closeEventDiceModal(mountEl);
+            break;
+
+        case 'mentalDamage':
+            // Need to roll damage dice
+            eventDiceModal.pendingEffect = outcome;
+            eventDiceModal = null; // Close event modal first
+            openDamageDiceModal(mountEl, 0, outcome.dice);
+            break;
+
+        case 'physicalDamage':
+            eventDiceModal.pendingEffect = outcome;
+            eventDiceModal = null;
+            openDamageDiceModal(mountEl, outcome.dice, 0);
+            break;
+
+        case 'damage':
+            eventDiceModal.pendingEffect = outcome;
+            eventDiceModal = null;
+            openDamageDiceModal(mountEl, outcome.physicalDice || 0, outcome.mentalDice || 0);
+            break;
+
+        case 'teleport':
+            console.log('[EventDice] Effect: teleport to', outcome.destination);
+            // TODO: Implement teleport
+            closeEventDiceModal(mountEl);
+            break;
+
+        case 'drawItem':
+            console.log('[EventDice] Effect: drawItem');
+            // TODO: Implement draw item
+            closeEventDiceModal(mountEl);
+            break;
+
+        case 'attack':
+            console.log('[EventDice] Effect: attack with', outcome.attackerDice, 'dice');
+            // TODO: Implement attack flow
+            closeEventDiceModal(mountEl);
+            break;
+
+        case 'forcedAttack':
+            console.log('[EventDice] Effect: forced attack on', outcome.target);
+            // TODO: Implement forced attack
+            closeEventDiceModal(mountEl);
+            break;
+
+        default:
+            console.log('[EventDice] Unknown effect:', outcome.effect);
+            closeEventDiceModal(mountEl);
+    }
+}
+
+/**
+ * Close event dice modal
+ * @param {HTMLElement} mountEl
+ */
+function closeEventDiceModal(mountEl) {
+    eventDiceModal = null;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close damage dice modal and apply damage
+ * @param {HTMLElement} mountEl
+ */
+function closeDamageDiceModal(mountEl) {
+    if (!damageDiceModal) return;
+
+    const physicalDamage = damageDiceModal.physicalResult || 0;
+    const mentalDamage = damageDiceModal.mentalResult || 0;
+
+    applyDamageToPlayer(mySocketId, physicalDamage, mentalDamage);
+
+    damageDiceModal = null;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
 /**
  * Render dice results screen (after all players rolled)
  */
@@ -854,6 +1249,196 @@ function renderDiceEventModal() {
                             Dong
                         </button>
                     ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render event dice modal - for immediate roll events (mandatory, no close button)
+ * @returns {string} HTML string
+ */
+function renderEventDiceModal() {
+    if (!eventDiceModal?.isOpen) return '';
+
+    const { eventCard, rollStat, selectedStat, diceCount, inputValue, result, currentRollIndex, allResults } = eventDiceModal;
+    const hasResult = result !== null;
+    const cardName = eventCard?.name?.vi || 'Event';
+
+    // Check if this is a multi-roll event (nguoi_treo_co)
+    const isMultiRoll = eventCard?.rollStats && Array.isArray(eventCard.rollStats);
+    const totalRolls = isMultiRoll ? eventCard.rollStats.length : 1;
+    const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || rollStat);
+
+    // Check if rollStat is an array (player choice, e.g., con_nhen)
+    const isStatChoice = Array.isArray(rollStat) && !isMultiRoll;
+    const needsStatSelection = isStatChoice && !selectedStat;
+
+    // Stat labels
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    // Get current stat label
+    const currentStatLabel = currentStat ? statLabels[currentStat] : '';
+
+    // Build results history for multi-roll
+    let resultsHistoryHtml = '';
+    if (isMultiRoll && allResults.length > 0) {
+        resultsHistoryHtml = `
+            <div class="event-dice-modal__history">
+                <h4>Ket qua da do:</h4>
+                <ul>
+                    ${allResults.map(r => `<li>${statLabels[r.stat]}: ${r.result}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="event-dice-overlay">
+            <div class="event-dice-modal" data-modal-content="true">
+                <header class="event-dice-modal__header">
+                    <h3 class="event-dice-modal__title">${cardName}</h3>
+                    ${isMultiRoll ? `<span class="event-dice-modal__progress">Lan ${currentRollIndex + 1}/${totalRolls}</span>` : ''}
+                </header>
+                <div class="event-dice-modal__body">
+                    <p class="event-dice-modal__description">${eventCard?.text?.vi || ''}</p>
+
+                    ${resultsHistoryHtml}
+
+                    ${needsStatSelection ? `
+                        <div class="event-dice-modal__stat-select">
+                            <label class="event-dice-modal__label">Chon chi so de do:</label>
+                            <select class="event-dice-modal__select" data-input="event-stat-select">
+                                <option value="">-- Chon --</option>
+                                ${rollStat.map(s => `<option value="${s}">${statLabels[s]}</option>`).join('')}
+                            </select>
+                        </div>
+                    ` : hasResult ? `
+                        <div class="event-dice-modal__result">
+                            <span class="event-dice-modal__result-label">Ket qua ${currentStatLabel}:</span>
+                            <span class="event-dice-modal__result-value">${result}</span>
+                        </div>
+                    ` : `
+                        <div class="event-dice-modal__roll-info">
+                            <p>Do ${eventCard?.fixedDice || diceCount} vien xuc xac ${currentStatLabel}</p>
+                        </div>
+                        <div class="event-dice-modal__input-group">
+                            <label class="event-dice-modal__label">Nhap so (0-16):</label>
+                            <input
+                                type="number"
+                                class="event-dice-modal__input"
+                                min="0"
+                                max="16"
+                                value="${inputValue}"
+                                data-input="event-dice-value"
+                                placeholder="0-16"
+                            />
+                        </div>
+                        <div class="event-dice-modal__actions">
+                            <button class="event-dice-modal__btn event-dice-modal__btn--confirm"
+                                    type="button"
+                                    data-action="event-dice-confirm">
+                                Xac nhan
+                            </button>
+                            <button class="event-dice-modal__btn event-dice-modal__btn--random"
+                                    type="button"
+                                    data-action="event-dice-random">
+                                Ngau nhien
+                            </button>
+                        </div>
+                    `}
+
+                    ${hasResult ? `
+                        <button class="event-dice-modal__btn event-dice-modal__btn--continue"
+                                type="button"
+                                data-action="event-dice-continue">
+                            ${isMultiRoll && currentRollIndex < totalRolls - 1 ? 'Tiep theo' : 'Ap dung ket qua'}
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render damage dice modal - for rolling damage dice after event effect
+ * @returns {string} HTML string
+ */
+function renderDamageDiceModal() {
+    if (!damageDiceModal?.isOpen) return '';
+
+    const { damageType, physicalDice, mentalDice, inputValue, currentPhase, physicalResult, mentalResult } = damageDiceModal;
+
+    const phaseLabels = {
+        physical: `Do ${physicalDice} vien xuc xac sat thuong vat li`,
+        mental: `Do ${mentalDice} vien xuc xac sat thuong tinh than`
+    };
+
+    const currentDice = currentPhase === 'physical' ? physicalDice : mentalDice;
+    const hasPhysicalResult = physicalResult !== null;
+    const hasMentalResult = mentalResult !== null;
+    const isWaitingForInput = currentPhase !== 'done';
+
+    // Build results display
+    let resultsHtml = '';
+    if (hasPhysicalResult) {
+        resultsHtml += `<p>Sat thuong vat li: ${physicalResult}</p>`;
+    }
+    if (hasMentalResult) {
+        resultsHtml += `<p>Sat thuong tinh than: ${mentalResult}</p>`;
+    }
+
+    return `
+        <div class="damage-dice-overlay">
+            <div class="damage-dice-modal" data-modal-content="true">
+                <header class="damage-dice-modal__header">
+                    <h3 class="damage-dice-modal__title">Do xuc xac sat thuong</h3>
+                </header>
+                <div class="damage-dice-modal__body">
+                    ${resultsHtml ? `<div class="damage-dice-modal__results">${resultsHtml}</div>` : ''}
+
+                    ${isWaitingForInput ? `
+                        <div class="damage-dice-modal__roll-info">
+                            <p>${phaseLabels[currentPhase]}</p>
+                        </div>
+                        <div class="damage-dice-modal__input-group">
+                            <label class="damage-dice-modal__label">Nhap so (0-${currentDice * 2}):</label>
+                            <input
+                                type="number"
+                                class="damage-dice-modal__input"
+                                min="0"
+                                max="${currentDice * 2}"
+                                value="${inputValue}"
+                                data-input="damage-dice-value"
+                                placeholder="0-${currentDice * 2}"
+                            />
+                        </div>
+                        <div class="damage-dice-modal__actions">
+                            <button class="damage-dice-modal__btn damage-dice-modal__btn--confirm"
+                                    type="button"
+                                    data-action="damage-dice-confirm">
+                                Xac nhan
+                            </button>
+                            <button class="damage-dice-modal__btn damage-dice-modal__btn--random"
+                                    type="button"
+                                    data-action="damage-dice-random">
+                                Ngau nhien
+                            </button>
+                        </div>
+                    ` : `
+                        <button class="damage-dice-modal__btn damage-dice-modal__btn--apply"
+                                type="button"
+                                data-action="damage-dice-apply">
+                            Ap dung sat thuong
+                        </button>
+                    `}
                 </div>
             </div>
         </div>
@@ -1375,9 +1960,12 @@ function renderDebugHauntButton(gameState) {
 function renderGameControls(gameState, myId) {
     if (!gameState || gameState.gamePhase !== 'playing') return '';
 
+    // Block all controls when event dice or damage dice modal is open
+    const isBlocked = eventDiceModal?.isOpen || damageDiceModal?.isOpen;
+
     const myTurn = isMyTurn(gameState, myId);
     const movesLeft = gameState.playerMoves?.[myId] ?? 0;
-    const canMove = myTurn && movesLeft > 0;
+    const canMove = myTurn && movesLeft > 0 && !isBlocked;
 
     // Check stairs availability
     const stairs = getStairsAvailability(gameState, myId);
@@ -1604,6 +2192,8 @@ function renderGameScreen(gameState, myId) {
             ${renderCardsViewModal()}
             ${renderStatAdjustModal()}
             ${renderDiceEventModal()}
+            ${renderEventDiceModal()}
+            ${renderDamageDiceModal()}
             ${renderEndTurnModal()}
             ${renderTutorialModal()}
         `;
@@ -2150,6 +2740,170 @@ function attachDebugEventListeners(mountEl) {
             diceEventModal = null;
             skipMapCentering = true;
             updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // ===== EVENT DICE MODAL HANDLERS =====
+
+        // Event dice - stat selection changed
+        if (target.matches('[data-input="event-stat-select"]')) {
+            if (!eventDiceModal) return;
+            const selectedStat = target.value;
+            if (selectedStat) {
+                eventDiceModal.selectedStat = selectedStat;
+                eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, selectedStat);
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Event dice confirm (manual input)
+        if (action === 'event-dice-confirm') {
+            if (!eventDiceModal) return;
+            const input = mountEl.querySelector('[data-input="event-dice-value"]');
+            const value = parseInt(input?.value, 10);
+            if (!isNaN(value) && value >= 0 && value <= 16) {
+                eventDiceModal.result = value;
+                eventDiceModal.inputValue = value.toString();
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Event dice random roll
+        if (action === 'event-dice-random') {
+            if (!eventDiceModal) return;
+            const diceCount = eventDiceModal.eventCard?.fixedDice || eventDiceModal.diceCount || 1;
+            // Roll diceCount dice (each 0-2) and sum
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+            eventDiceModal.result = total;
+            eventDiceModal.inputValue = total.toString();
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Event dice continue/apply result
+        if (action === 'event-dice-continue') {
+            if (!eventDiceModal) return;
+
+            const { eventCard, result, currentRollIndex, allResults, selectedStat } = eventDiceModal;
+            const isMultiRoll = eventCard?.rollStats && Array.isArray(eventCard.rollStats);
+            const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || eventCard.rollStat);
+
+            if (isMultiRoll) {
+                // Save current result
+                eventDiceModal.allResults.push({ stat: currentStat, result: result });
+
+                // Check if more rolls needed
+                if (currentRollIndex < eventCard.rollStats.length - 1) {
+                    // Move to next roll
+                    const nextStat = eventCard.rollStats[currentRollIndex + 1];
+                    eventDiceModal.currentRollIndex++;
+                    eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, nextStat);
+                    eventDiceModal.inputValue = '';
+                    eventDiceModal.result = null;
+                    skipMapCentering = true;
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                    return;
+                }
+
+                // All rolls done - apply multi-roll results
+                console.log('[EventDice] Multi-roll complete:', eventDiceModal.allResults);
+                const allRollResults = [...eventDiceModal.allResults, { stat: currentStat, result: result }];
+
+                // Apply results for each stat
+                allRollResults.forEach(r => {
+                    const outcome = findMatchingOutcome(eventCard.rollResults, r.result);
+                    if (outcome && outcome.effect === 'loseStat') {
+                        applyStatChange(mySocketId, r.stat, -(outcome.amount || 1));
+                    }
+                });
+
+                // Check bonus condition (nguoi_treo_co)
+                if (eventCard.bonusCondition) {
+                    const threshold = eventCard.bonusCondition.threshold || 2;
+                    const allPassed = allRollResults.every(r => r.result >= threshold);
+                    if (allPassed && eventCard.bonusCondition.reward) {
+                        console.log('[EventDice] Bonus condition met! Player can gain +2 to any stat');
+                        // TODO: Let player choose which stat to boost
+                    }
+                }
+
+                closeEventDiceModal(mountEl);
+                return;
+            }
+
+            // Single roll - apply result
+            applyEventDiceResult(mountEl, result, currentStat);
+            return;
+        }
+
+        // ===== DAMAGE DICE MODAL HANDLERS =====
+
+        // Damage dice confirm (manual input)
+        if (action === 'damage-dice-confirm') {
+            if (!damageDiceModal) return;
+            const input = mountEl.querySelector('[data-input="damage-dice-value"]');
+            const currentDice = damageDiceModal.currentPhase === 'physical' ? damageDiceModal.physicalDice : damageDiceModal.mentalDice;
+            const maxValue = currentDice * 2;
+            const value = parseInt(input?.value, 10);
+
+            if (!isNaN(value) && value >= 0 && value <= maxValue) {
+                if (damageDiceModal.currentPhase === 'physical') {
+                    damageDiceModal.physicalResult = value;
+                    // Check if mental damage also needed
+                    if (damageDiceModal.mentalDice > 0) {
+                        damageDiceModal.currentPhase = 'mental';
+                        damageDiceModal.inputValue = '';
+                    } else {
+                        damageDiceModal.currentPhase = 'done';
+                    }
+                } else if (damageDiceModal.currentPhase === 'mental') {
+                    damageDiceModal.mentalResult = value;
+                    damageDiceModal.currentPhase = 'done';
+                }
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Damage dice random roll
+        if (action === 'damage-dice-random') {
+            if (!damageDiceModal) return;
+            const currentDice = damageDiceModal.currentPhase === 'physical' ? damageDiceModal.physicalDice : damageDiceModal.mentalDice;
+            // Roll dice (each 0-2) and sum
+            let total = 0;
+            for (let i = 0; i < currentDice; i++) {
+                total += Math.floor(Math.random() * 3);
+            }
+
+            if (damageDiceModal.currentPhase === 'physical') {
+                damageDiceModal.physicalResult = total;
+                if (damageDiceModal.mentalDice > 0) {
+                    damageDiceModal.currentPhase = 'mental';
+                    damageDiceModal.inputValue = '';
+                } else {
+                    damageDiceModal.currentPhase = 'done';
+                }
+            } else if (damageDiceModal.currentPhase === 'mental') {
+                damageDiceModal.mentalResult = total;
+                damageDiceModal.currentPhase = 'done';
+            }
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Damage dice apply
+        if (action === 'damage-dice-apply') {
+            closeDamageDiceModal(mountEl);
             return;
         }
 
@@ -4074,9 +4828,9 @@ function handleTokenDrawNext(mountEl) {
  */
 function confirmTokenDrawing(mountEl) {
     if (!tokenDrawingModal || !currentGameState) return;
-    
+
     const playerId = mySocketId;
-    
+
     // Initialize player cards if not exists
     if (!currentGameState.playerState.playerCards) {
         currentGameState.playerState.playerCards = {};
@@ -4088,23 +4842,38 @@ function confirmTokenDrawing(mountEl) {
             items: []
         };
     }
-    
+
+    // Collect events that require immediate roll
+    let immediateRollEvent = null;
+
     // Add drawn cards to player inventory
     tokenDrawingModal.tokensToDrawn.forEach(token => {
         if (token.drawn && token.selectedCard) {
             const cardType = token.type === 'omen' ? 'omens' : token.type === 'event' ? 'events' : 'items';
             currentGameState.playerState.playerCards[playerId][cardType].push(token.selectedCard);
+
+            // Check if this event requires immediate dice roll
+            if (token.type === 'event' && checkEventRequiresImmediateRoll(token.selectedCard)) {
+                immediateRollEvent = token.selectedCard;
+            }
         }
     });
-    
-    // Close modal
+
+    // Close token drawing modal
     tokenDrawingModal = null;
-    
+
+    // If there's an event requiring immediate roll, open event dice modal
+    if (immediateRollEvent) {
+        console.log('[TokenDrawing] Event requires immediate roll:', immediateRollEvent);
+        openEventDiceModal(mountEl, immediateRollEvent);
+        return; // Don't proceed to next turn yet
+    }
+
     // Check if turn ended (no more moves)
     if (currentGameState.playerMoves[playerId] <= 0) {
         // Move to next player
         currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-        
+
         const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
         const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
         if (nextPlayer) {
@@ -4112,7 +4881,7 @@ function confirmTokenDrawing(mountEl) {
             const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
             currentGameState.playerMoves[nextPlayerId] = speed;
         }
-        
+
         // Auto switch to next player in debug mode
         if (isDebugMode) {
             const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
@@ -4122,7 +4891,7 @@ function confirmTokenDrawing(mountEl) {
             }
         }
     }
-    
+
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 

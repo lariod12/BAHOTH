@@ -451,6 +451,7 @@ export const EVENTS = [
         '1-3  Chịu 1 xúc xắc sát thương tinh thần.\n' +
         '0  Chịu 2 xúc xắc sát thương tinh thần.',
     },
+    immediateRoll: true,
     rollStat: 'sanity',
     rollResults: [
       { range: '4+', effect: 'nothing' },
@@ -486,6 +487,7 @@ export const EVENTS = [
         '5+  Bạn nhận ra họ chính là chủ nhân cũ của ngôi nhà này. Bạn gọi tên họ, họ quay lại và thì thầm những bí mật đen tối của nơi này. Tăng 1 Knowledge.\n' +
         '0-4  Bạn lùi lại trong hoảng sợ tột độ. Chịu 1 xúc xắc sát thương tinh thần.',
     },
+    immediateRoll: true,
     rollStat: 'knowledge',
     rollResults: [
       { range: '5+', effect: 'gainStat', stat: 'knowledge', amount: 1 },
@@ -505,6 +507,7 @@ export const EVENTS = [
         '2-3  Ra ngoài, ra ngoài, bạn phải ra ngoài. Đặt nhân vật của bạn ở Lối vào sảnh chính (Entrance Hall).\n' +
         '0-1  Bạn chạy xuyên qua lửa! Chịu 1 xúc xắc sát thương vật lí và 1 xúc xắc sát thương tinh thần.',
     },
+    immediateRoll: true,
     rollStat: 'sanity',
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'sanity', amount: 1 },
@@ -542,6 +545,8 @@ export const EVENTS = [
         '0-1  Căn phòng bất kì ở tầng hầm.\n' +
         'Bạn và các người chơi khác chỉ có thể sử dụng "Secret Passage" nếu như không còn bước di chuyển nào.',
     },
+    immediateRoll: true,
+    fixedDice: 3,
     effect: 'placeToken',
     tokenType: 'secretPassage',
     rollResults: [
@@ -622,6 +627,7 @@ export const EVENTS = [
         '4+  Bạn tìm thấy gì đó trong đám bùn đất. Rút 1 lá Item.\n' +
         '0-3  Hắn ta xuất hiện trở lại và tấn công bạn. Người chơi bên phải bạn đổ 4 viên xúc xắc để tính sát thương lên bạn. Bạn phòng thủ bằng cách đổ xúc xắc Might như bình thường.',
     },
+    immediateRoll: true,
     rollStat: 'knowledge',
     roomModifier: { room: 'gardens', diceReduction: 2 },
     rollResults: [
@@ -661,6 +667,7 @@ export const EVENTS = [
         '0-1  Mất 1 nấc chỉ số đó.\n' +
         'Nếu bạn đổ được 2+ trong cả bốn lần, thì tăng 2 nấc một chỉ số bất kì.',
     },
+    immediateRoll: true,
     rollStats: ['might', 'speed', 'sanity', 'knowledge'],
     rollResults: [
       { range: '2+', effect: 'nothing' },
@@ -685,6 +692,7 @@ export const EVENTS = [
         '1-3  Con nhện cắn bạn, chịu 1 xúc xắc sát thương vật lí.\n' +
         '0  Con nhện cắn bạn liên tục nhiều lần. Chịu 2 xúc xắc sát thương vật lí.',
     },
+    immediateRoll: true,
     rollStat: ['speed', 'sanity'],
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'rolled', amount: 1 },
@@ -705,6 +713,7 @@ export const EVENTS = [
         '1-4  Mất 1 Sanity.\n' +
         '0  Mất 2 Sanity.',
     },
+    immediateRoll: true,
     rollStat: 'sanity',
     rollResults: [
       { range: '5+', effect: 'gainStat', stat: 'sanity', amount: 1 },
@@ -726,6 +735,7 @@ export const EVENTS = [
         '1  Mất 1 Might và 1 Speed.\n' +
         '0  Bạn nôn mửa thảm tệ. Mất 1 Might, 1 Speed, 1 Knowledge và 1 Sanity.',
     },
+    immediateRoll: true,
     rollStat: 'sanity',
     rollResults: [
       { range: '5+', effect: 'gainStat', stat: 'sanity', amount: 1 },
@@ -747,6 +757,7 @@ export const EVENTS = [
         '2-3  Bạn sợ hãi và mất 1 Sanity.\n' +
         '0-1  Bạn trở nên điên loạn. Nếu có quái vật hoặc đồng đội ở căn phòng liền kề, bạn bắt buộc phải tấn công họ (nếu có thể, chọn người có chỉ số Might thấp nhất).',
     },
+    immediateRoll: true,
     rollStat: 'sanity',
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'sanity', amount: 1 },
@@ -786,6 +797,7 @@ export const EVENTS = [
         '1-3  Mất 1 Might.\n' +
         '0  Mất 1 Speed và 1 Might.',
     },
+    immediateRoll: true,
     rollStat: 'speed',
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'speed', amount: 1 },

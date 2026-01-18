@@ -5973,3 +5973,383 @@ select.field__input option {
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
+
+/* ===== EVENT DICE MODAL (for immediate roll events) ===== */
+.event-dice-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 20px;
+}
+
+.event-dice-modal {
+    background: linear-gradient(145deg, #1a1a1a 0%, #252525 100%);
+    border: 2px solid #c9a55c;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 400px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(201, 165, 92, 0.2);
+}
+
+.event-dice-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(201, 165, 92, 0.3);
+    background: rgba(201, 165, 92, 0.1);
+}
+
+.event-dice-modal__title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+    color: #c9a55c;
+}
+
+.event-dice-modal__progress {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 12px;
+    border-radius: 12px;
+}
+
+.event-dice-modal__body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.event-dice-modal__description {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: pre-line;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-left: 3px solid #c9a55c;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.event-dice-modal__history {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px 16px;
+}
+
+.event-dice-modal__history h4 {
+    margin: 0 0 8px 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.event-dice-modal__history ul {
+    margin: 0;
+    padding: 0 0 0 20px;
+}
+
+.event-dice-modal__history li {
+    font-size: 0.85rem;
+    color: #c9a55c;
+    margin: 4px 0;
+}
+
+.event-dice-modal__stat-select {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event-dice-modal__select {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+}
+
+.event-dice-modal__select:focus {
+    border-color: #c9a55c;
+    outline: none;
+}
+
+.event-dice-modal__roll-info {
+    text-align: center;
+    padding: 12px;
+    background: rgba(201, 165, 92, 0.15);
+    border-radius: 8px;
+}
+
+.event-dice-modal__roll-info p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #c9a55c;
+    font-weight: 600;
+}
+
+.event-dice-modal__input-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.event-dice-modal__label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.event-dice-modal__input {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 1.3rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.event-dice-modal__input:focus {
+    border-color: #c9a55c;
+}
+
+.event-dice-modal__actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.event-dice-modal__btn {
+    flex: 1;
+    padding: 14px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.event-dice-modal__btn--confirm {
+    background: #c9a55c;
+    color: #1a1a1a;
+}
+
+.event-dice-modal__btn--confirm:hover {
+    background: #d4b46a;
+    transform: translateY(-1px);
+}
+
+.event-dice-modal__btn--random {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.event-dice-modal__btn--random:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.event-dice-modal__btn--continue {
+    width: 100%;
+    background: linear-gradient(135deg, #4a9c4a 0%, #3d8a3d 100%);
+    color: #fff;
+}
+
+.event-dice-modal__btn--continue:hover {
+    background: linear-gradient(135deg, #5ab55a 0%, #4a9c4a 100%);
+    transform: translateY(-1px);
+}
+
+.event-dice-modal__result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: rgba(201, 165, 92, 0.1);
+    border-radius: 12px;
+}
+
+.event-dice-modal__result-label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.event-dice-modal__result-value {
+    font-size: 3.5rem;
+    font-weight: 700;
+    color: #c9a55c;
+    text-shadow: 0 2px 8px rgba(201, 165, 92, 0.3);
+}
+
+/* ===== DAMAGE DICE MODAL ===== */
+.damage-dice-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 20px;
+}
+
+.damage-dice-modal {
+    background: linear-gradient(145deg, #2a1515 0%, #1a1a1a 100%);
+    border: 2px solid #c94c4c;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(201, 76, 76, 0.2);
+}
+
+.damage-dice-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(201, 76, 76, 0.3);
+    background: rgba(201, 76, 76, 0.1);
+}
+
+.damage-dice-modal__title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0;
+    color: #c94c4c;
+}
+
+.damage-dice-modal__body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.damage-dice-modal__results {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-left: 3px solid #c94c4c;
+}
+
+.damage-dice-modal__results p {
+    margin: 6px 0;
+    font-size: 0.95rem;
+    color: #c94c4c;
+    font-weight: 600;
+}
+
+.damage-dice-modal__roll-info {
+    text-align: center;
+    padding: 12px;
+    background: rgba(201, 76, 76, 0.15);
+    border-radius: 8px;
+}
+
+.damage-dice-modal__roll-info p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #c94c4c;
+    font-weight: 600;
+}
+
+.damage-dice-modal__input-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.damage-dice-modal__label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.damage-dice-modal__input {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 1.3rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(201, 76, 76, 0.4);
+    border-radius: 8px;
+    color: #fff;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.damage-dice-modal__input:focus {
+    border-color: #c94c4c;
+}
+
+.damage-dice-modal__actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.damage-dice-modal__btn {
+    flex: 1;
+    padding: 14px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.damage-dice-modal__btn--confirm {
+    background: #c94c4c;
+    color: #fff;
+}
+
+.damage-dice-modal__btn--confirm:hover {
+    background: #d65c5c;
+    transform: translateY(-1px);
+}
+
+.damage-dice-modal__btn--random {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.damage-dice-modal__btn--random:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.damage-dice-modal__btn--apply {
+    width: 100%;
+    background: linear-gradient(135deg, #c94c4c 0%, #a83c3c 100%);
+    color: #fff;
+}
+
+.damage-dice-modal__btn--apply:hover {
+    background: linear-gradient(135deg, #d65c5c 0%, #c94c4c 100%);
+    transform: translateY(-1px);
+}
