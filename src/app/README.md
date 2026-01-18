@@ -57,6 +57,7 @@ src/app/
 │   └── socketClient.js                          # 14KB  | 513 lines  | Socket.IO client wrapper
 │
 ├── utils/                                       # Utility functions and helpers
+│   ├── factionUtils.js                          # 5KB   | 170 lines  | Faction/haunt system utilities
 │   ├── vaultLayout.js                           # 8KB   | 249 lines  | Vault room layout calculator
 │   └── vaultLayout.test.js                      # 4KB   | 112 lines  | Property-based tests
 │
@@ -69,7 +70,7 @@ src/app/
     └── tutorialBooksView.js                     # 2KB   | 63 lines   | Tutorial menu
 ```
 
-**Total**: 17 files | ~450KB | ~13,000+ lines of code
+**Total**: 18 files | ~455KB | ~13,200+ lines of code
 
 ---
 
@@ -272,7 +273,8 @@ gameView.js (Most Complex)
   ├─ cardsData.js
   ├─ socketClient.js
   ├─ GameMap.js
-  └─ vaultLayout.js
+  ├─ vaultLayout.js
+  └─ factionUtils.js
 
 GameMap.js
   └─ vaultLayout.js
@@ -859,6 +861,69 @@ await socketClient.toggleReady();
 ---
 
 ### utils/
+
+#### `factionUtils.js` (~170 lines, 5KB)
+
+**Purpose**: Utility functions for the faction/haunt system. Handles player allegiances (allies vs enemies) before and after haunt.
+
+**Key Concepts**:
+- **Pre-Haunt**: All players are allies (`faction: null`)
+- **Post-Haunt**: Players split into `'heroes'` or `'traitor'` factions
+- **Allies**: Same faction or pre-haunt
+- **Enemies**: Different factions after haunt
+
+**Key Functions**:
+```javascript
+// State creation
+export function createDefaultHauntState()
+// Returns: { hauntTriggered, hauntNumber, triggeredByPlayerId, triggerOmen, triggerRoom, traitorId }
+
+// State checks
+export function isHauntTriggered(gameState)         // Returns: boolean
+export function getFaction(gameState, playerId)      // Returns: 'heroes' | 'traitor' | null
+export function getTraitorId(gameState)              // Returns: string | null
+
+// Relationship checks
+export function isAlly(gameState, playerId1, playerId2)   // Returns: boolean
+export function isEnemy(gameState, playerId1, playerId2)  // Returns: boolean
+
+// Player queries
+export function getPlayersInFaction(gameState, faction)   // Returns: string[]
+export function getHeroes(gameState)                      // Returns: string[]
+export function isTraitor(gameState, playerId)            // Returns: boolean
+export function isHero(gameState, playerId)               // Returns: boolean
+
+// Display
+export function getFactionLabel(faction)             // Returns: 'Ke Phan Boi' | 'Anh Hung' | ''
+
+// Debug mode
+export function triggerHauntDebug(gameState, hauntData)  // Mutates gameState directly
+```
+
+**Usage Example**:
+```javascript
+import { isAlly, isEnemy, getFaction, isHauntTriggered } from './utils/factionUtils.js';
+
+// Check if players are allies
+if (isAlly(gameState, myId, otherPlayerId)) {
+    // Can trade items, share information, etc.
+}
+
+// Check if player is an enemy
+if (isEnemy(gameState, myId, otherPlayerId)) {
+    // Can attack, block movement, etc.
+}
+
+// Get faction for UI display
+const faction = getFaction(gameState, playerId);
+if (faction === 'traitor') {
+    // Show traitor UI
+}
+```
+
+**Pattern**: Pure functional utilities with no side effects (except `triggerHauntDebug` for debug mode)
+
+---
 
 #### `vaultLayout.js` (~249 lines, 8KB)
 
@@ -1798,7 +1863,7 @@ function renderComponent(props) {
 
 ---
 
-**Last Updated**: 2026-01-17 @ 21:30 (based on commit `8ed05fd`)
+**Last Updated**: 2026-01-18 @ Faction system added (factionUtils.js)
 
 **Maintainers**: See [package.json](../../package.json) for contact info
 

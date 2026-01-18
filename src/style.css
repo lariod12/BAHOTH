@@ -5848,3 +5848,128 @@ select.field__input option {
         padding: 0 14px 14px;
     }
 }
+
+/* ============================================
+   FACTION SYSTEM STYLES
+   ============================================ */
+
+/* Sidebar Faction Indicator */
+.sidebar-faction {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 14px;
+    margin: 0 12px 10px;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border: 1px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.sidebar-faction::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0.08;
+    pointer-events: none;
+}
+
+.sidebar-faction__icon {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.sidebar-faction__label {
+    font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+}
+
+/* Survivor (Heroes) - Subtle blue/teal theme */
+.sidebar-faction--survivor {
+    background: rgba(38, 166, 154, 0.12);
+    color: #80CBC4;
+    border-color: rgba(38, 166, 154, 0.25);
+}
+
+.sidebar-faction--survivor::before {
+    background: linear-gradient(135deg, #26A69A 0%, #00897B 100%);
+}
+
+/* Traitor - Subtle dark red theme */
+.sidebar-faction--traitor {
+    background: rgba(183, 28, 28, 0.15);
+    color: #EF9A9A;
+    border-color: rgba(183, 28, 28, 0.3);
+}
+
+.sidebar-faction--traitor::before {
+    background: linear-gradient(135deg, #C62828 0%, #8B0000 100%);
+}
+
+/* Sidebar Haunt Active State */
+.game-sidebar.is-haunt-active {
+    border-color: rgba(183, 28, 28, 0.2);
+}
+
+/* Turn Order Faction Colors */
+.turn-indicator.faction-survivor {
+    border-left: 2px solid #26A69A;
+}
+
+.turn-indicator.faction-traitor {
+    border-left: 2px solid #C62828;
+}
+
+.turn-indicator.is-enemy {
+    background-color: rgba(244, 67, 54, 0.1);
+}
+
+.turn-indicator.is-ally {
+    background-color: rgba(76, 175, 80, 0.1);
+}
+
+/* Debug Haunt Trigger Button */
+.debug-haunt-btn {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: linear-gradient(135deg, #7B1FA2, #4A148C);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(123, 31, 162, 0.4);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.debug-haunt-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(123, 31, 162, 0.5);
+}
+
+.debug-haunt-btn:active {
+    transform: translateY(0);
+}
+
+.debug-haunt-btn__icon {
+    font-size: 1.1rem;
+}
+
+.debug-haunt-btn__label {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}

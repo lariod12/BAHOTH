@@ -5,6 +5,7 @@ import { renderGameMap, buildPlayerNamesMap, buildPlayerColorsMap } from '../com
 import { ROOMS } from '../data/mapsData.js';
 import { ITEMS, EVENTS, OMENS } from '../data/cardsData.js';
 import { calculateVaultLayout, calculatePlayerSpawnPosition } from '../utils/vaultLayout.js';
+import { createDefaultHauntState, isHauntTriggered, getFaction, isAlly, isEnemy, getFactionLabel, triggerHauntDebug, getTraitorId } from '../utils/factionUtils.js';
 
 // Room discovery modal state
 /** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number; selectedFloor: string | null; needsFloorSelection: boolean } | null} */
@@ -210,6 +211,7 @@ function createCharacterData(playerId, characterId) {
             knowledge: char.traits.knowledge.startIndex,
         },
         isDead: false,
+        faction: null, // null = pre-haunt (all allies), 'heroes' | 'traitor' after haunt
     };
 }
 
@@ -249,7 +251,8 @@ function createGameStateFromPlayers(players) {
             characterData
         },
         characterData,
-        map: createMockMap()
+        map: createMockMap(),
+        hauntState: createDefaultHauntState(), // Faction system: pre-haunt state
     };
 }
 
@@ -324,7 +327,8 @@ function createDebugGameState() {
             characterData
         },
         characterData,
-        map: createMockMap()
+        map: createMockMap(),
+        hauntState: createDefaultHauntState(), // Faction system: pre-haunt state
     };
 }
 
@@ -1007,12 +1011,24 @@ function renderSidebar(gameState, myId) {
 
     const openClass = sidebarOpen ? 'is-open' : '';
 
+    // Get faction info
+    const myFaction = getFaction(gameState, myId);
+    const factionLabel = getFactionLabel(myFaction);
+    const hauntActive = isHauntTriggered(gameState);
+    const factionClass = myFaction ? `sidebar-faction--${myFaction}` : '';
+
     return `
-        <aside class="game-sidebar ${openClass} ${myTurn ? 'is-my-turn' : ''}">
+        <aside class="game-sidebar ${openClass} ${myTurn ? 'is-my-turn' : ''} ${hauntActive ? 'is-haunt-active' : ''}">
             <div class="sidebar-header">
                 <span class="sidebar-title">${charName}</span>
                 <button class="sidebar-close" type="button" data-action="close-sidebar">&times;</button>
             </div>
+            ${myFaction ? `
+                <div class="sidebar-faction ${factionClass}">
+                    <span class="sidebar-faction__icon">${myFaction === 'traitor' ? '☠' : '◆'}</span>
+                    <span class="sidebar-faction__label">${factionLabel}</span>
+                </div>
+            ` : ''}
             <div class="sidebar-content">
                 <div class="sidebar-stats">
                     <div class="sidebar-stat">
@@ -1112,6 +1128,8 @@ function renderTurnOrder(gameState, myId) {
     const currentCharName = currentPlayer ? getCharacterName(currentPlayer.characterId) : 'Unknown';
     const isCurrentMe = currentPlayerId === myId;
 
+    const hauntActive = isHauntTriggered(gameState);
+
     const orderedPlayers = turnOrder.map((socketId, idx) => {
         const player = players.find(p => p.id === socketId);
         if (!player) return null;
@@ -1125,11 +1143,18 @@ function renderTurnOrder(gameState, myId) {
         const clickableAttr = isDebugMode ? `data-action="debug-switch-player" data-player-id="${socketId}"` : '';
         const clickableClass = isDebugMode ? 'is-clickable' : '';
 
+        // Faction classes (only after haunt)
+        const playerFaction = getFaction(gameState, socketId);
+        const factionClass = playerFaction ? `faction-${playerFaction}` : '';
+        const isMyEnemy = hauntActive ? isEnemy(gameState, myId, socketId) : false;
+        const isMyAlly = hauntActive ? isAlly(gameState, myId, socketId) && !isMe : false;
+        const relationClass = isMyEnemy ? 'is-enemy' : (isMyAlly ? 'is-ally' : '');
+
         return `
-            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass}" ${clickableAttr}>
+            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass} ${factionClass} ${relationClass}" ${clickableAttr}>
                 <span class="turn-indicator__order">${idx + 1}</span>
                 <div class="turn-indicator__info">
-                    <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}</span>
+                    <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}${playerFaction === 'traitor' ? ' ☠' : ''}</span>
                     <span class="turn-indicator__room">${position}</span>
                 </div>
             </div>
@@ -1324,6 +1349,24 @@ function getAvailableDirections(gameState, myId) {
     }
     
     return result;
+}
+
+/**
+ * Render debug haunt trigger button (only in debug mode, before haunt)
+ * @param {Object} gameState
+ * @returns {string}
+ */
+function renderDebugHauntButton(gameState) {
+    if (!isDebugMode) return '';
+    if (isHauntTriggered(gameState)) return '';
+    if (gameState?.gamePhase !== 'playing') return '';
+
+    return `
+        <button class="debug-haunt-btn" type="button" data-action="debug-trigger-haunt" title="[DEBUG] Trigger Haunt">
+            <span class="debug-haunt-btn__icon">👻</span>
+            <span class="debug-haunt-btn__label">Haunt</span>
+        </button>
+    `;
 }
 
 /**
@@ -1555,6 +1598,7 @@ function renderGameScreen(gameState, myId) {
                 </div>
             </div>
             ${renderGameControls(gameState, myId)}
+            ${renderDebugHauntButton(gameState)}
             ${roomDiscoveryHtml}
             ${renderTokenDrawingModal()}
             ${renderCardsViewModal()}
@@ -1812,6 +1856,26 @@ function attachDebugEventListeners(mountEl) {
         if (action === 'roll-random') {
             const randomValue = Math.floor(Math.random() * 16) + 1;
             handleDebugDiceRoll(mountEl, randomValue);
+            return;
+        }
+
+        // Debug trigger haunt
+        if (action === 'debug-trigger-haunt') {
+            if (isDebugMode && currentGameState && !isHauntTriggered(currentGameState)) {
+                // Pick first player as traitor (for testing)
+                const traitorId = currentGameState.players[0]?.id;
+                if (traitorId) {
+                    triggerHauntDebug(currentGameState, {
+                        hauntNumber: 1,
+                        traitorId: traitorId,
+                        triggeredByPlayerId: traitorId,
+                        triggerOmen: 'girl',
+                        triggerRoom: 'Foyer',
+                    });
+                    console.log('[Debug] Haunt triggered! Traitor:', traitorId);
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+            }
             return;
         }
 
