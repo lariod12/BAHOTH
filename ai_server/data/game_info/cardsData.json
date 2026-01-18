@@ -1,0 +1,546 @@
+{
+  "ITEMS": [
+    {
+      "id": "long_vu_thien_than",
+      "type": "item",
+      "name": { "vi": "Lông vũ thiên thần" },
+      "text": {
+        "vi": "Một chiếc lông vũ tuyệt đẹp.\nKhi đổ xúc xắc với chỉ số bất kì, bạn có thể chọn một số từ 0 đến 8 và sử dụng đó làm kết quả đổ xúc xắc.\nHủy bỏ lá bài này sau khi sử dụng."
+      },
+      "usable": true,
+      "useOnRoll": true,
+      "effect": { "setRollResult": { "min": 0, "max": 8 } },
+      "consumable": true
+    },
+    {
+      "id": "hop_nhac_ma_quai",
+      "type": "item",
+      "name": { "vi": "Hộp nhạc ma quái" },
+      "text": {
+        "vi": "Nó vang lên một giai điệu mê hoặc.\nMột lần mỗi lượt, bạn có thể mở hoặc đóng hộp nhạc này.\nKhi mở, tất cả người chơi (kể cả người sử dụng) và quái vật cùng phòng có chỉ số Sanity đều phải đổ xúc xắc Sanity được 4+. Nếu thất bại, người đó sẽ bị thôi miên và mất lượt.\nNếu người sử dụng bị thôi miên thì sẽ đánh rơi hộp nhạc. Nếu bị rơi, hộp nhạc vẫn sẽ giữ nguyên tình trạng đóng/mở trước đó."
+      },
+      "usable": true,
+      "usePerTurn": 1,
+      "toggleable": true
+    },
+    {
+      "id": "hop_lac_ghep",
+      "type": "item",
+      "name": { "vi": "Hộp lắp ghép" },
+      "text": {
+        "vi": "Phải có cách nào để mở nó.\nMột lần mỗi lượt, bạn có thể đổ xúc xắc Knowledge để mở chiếc hộp:\n6+  Bạn mở thành công, rút 2 lá Item mới và hủy bỏ lá bài này.\n0-5  Bạn không mở được."
+      },
+      "usable": true,
+      "usePerTurn": 1,
+      "rollStat": "knowledge"
+    },
+    {
+      "id": "kim_tiem_an_than",
+      "type": "item",
+      "name": { "vi": "Kim tiêm an thần" },
+      "text": {
+        "vi": "Một ống xi-lanh chứa Adrenaline.\nTrước khi đổ xúc xắc với bất kì chỉ số nào, bạn có thể cộng thêm 4 điểm vào kết quả.\nHủy bỏ lá bài này sau khi sử dụng."
+      },
+      "usable": true,
+      "useBeforeRoll": true,
+      "effect": { "addToResult": 4 },
+      "consumable": true
+    },
+    {
+      "id": "ao_giap",
+      "type": "item",
+      "name": { "vi": "Áo giáp" },
+      "text": {
+        "vi": "Một chiếc áo giáp bằng kim loại từ thời Trung cổ.\nGiảm 1 sát thương vật lí bạn gánh chịu.\nItem này không thể bị cướp."
+      },
+      "passive": true,
+      "damageReduction": { "physical": 1 },
+      "cannotSteal": true
+    },
+    {
+      "id": "cai_chai",
+      "type": "item",
+      "name": { "vi": "Cái chai" },
+      "text": {
+        "vi": "Cái chai chứa một thứ rượu màu đen.\nSau khi lời nguyền xuất hiện, bạn có thể đổ 3 viên xúc xắc để uống rượu trong chai:\n6  Chọn một căn phòng bất kì và đặt nhân vật của bạn ở đó.\n5  Tăng 2 Might và 2 Speed.\n4  Tăng 2 Knowledge và 2 Sanity.\n3  Tăng 1 Knowledge, giảm 1 Sanity.\n2  Mất 2 Knowledge và 2 Sanity.\n1  Mất 2 Might và 2 Speed.\n0  Mất 2 nấc mỗi chỉ số.\nHủy bỏ lá bài này sau khi sử dụng."
+      }
+    },
+    {
+      "id": "xuc_xac_bong_toi",
+      "type": "item",
+      "name": { "vi": "Xúc xắc bóng tối" },
+      "text": {
+        "vi": "Bạn có cảm thấy may mắn không?\nMột lần mỗi lượt, bạn có thể đổ 3 viên xúc xắc:\n6  Dịch chuyển đến một người đồng đội bất kì (không phải kẻ phản bội).\n5  Dịch chuyển một người đồng đội ở cùng phòng sang phòng liền kề.\n4  Tăng 1 Might hoặc Speed.\n3  Dịch chuyển đến phòng liền kề.\n2  Tăng 1 Knowledge hoặc Sanity.\n1  Rút 1 lá bài Event.\n0  Giảm toàn bộ chỉ số của bạn về mức thấp nhất (trên mục đầu lâu) và hủy bỏ lá bài này."
+      }
+    },
+    {
+      "id": "chiec_chuong",
+      "type": "item",
+      "name": { "vi": "Chiếc chuông" },
+      "text": {
+        "vi": "Một cái chuông được làm từ đồng thau và vang lên những âm thanh kì lạ.\nTăng 1 Sanity ngay bây giờ.\nGiảm 1 Sanity nếu bạn làm mất Chiếc chuông.\nMột lần mỗi lượt, sau khi lời nguyền xuất hiện, bạn có thể đổ xúc xắc Sanity để sử dụng chuông:\n5+  Dịch chuyển bất kì số lượng người chơi chính diện về gần bạn 1 bước.\n0-4  Toàn bộ quái vật di chuyển về gần bạn 1 bước."
+      },
+      "onGain": { "effect": "gainStat", "stat": "sanity", "amount": 1 },
+      "onLose": { "effect": "loseStat", "stat": "sanity", "amount": 1 }
+    },
+    {
+      "id": "muoi_amoniac",
+      "type": "item",
+      "name": { "vi": "Muối Amoniac" },
+      "text": {
+        "vi": "Whewww, phê quáaaaaa!\nNếu bạn hoặc người cùng phòng có chỉ số Knowledge ở dưới mức khởi điểm thì hãy tăng lên bằng mức khởi điểm.\nHủy bỏ lá bài này sau khi sử dụng."
+      },
+      "usable": true,
+      "canTargetAllyInRoom": true,
+      "effect": "restoreKnowledgeToStarting",
+      "consumable": true
+    },
+    {
+      "id": "hon_da_may_man",
+      "type": "item",
+      "name": { "vi": "Hòn đá may mắn" },
+      "text": {
+        "vi": "Bạn cảm thấy dường như nó sẽ mang lại may mắn.\nSau khi đổ xúc xắc vì bất cứ lí do gì, bạn có thể sử dụng hòn đá để đổ lại (1 lần) số lượng xúc xắc tuỳ ý.\nHủy bỏ lá bài này sau khi sử dụng."
+      },
+      "usable": true,
+      "useAfterRoll": true,
+      "effect": "rerollAnyDice",
+      "consumable": true
+    },
+    {
+      "id": "dao_gam_hut_mau",
+      "type": "item",
+      "subtype": "weapon",
+      "name": { "vi": "Dao găm hút máu" },
+      "text": {
+        "vi": "Một thứ vũ khí kinh tởm. Những cái kim và vòi mọc ra từ cán đâm vào mạch máu ở tay bạn.\nBạn có thể đổ nhiều hơn 3 viên xúc xắc (tối đa là 8 viên) khi chiến đấu bằng Might với vũ khí này, nhưng đổi lại bạn phải mất 1 Speed mỗi lần sử dụng.\nBạn không thể sử dụng vũ khí khác cùng lúc với vũ khí này.\nItem này không thể trao đổi hay đánh rơi. Nếu nó bị cướp, bạn chịu 2 xúc xắc sát thương vật lí."
+      },
+      "weapon": true,
+      "exclusiveWeapon": true,
+      "cannotTrade": true,
+      "cannotDrop": true
+    },
+    {
+      "id": "gang_tay_cua_ke_moc_tui",
+      "type": "item",
+      "name": { "vi": "Găng tay của kẻ móc túi" },
+      "text": {
+        "vi": "Ăn trộm là xấu!\nNếu bạn đang ở cùng phòng với một người khác, sử dụng lá bài này để trộm 1 Item mà người đó đang sở hữu.\nHủy bỏ lá bài này sau khi sử dụng."
+      },
+      "usable": true,
+      "requiresTargetInRoom": true,
+      "effect": "stealItem",
+      "consumable": true
+    },
+    {
+      "id": "cay_riu",
+      "type": "item",
+      "subtype": "weapon",
+      "name": { "vi": "Cây rìu" },
+      "text": {
+        "vi": "Một vũ khí cực kì sắc bén.\nBạn được đổ nhiều hơn 1 viên xúc xắc khi tấn công bằng Might với Cây rìu này.\nBạn không thể sử dụng cùng lúc vũ khí khác khi đang dùng Cây rìu."
+      },
+      "weapon": true,
+      "exclusiveWeapon": true
+    },
+    {
+      "id": "buc_tuong_ma_am",
+      "type": "item",
+      "name": { "vi": "Bức tượng ma ám" },
+      "text": {
+        "vi": "Có thể nó đã chọn bạn vì lí do nào đó.\nMột lần mỗi lượt, trước khi đổ xúc xắc, bạn có thể chà sát vào bức tượng này để được đổ nhiều hơn 2 viên xúc xắc (tối đa 8 viên). Nhưng bạn phải trả giá bằng việc mất 1 Sanity mỗi lần sử dụng."
+      },
+      "usable": true,
+      "usePerTurn": 1,
+      "useBeforeRoll": true
+    },
+    {
+      "id": "dao_gam_hien_te",
+      "type": "item",
+      "subtype": "weapon",
+      "name": { "vi": "Dao găm hiến tế" },
+      "text": {
+        "vi": "Một con dao găm dính đầy máu và được khắc những kí tự bí ẩn.\nBạn được đổ nhiều hơn 3 viên xúc xắc (tối đa 8 viên) khi chiến đấu bằng Might. Nhưng trước khi sử dụng bạn phải đổ xúc xắc Knowledge.\n6+  Không có gì xảy ra cả.\n3-5  Chịu 1 sát thương tinh thần.\n0-2  Con dao cứa vào tay bạn, chịu 1 sát thương vật lí và bạn không thể dùng vũ khí này.\nBạn không thể dùng vũ khí khác cùng lúc với vũ khí này."
+      },
+      "weapon": true,
+      "exclusiveWeapon": true
+    },
+    {
+      "id": "ngon_nen",
+      "type": "item",
+      "name": { "vi": "Ngọn nến" },
+      "text": {
+        "vi": "Nó khiến tà ma tránh xa. Ít nhất là bạn hi vọng thế.\nNếu bạn rút 1 lá Event và bị yêu cầu đổ xúc xắc, bạn được đổ nhiều hơn 1 viên (tối đa 8 viên).\nNếu bạn có đủ bộ 3 lá bài: Cái chuông, Quyển sách và Ngọn nến; thì bạn được tăng 2 nấc mỗi chỉ số. Nếu bạn làm mất 1 trong 3 lá bài trên thì bạn bị giảm 2 nấc mỗi chỉ số."
+      },
+      "passive": true
+    },
+    {
+      "id": "day_chuyen_ho_menh",
+      "type": "item",
+      "name": { "vi": "Dây chuyền hộ mệnh" },
+      "text": {
+        "vi": "Một mặt dây chuyền cổ bằng bạc, có đính nhiều viên đá quý và được khắc vài dòng chữ tâm linh.\nTăng 1 nấc ở tất cả chỉ số của bạn.\nMất 3 nấc ở tất cả chỉ số nếu bạn làm mất Dây chuyền hộ mệnh."
+      },
+      "onGain": { "effect": "gainAllStats", "amount": 1 },
+      "onLose": { "effect": "loseAllStats", "amount": 3 }
+    },
+    {
+      "id": "tui_cuu_thuong",
+      "type": "item",
+      "name": { "vi": "Túi cứu thương" },
+      "text": {
+        "vi": "Túi của bác sĩ, chứa nhiều thứ có thể cứu mạng người.\nMột lần mỗi lượt, bạn có thể đổ xúc xắc Knowledge để sử dụng túi cứu thương cho chính mình hoặc đồng đội cùng phòng:\n8+  Tăng 3 nấc chỉ số vật lí.\n6-7  Tăng 2 nấc chỉ số vật lí.\n4-5  Tăng 1 nấc chỉ số vật lí.\n0-3  Bạn không đủ trình độ để dùng túi cứu thương.\nLưu ý: bạn không thể tăng chỉ số vượt quá mức khởi điểm."
+      },
+      "usable": true,
+      "usePerTurn": 1,
+      "rollStat": "knowledge",
+      "canTargetAllyInRoom": true
+    },
+    {
+      "id": "sung_ngan",
+      "type": "item",
+      "subtype": "weapon",
+      "name": { "vi": "Súng ngắn" },
+      "text": {
+        "vi": "Một vũ khí lạc hậu nhưng đầy uy lực.\nBạn có thể dùng Súng ngắn để tấn công người khác (bằng cách đổ xúc xắc Speed, nhưng được đổ nhiều hơn 1 viên, tối đa 8 viên). Người bị tấn công cũng phải đổ xúc xắc Speed để né đạn (chịu sát thương vật lí nếu trúng đạn). Nếu đối phương né được, bạn không bị gì.\nVũ khí này có thể tấn công từ xa, miễn là bạn và đối phương đứng trên cùng một \"đường thẳng tầm nhìn\".\nBạn không thể sử dụng cùng lúc vũ khí khác khi đang dùng Súng ngắn."
+      },
+      "weapon": true,
+      "ranged": true,
+      "requiresLineOfSight": true,
+      "exclusiveWeapon": true
+    },
+    {
+      "id": "thuoc_giam_dau",
+      "type": "item",
+      "name": { "vi": "Thuốc giảm đau" },
+      "text": {
+        "vi": "Một chất kem, được đựng trong cái bát, bôi lên vết thương để giảm đau.\nBạn có thể sử dụng Thuốc bôi giảm đau lên bản thân hoặc đồng đội cùng phòng. Nếu chỉ số Might hoặc Speed của người chơi ở dưới mức khởi điểm, thì tăng lên (1 hoặc cả 2 chỉ số trên) bằng với mức khởi điểm.\nHủy bỏ lá bài này sau khi sử dụng."
+      },
+      "usable": true,
+      "canTargetAllyInRoom": true,
+      "effect": "restorePhysicalToStarting",
+      "consumable": true
+    },
+    {
+      "id": "chan_tho",
+      "type": "item",
+      "name": { "vi": "Chân thỏ" },
+      "text": {
+        "vi": "Một con thỏ không may mắn.\nMột lần mỗi lượt, bạn có thể đổ lại 1 viên xúc xắc.\nBạn bắt buộc phải chấp nhận kết quả đó."
+      },
+      "usable": true,
+      "usePerTurn": 1,
+      "effect": "rerollOneDie",
+      "mustAcceptResult": true
+    },
+    {
+      "id": "phao_no",
+      "type": "item",
+      "name": { "vi": "Pháo nổ" },
+      "text": {
+        "vi": "Bùmmmm...!\nBạn có thể ném Pháo nổ sang phòng liền kề (thông qua cửa ra vào).\nTất cả người chơi và quái vật ở căn phòng bị quăng Pháo nổ phải đổ xúc xắc Speed.\n5+  Né được vụ nổ. Không bị sát thương.\n0-4  Bùmmmm. Chịu 4 sát thương vật lí.\nHủy bỏ lá bài này sau khi sử dụng."
+      },
+      "usable": true,
+      "ranged": true,
+      "targetAdjacentRoom": true,
+      "affectsAllInTargetRoom": true,
+      "rollStat": "speed",
+      "consumable": true
+    }
+  ],
+  "EVENTS": [
+    {
+      "id": "tieng_het_that_thanh",
+      "type": "event",
+      "name": { "vi": "Tiếng hét thất thanh" },
+      "text": {
+        "vi": "Một tiếng thì thầm vang lên khắp căn nhà, sau đó là một tiếng thét lớn kinh hãi làm xiêu lạc hồn phách.\nTất cả người chơi (trừ kẻ phản bội) phải đổ xúc xắc Sanity:\n4+  Bạn không hề sợ tiếng thét đó.\n1-3  Chịu 1 xúc xắc sát thương tinh thần.\n0  Chịu 2 xúc xắc sát thương tinh thần."
+      },
+      "rollStat": "sanity"
+    },
+    {
+      "id": "den_tat",
+      "type": "event",
+      "name": { "vi": "Đèn tắt" },
+      "text": {
+        "vi": "Đèn pin của bạn hết pin. Đừng lo lắng, bạn của bạn có pin mà!\nBạn giữ lại lá bài này. Từ giờ, bạn chỉ có thể đi 1 bước mỗi lượt. Cho đến khi bạn dừng lại chung phòng với một người chơi khác thì hủy lá bài này đi và bạn di chuyển như bình thường.\nNgoại lệ, nếu bạn có lá bài Ngọn nến hoặc dừng lại ở Lò than (Furnace room) thì lá bài này sẽ bị hủy và bạn di chuyển như bình thường."
+      },
+      "persistent": true,
+      "effect": "movementRestriction",
+      "movesPerTurn": 1
+    },
+    {
+      "id": "canh_tuong_ma_quai",
+      "type": "event",
+      "name": { "vi": "Cảnh tượng ma quái" },
+      "text": {
+        "vi": "Bạn nhìn thấy cảnh một đôi nam nữ đang tổ chức hôn lễ, họ lướt đi chậm rãi trên mặt đất.\nBạn phải đổ xúc xắc Knowledge:\n5+  Bạn nhận ra họ chính là chủ nhân cũ của ngôi nhà này. Bạn gọi tên họ, họ quay lại và thì thầm những bí mật đen tối của nơi này. Tăng 1 Knowledge.\n0-4  Bạn lùi lại trong hoảng sợ tột độ. Chịu 1 xúc xắc sát thương tinh thần."
+      },
+      "rollStat": "knowledge"
+    },
+    {
+      "id": "nguoi_dan_ong_bi_thieu_song",
+      "type": "event",
+      "name": { "vi": "Người đàn ông bị thiêu sống" },
+      "text": {
+        "vi": "Một người đàn ông bị thiêu sống chạy xuyên qua căn phòng. Da của hắn nổi bóng nước và nứt nẻ. Hắn té xuống trước mặt bạn, đầu lâu, xương của hắn rơi vương vãi khắp mặt đất.\nBạn phải đổ xúc xắc Sanity:\n4+  Sau một thoáng, mọi thứ biến mất. Bạn thấy hơi nóng một chút, nhưng tất cả là ảo ảnh. Tăng 1 Sanity.\n2-3  Ra ngoài, ra ngoài, bạn phải ra ngoài. Đặt nhân vật của bạn ở Lối vào sảnh chính (Entrance Hall).\n0-1  Bạn chạy xuyên qua lửa! Chịu 1 xúc xắc sát thương vật lí và 1 xúc xắc sát thương tinh thần."
+      },
+      "rollStat": "sanity"
+    },
+    {
+      "id": "anh_phan_chieu",
+      "type": "event",
+      "name": { "vi": "Ảnh phản chiếu" },
+      "text": {
+        "vi": "Có một chiếc gương cũ trong phòng. Hình ảnh phản chiếu của bạn xuất hiện trong gương. Bạn nhận ra đó chính là bản thân mình ở chiều không gian khác. Kẻ trong gương viết lên dòng chữ:\n\"Thứ này sẽ giúp ích cho mày\"\nSau đó, kẻ trong gương đưa cho bạn một vật.\nRút 1 lá bài Item."
+      },
+      "effect": "drawItem",
+      "amount": 1
+    },
+    {
+      "id": "duong_bi_mat",
+      "type": "event",
+      "name": { "vi": "Đường bí mật" },
+      "text": {
+        "vi": "Một phần bức tường mở ra. Đằng sau đó là một đường hầm đầy nấm mốc.\nĐặt miếng token \"Secret Passage\" thứ nhất vào căn phòng này. Đổ 3 viên xúc xắc và đặt token \"Secret Passage\" thứ hai ở:\n6+  Căn phòng bất kì.\n4-5  Căn phòng bất kì ở tầng lầu.\n2-3  Căn phòng bất kì ở tầng trệt.\n0-1  Căn phòng bất kì ở tầng hầm.\nBạn và các người chơi khác chỉ có thể sử dụng \"Secret Passage\" nếu như không còn bước di chuyển nào."
+      },
+      "effect": "placeToken",
+      "tokenType": "secretPassage"
+    },
+    {
+      "id": "canh_cua_tu",
+      "type": "event",
+      "name": { "vi": "Cánh cửa tủ" },
+      "text": {
+        "vi": "Cánh cửa tủ kia đang mở... là một vết nứt. Có gì đó bên trong.\nĐặt miếng token \"Closet\" vào căn phòng này. Một lần mỗi lượt, người chơi có thể đổ 2 viên xúc xắc để mở cửa tủ:\n4+  Bạn mở được cửa tủ và rút một lá Item.\n2-3  Bạn không mở được tủ và rút một lá Event.\n0-1  Cái tủ đột nhiên biến mất, bạn nhận ra đó là ảo ảnh. Bỏ miếng token \"Closet\" đi và rút 1 lá Event."
+      },
+      "effect": "placeToken",
+      "tokenType": "closet"
+    },
+    {
+      "id": "khoi",
+      "type": "event",
+      "name": { "vi": "Khói" },
+      "text": {
+        "vi": "Một làn khói dày đặc bao phủ lấy bạn và căn phòng. Bạn ho dữ dội, nước mắt chảy giàn giụa.\nĐặt miếng token \"Smoke\" vào căn phòng này. Đám khói sẽ cản tầm nhìn đến căn phòng liền kề.\nBạn phải đổ ít hơn 2 xúc xắc nếu đang ở trong căn phòng này."
+      },
+      "effect": "placeToken",
+      "tokenType": "smoke"
+    },
+    {
+      "id": "dinh_truoc_tuong_lai",
+      "type": "event",
+      "name": { "vi": "Định trước tương lai" },
+      "text": {
+        "vi": "Bạn ngã sập xuống sàn nhà và cảnh tượng của tương lai tràn vào tâm trí.\nBạn phải chọn 1 trong 2 lựa chọn:\nBạn có thể nhìn trước 3 lát phòng trên cùng hoặc 3 lá bài trên cùng (Item, Event hoặc Omen) nhưng không được nói cho người khác biết.\nHoặc\nBạn đổ 4 viên xúc xắc (ghi lại kết quả ra giấy). Ở các lượt sau, khi đổ xúc xắc, bạn có thể lấy kết quả đã ghi để thay thế cho lần đổ đó."
+      },
+      "effect": "choice"
+    },
+    {
+      "id": "nguoi_lam_vuon",
+      "type": "event",
+      "name": { "vi": "Người làm vườn" },
+      "text": {
+        "vi": "Bạn nhìn thấy một người đàn ông mặc bộ đồ làm vườn. Ông ta giơ cái xẻng lên tấn công bạn. Khi chỉ còn cách bạn vài cm, hắn đột nhiên biến mất, để lại những dấu giày đầy bùn đất.\nBạn phải đổ xúc xắc Knowledge (Nếu đang ở trong Khu vườn (Gardens), bạn đổ ít hơn 2 xúc xắc).\n4+  Bạn tìm thấy gì đó trong đám bùn đất. Rút 1 lá Item.\n0-3  Hắn ta xuất hiện trở lại và tấn công bạn. Người chơi bên phải bạn đổ 4 viên xúc xắc để tính sát thương lên bạn. Bạn phòng thủ bằng cách đổ xúc xắc Might như bình thường."
+      },
+      "rollStat": "knowledge"
+    },
+    {
+      "id": "thu_gi_do_an_giau",
+      "type": "event",
+      "name": { "vi": "Thứ gì đó ẩn giấu" },
+      "text": {
+        "vi": "Có thứ gì đó đang được ẩn giấu trong căn phòng này, nhưng nó là cái gì? Điều đó làm bạn thấy không an tâm.\nNếu bạn muốn tìm thứ đó, thì hãy đổ xúc xắc Knowledge:\n4+  Một phần của bức tường rơi ra, để lộ ra một khoảng trống nhỏ. Bạn tìm thấy một vật trong đó. Rút 1 lá bài Item.\n0-3  Bạn không hề tìm thấy gì và điều đó làm bạn hơi bất an. Mất 1 Sanity."
+      },
+      "optional": true,
+      "rollStat": "knowledge"
+    },
+    {
+      "id": "nguoi_treo_co",
+      "type": "event",
+      "name": { "vi": "Người treo cổ" },
+      "text": {
+        "vi": "Bạn bị sốc nặng khi trước mặt là ba người đàn ông bị treo cổ. Họ đang đung đưa qua lại và liếc nhìn bạn với ánh mắt sắc lạnh. Sau đó cả ba tan dần trong đám bụi mờ ảo. Bạn sắp loạn trí mất rồi.\nBạn phải đổ xúc xắc Might, Speed, Sanity và Knowledge (đổ 4 lần):\n2+  Chỉ số đó không bị gì.\n0-1  Mất 1 nấc chỉ số đó.\nNếu bạn đổ được 2+ trong cả bốn lần, thì tăng 2 nấc một chỉ số bất kì."
+      },
+      "rollStats": ["might", "speed", "sanity", "knowledge"]
+    },
+    {
+      "id": "con_nhen",
+      "type": "event",
+      "name": { "vi": "Con nhện" },
+      "text": {
+        "vi": "Một con nhện kích thước khủng bò lên trên vai bạn.\nBạn phải đổ xúc xắc Speed hoặc Sanity:\n4+  Con nhện biến mất, tăng 1 nấc của chỉ số mà bạn đã dùng để đổ xúc xắc.\n1-3  Con nhện cắn bạn, chịu 1 xúc xắc sát thương vật lí.\n0  Con nhện cắn bạn liên tục nhiều lần. Chịu 2 xúc xắc sát thương vật lí."
+      },
+      "rollStat": ["speed", "sanity"]
+    },
+    {
+      "id": "bay_con_trung_kinh_di",
+      "type": "event",
+      "name": { "vi": "Bầy côn trùng kinh dị" },
+      "text": {
+        "vi": "Hàng ngàn con bọ tràn lên mặt bạn, chúng chui vào quần áo, bò ngoe nguẩy trên da, luồn lách trong tóc bạn.\nBạn phải đổ xúc xắc Sanity:\n5+  Bạn chớp mắt, bọn chúng biến mất. Thì ra chỉ là ảo ảnh. Tăng 1 Sanity.\n1-4  Mất 1 Sanity.\n0  Mất 2 Sanity."
+      },
+      "rollStat": "sanity"
+    },
+    {
+      "id": "mui_hoi_thoi",
+      "type": "event",
+      "name": { "vi": "Mùi hôi thối" },
+      "text": {
+        "vi": "Mùi của căn phòng này cực kì kinh tởm. Ngửi như mùi của xác thịt trộn với máu tanh.\nBạn phải đổ xúc xắc Sanity:\n5+  Chỉ là một mùi khó chịu thôi mà, chẳng có gì cả! Tăng 1 Sanity.\n2-4  Mất 1 Might.\n1  Mất 1 Might và 1 Speed.\n0  Bạn nôn mửa thảm tệ. Mất 1 Might, 1 Speed, 1 Knowledge và 1 Sanity."
+      },
+      "rollStat": "sanity"
+    },
+    {
+      "id": "canh_tuong_mau_me",
+      "type": "event",
+      "name": { "vi": "Cảnh tượng máu me" },
+      "text": {
+        "vi": "Những bức tường của căn phòng này thấm đẫm máu. Máu nhỏ giọt xuống từ trần nhà, từ các bức tường, từ đồ đạc xung quanh và dính lên giày bạn. Bạn chớp mắt, tất cả mọi thứ biến mất!!! Là ảo ảnh sao?\nBạn phải đổ xúc xắc Sanity:\n4+  Bạn lấy lại bình tĩnh. Tăng 1 Sanity.\n2-3  Bạn sợ hãi và mất 1 Sanity.\n0-1  Bạn trở nên điên loạn. Nếu có quái vật hoặc đồng đội ở căn phòng liền kề, bạn bắt buộc phải tấn công họ (nếu có thể, chọn người có chỉ số Might thấp nhất)."
+      },
+      "rollStat": "sanity"
+    }
+  ],
+  "OMENS": [
+    {
+      "id": "vet_can",
+      "type": "omen",
+      "name": { "vi": "Vết cắn" },
+      "text": {
+        "vi": "Một tiếng gầm gừ trong bóng tối, nặng mùi của cái chết và sự đau đớn.\nKhi rút được lá bài này, một con gì đó đã cắn bạn. Người chơi ở bên tay phải bạn phải đổ 4 viên xúc xắc để tính sát thương gây ra lên bạn. Bạn phòng thủ bằng cách đổ xúc xắc Might.\nLá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp."
+      },
+      "cannotDrop": true,
+      "cannotTrade": true,
+      "cannotSteal": true
+    },
+    {
+      "id": "mat_na",
+      "type": "omen",
+      "name": { "vi": "Mặt nạ" },
+      "text": {
+        "vi": "Một chiếc mặt nạ tuyệt vời để ẩn giấu suy nghĩ.\nMột lần trong lượt, bạn có thể đổ xúc xắc Sanity để sử dụng mặt nạ:\n4+  Bạn đeo hoặc tháo Mặt nạ.\nNếu bạn đeo Mặt nạ, tăng 2 Knowledge và giảm 2 Sanity.\nNếu bạn tháo Mặt nạ, giảm 2 Knowledge và tăng 2 Sanity.\n0-3  Bạn không thể sử dụng Mặt nạ."
+      },
+      "usable": true,
+      "usePerTurn": 1,
+      "rollStat": "sanity"
+    },
+    {
+      "id": "chiec_nhan",
+      "type": "omen",
+      "name": { "vi": "Chiếc nhẫn" },
+      "text": {
+        "vi": "Một chiếc nhẫn bị đập nát với dòng chữ khó hiểu.\nNếu tấn công đối thủ có chỉ số Sanity, bạn có thể dùng Sanity thay vì Might (đối thủ cũng phải phòng thủ bằng Sanity và bị sát thương tinh thần thay cho sát thương vật lí)."
+      },
+      "passive": true
+    },
+    {
+      "id": "quyen_sach",
+      "type": "omen",
+      "name": { "vi": "Quyển sách" },
+      "text": {
+        "vi": "Một quyển nhật kí hay bản ghi chú? Chữ viết cổ hay kí hiệu hiện đại?\nTăng 2 Knowledge.\nGiảm 2 Knowledge nếu bạn mất Quyển sách."
+      },
+      "onGain": { "effect": "gainStat", "stat": "knowledge", "amount": 2 },
+      "onLose": { "effect": "loseStat", "stat": "knowledge", "amount": 2 }
+    },
+    {
+      "id": "co_gai",
+      "type": "omen",
+      "subtype": "companion",
+      "name": { "vi": "Cô gái" },
+      "text": {
+        "vi": "(Bạn đồng hành)\nMột cô gái sao? Đây là cái bẫy? Bỏ cô ta một mình hay cứu giúp?\nBạn tìm thấy một cô gái, bạn cho cô ta đi theo mình.\nTăng 1 Sanity và 1 Knowledge.\nGiảm 1 Sanity và 1 Knowledge nếu bạn mất dấu cô gái.\nLá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp."
+      },
+      "cannotDrop": true,
+      "cannotTrade": true,
+      "cannotSteal": true
+    },
+    {
+      "id": "qua_cau_pha_le",
+      "type": "omen",
+      "name": { "vi": "Quả cầu pha lê" },
+      "text": {
+        "vi": "Những cảnh tượng mờ ám hiện lên bên trong.\nMột lần một lượt sau khi lời nguyền xuất hiện, bạn có thể đổ xúc xắc Knowledge để nhìn vào Quả cầu pha lê:\n4+  Bạn nhìn thấy sự thật. Chọn một lá bất kì trong xấp bài Event hoặc Item, xào lại sắp bài và đặt lá bạn chọn lên đầu.\n1-3  Bạn bị lóa mắt. Mất 1 Sanity.\n0  Bạn nhìn thấy cảnh tượng ở địa ngục, bạn sợ hãi và mất 2 Sanity."
+      },
+      "usable": true,
+      "usePerTurn": 1,
+      "useAfterHaunt": true,
+      "rollStat": "knowledge"
+    },
+    {
+      "id": "con_cho",
+      "type": "omen",
+      "subtype": "companion",
+      "name": { "vi": "Con chó" },
+      "text": {
+        "vi": "(Bạn đồng hành)\nCon chó ghẻ này có vẻ thân thiện. Ít nhất là bạn nghĩ thế.\nTăng 1 Might và 1 Sanity.\nMất 1 Might và 1 Sanity nếu bạn mất dấu Con chó.\nLấy một miếng token để tượng trưng cho Con chó. Đặt nó cùng phòng với bạn.\nMột lần trong lượt, Con chó có thể di chuyển tối đa 6 bước đến các căn phòng đã khám phá, sử dụng cửa, cầu thang và sau đó tự động quay trở lại. Nó có thể nhặt, mang và bỏ lại vật phẩm trước khi quay lại.\nCon chó không bị làm chậm bởi đối thủ. Nó không thể dùng cửa bí mật, đi vào căn phòng có hiệu ứng đổ xúc xắc và mang vật phẩm có hiệu ứng làm chậm.\nLá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp."
+      },
+      "cannotDrop": true,
+      "cannotTrade": true,
+      "cannotSteal": true
+    },
+    {
+      "id": "dau_lau",
+      "type": "omen",
+      "name": { "vi": "Đầu lâu" },
+      "text": {
+        "vi": "Một cái đầu lâu bị nứt vỡ và thiếu mất vài cái răng.\nNếu nhận sát thương tinh thần, bạn có thể chuyển toàn bộ sang sát thương vật lí."
+      },
+      "passive": true
+    },
+    {
+      "id": "tam_me_day",
+      "type": "omen",
+      "name": { "vi": "Tấm mề đay" },
+      "text": {
+        "vi": "Một tấm mề đay được khắc hình ngôi sao năm cánh.\nBạn được miễn nhiễm với mọi hiệu ứng của Căn phòng hình sao, Nhà mồ và Nghĩa địa (Pentagram Chamber, Crypt và Graveyard)."
+      },
+      "passive": true,
+      "immunity": ["pentagram_chamber", "crypt", "graveyard"]
+    },
+    {
+      "id": "ngon_giao",
+      "type": "omen",
+      "subtype": "weapon",
+      "name": { "vi": "Ngọn giáo" },
+      "text": {
+        "vi": "(Vũ khí)\nMột thứ vũ khí tăng sức mạnh.\nBạn được đổ nhiều hơn 2 viên xúc xắc (tối đa 8 viên) khi tấn công bằng Might với vũ khí này.\nBạn không thể sử dụng vũ khí khác cùng lúc với Ngọn giáo."
+      },
+      "weapon": true,
+      "exclusiveWeapon": true
+    },
+    {
+      "id": "thanh_gia",
+      "type": "omen",
+      "name": { "vi": "Thánh giá" },
+      "text": {
+        "vi": "Biểu tượng của cái thiện trong thế giới hỗn độn.\nTăng 2 Sanity.\nGiảm 2 Sanity nếu bạn mất Thánh giá."
+      },
+      "onGain": { "effect": "gainStat", "stat": "sanity", "amount": 2 },
+      "onLose": { "effect": "loseStat", "stat": "sanity", "amount": 2 }
+    },
+    {
+      "id": "ten_dien",
+      "type": "omen",
+      "subtype": "companion",
+      "name": { "vi": "Tên điên" },
+      "text": {
+        "vi": "(Bạn đồng hành)\nMột tên điên nói nhảng nói cuội, miệng sùi bọt mép.\nTăng 2 Might và mất 1 Sanity.\nMất 2 Might và tăng 1 Sanity nếu bạn mất dấu kẻ điên.\nLá Omen này không thể bị đánh rơi, trao đổi hoặc bị cướp."
+      },
+      "cannotDrop": true,
+      "cannotTrade": true,
+      "cannotSteal": true
+    },
+    {
+      "id": "ban_cau_co",
+      "type": "omen",
+      "name": { "vi": "Bàn cầu cơ" },
+      "text": {
+        "vi": "Một tấm bảng với những kí tự và con số kêu gọi cái chết.\nTrước khi di chuyển trong lượt, bạn có thể nhìn trước lát phòng định rút.\nVì bàn cầu cơ thu hút ma quỷ, nên nếu bạn sử dụng Bàn cầu cơ sau khi lời nguyền xuất hiện, các quái vật có thể được đi nhiều hơn 1 bước về gần bạn hơn (nếu bạn là kẻ phản bội, không có gì xảy ra)."
+      },
+      "usable": true,
+      "useBeforeMove": true,
+      "effect": "peekRoomTile"
+    }
+  ]
+}

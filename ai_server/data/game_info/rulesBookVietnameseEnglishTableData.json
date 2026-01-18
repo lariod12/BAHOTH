@@ -1,0 +1,257 @@
+{
+  "TRANSLATION_SECTIONS": [
+    {
+      "id": "traits",
+      "title": "Chỉ số (Traits)",
+      "entries": [
+        { "vi": "Sức Mạnh", "en": "Might" },
+        { "vi": "Tinh Táo", "en": "Sanity" },
+        { "vi": "Tốc Độ", "en": "Speed" },
+        { "vi": "Trí Tuệ", "en": "Knowledge" }
+      ]
+    },
+    {
+      "id": "items",
+      "title": "Vật Dụng (Items)",
+      "entries": [
+        { "vi": "Áo Giáp", "en": "Armor" },
+        { "vi": "Cái Chuông", "en": "Bell" },
+        { "vi": "Cây Nến", "en": "Candle" },
+        { "vi": "Cây Rìu", "en": "Axe" },
+        { "vi": "Chân Thỏ", "en": "Rabbit's Foot" },
+        { "vi": "Chiếc Hộp Xếp Hình", "en": "Puzzle Box" },
+        { "vi": "Chiếc Lọ", "en": "Bottle" },
+        { "vi": "Dao Hiến Tế", "en": "Sacrificial Dagger" },
+        { "vi": "Dao Máu", "en": "Blood Dagger" },
+        { "vi": "Găng Tay Móc Túi", "en": "Pickpocket's glove" },
+        { "vi": "Hòn Đá May Mắn", "en": "Lucky Stone" },
+        { "vi": "Hộp Nhạc", "en": "Music Box" },
+        { "vi": "Linh Vật", "en": "Idol" },
+        { "vi": "Lông Vũ Thiên Thần", "en": "Angel Feather" },
+        { "vi": "Muối Amoniac", "en": "Smelling salts" },
+        { "vi": "Ngọc Bội Kỷ Nguyên", "en": "Amulet Of The Ages" },
+        { "vi": "Súng Lục", "en": "Revolver" },
+        { "vi": "Thuốc Nổ", "en": "Dynamite" },
+        { "vi": "Thuốc Trị Thương", "en": "Healing Salve" },
+        { "vi": "Tiêm Adrenaline", "en": "Adrenaline Shot" },
+        { "vi": "Túi Y Tế", "en": "Medical Kit" },
+        { "vi": "Xúc Xắc Bóng Đêm", "en": "Dark Dice" }
+      ]
+    },
+    {
+      "id": "omens",
+      "title": "Điềm Gở (Omens)",
+      "entries": [
+        { "vi": "Bảng Cầu Cơ", "en": "Spirit Board" },
+        { "vi": "Cây Giáo", "en": "Spear" },
+        { "vi": "Chiếc Nhẫn", "en": "Ring" },
+        { "vi": "Cô Gái", "en": "Girl" },
+        { "vi": "Con Chó", "en": "Dog" },
+        { "vi": "Cuốn Sách", "en": "Book" },
+        { "vi": "Đầu Lâu", "en": "Skull" },
+        { "vi": "Gã Điên", "en": "Madman" },
+        { "vi": "Mặt Dây Chuyền", "en": "Medallion" },
+        { "vi": "Mặt Nạ", "en": "Mask" },
+        { "vi": "Quả Cầu Thủy Tinh", "en": "Crystal Ball" },
+        { "vi": "Thánh Giá", "en": "Holy Symbol" },
+        { "vi": "Vết Cắn", "en": "Bite" }
+      ]
+    },
+    {
+      "id": "rooms",
+      "title": "Phòng (Rooms)",
+      "entries": [
+        { "vi": "Ban Công", "en": "Balcony" },
+        { "vi": "Căn Buồng Hình Sao", "en": "Pentagram Chamber" },
+        { "vi": "Căn Phòng Bị Cháy", "en": "Charred Room" },
+        { "vi": "Căn Phòng Bừa Bộn", "en": "Junk Room" },
+        { "vi": "Căn Phòng Bỏ Hoang", "en": "Abandoned Room" },
+        { "vi": "Căn Phòng Đầy Máu", "en": "Bloody Room" },
+        { "vi": "Căn Phòng Đổ Sập", "en": "Collapsed Room" },
+        { "vi": "Cầu Thang Từ Tầng Hầm", "en": "Stair From Basement" },
+        { "vi": "Chiếu Nghỉ Tầng Hầm", "en": "Basement Landing" },
+        { "vi": "Chiếu Nghỉ Tầng Lầu", "en": "Upper Landing" },
+        { "vi": "Chiếc Tủ", "en": "Closet" },
+        { "vi": "Dưới Căn Phòng Đổ Sập", "en": "Below Collapsed Room" },
+        { "vi": "Gác Mái", "en": "Attic" },
+        { "vi": "Hầm Chứa", "en": "Vault" },
+        { "vi": "Hầm Chứa Rỗng", "en": "Vault Empty" },
+        { "vi": "Hầm Mộ", "en": "Catacombs" },
+        { "vi": "Hầm Rượu", "en": "Wine Cellar" },
+        { "vi": "Hành Lang Bụi Bặm", "en": "Dusty Hallway" },
+        { "vi": "Hành Lang Có Tượng", "en": "Statuary Corridor" },
+        { "vi": "Hành Lang Kêu Cót Két", "en": "Creaky Hallway" },
+        { "vi": "Hồ Nước Ngầm", "en": "Underground Lake" },
+        { "vi": "Khán Đài", "en": "Gallery" },
+        { "vi": "Két Sắt", "en": "Safe" },
+        { "vi": "Kho Lương Thực", "en": "Larder" },
+        { "vi": "Khói", "en": "Smoke" },
+        { "vi": "Lò Than", "en": "Furnace Room" },
+        { "vi": "Mái Hiên", "en": "Patio" },
+        { "vi": "Mật Đạo", "en": "Secret Passage" },
+        { "vi": "Nghĩa Địa", "en": "Graveyard" },
+        { "vi": "Nhà Bếp", "en": "Kitchen" },
+        { "vi": "Nhà Kính", "en": "Conservatory" },
+        { "vi": "Nhà Mồ", "en": "Crypt" },
+        { "vi": "Nhà Thờ", "en": "Chapel" },
+        { "vi": "Nước Nhiễu", "en": "Drip" },
+        { "vi": "Ống Dẫn Than", "en": "Coal Chute" },
+        { "vi": "Phòng Ăn", "en": "Dining Room" },
+        { "vi": "Phòng Game", "en": "Game Room" },
+        { "vi": "Phòng Gia Nhân", "en": "Servants Quarters" },
+        { "vi": "Phòng Khiêu Vũ", "en": "Ballroom" },
+        { "vi": "Phòng Kho", "en": "Storeroom" },
+        { "vi": "Phòng Ngủ", "en": "Bedroom" },
+        { "vi": "Phòng Ngủ Chính", "en": "Master Bedroom" },
+        { "vi": "Phòng Nghiên Cứu", "en": "Research Laboratory" },
+        { "vi": "Phòng Nhạc", "en": "Organ Room" },
+        { "vi": "Phòng Phẫu Thuật", "en": "Operating Laboratory" },
+        { "vi": "Phòng Thể Dục", "en": "Gymnasium" },
+        { "vi": "Phước Lành", "en": "Blessing" },
+        { "vi": "Sân Vườn", "en": "Gardens" },
+        { "vi": "Tòa Tháp", "en": "Tower" },
+        { "vi": "Thang Máy Huyền Bí", "en": "Mystical Elevator" },
+        { "vi": "Thư Viện", "en": "Library" },
+        { "vi": "Vực Thẳm", "en": "Chasm" }
+      ]
+    },
+    {
+      "id": "room-functions",
+      "title": "Chức năng lát phòng (Room tile effects)",
+      "columns": ["English", "Vietnamese", "Effect"],
+      "entries": [
+        {
+          "en": "Junk Room",
+          "vi": "Căn Phòng Bừa Bộn",
+          "desc": "Khi rời khỏi phòng, bạn phải đổ xúc xắc Sức Mạnh được 3+. Nếu thất bại, mất 1 điểm Tốc Độ (nhưng vẫn tiếp tục di chuyển)."
+        },
+        {
+          "en": "Mystic Elevator",
+          "vi": "Thang Máy Huyền Bí",
+          "desc": "Mỗi lượt 1 lần, đổ 2 xúc xắc và di chuyển căn phòng này tới bất kỳ cạnh của cột tương ứng:\n4: Một tầng bất kỳ\n3: Tầng lầu\n2: Tầng trệt\n1: Tầng hầm\n0: Tầng hầm, rồi nhận 1 xúc xắc sát thương vật lý"
+        },
+        {
+          "en": "Catacombs",
+          "vi": "Hầm Mộ",
+          "desc": "Có thể đổ xúc xắc Tinh Táo được 6+ để băng qua. Nếu thất bại, ngừng di chuyển."
+        },
+        {
+          "en": "Furnace Room",
+          "vi": "Lò Than",
+          "desc": "Nếu bạn kết thúc lượt ở đây, nhận 1 điểm sát thương vật lý."
+        },
+        {
+          "en": "Stairs From Basement",
+          "vi": "Cầu Thang Từ Tầng Hầm",
+          "desc": "Dẫn tới Sảnh Chính và ngược lại."
+        },
+        {
+          "en": "Chasm",
+          "vi": "Vực Thẳm",
+          "desc": "Bạn có thể đổ xúc xắc Tốc Độ được 3+ để băng qua. Nếu thất bại, ngừng di chuyển."
+        },
+        {
+          "en": "Larder",
+          "vi": "Kho Lương Thực",
+          "desc": "Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Sức Mạnh."
+        },
+        {
+          "en": "Crypt",
+          "vi": "Nhà Mồ",
+          "desc": "Nếu bạn kết thúc lượt ở đây, nhận 1 điểm sát thương tinh thần."
+        },
+        {
+          "en": "Pentagram Chamber",
+          "vi": "Căn Buồng Hình Sao",
+          "desc": "Ai rời khỏi căn phòng này phải đổ xúc xắc Trí Tuệ được 4+. Nếu thất bại, mất 1 điểm Tinh Táo (nhưng vẫn tiếp tục di chuyển)."
+        },
+        {
+          "en": "Collapsed Room",
+          "vi": "Căn Phòng Đổ Sập",
+          "desc": "Bạn phải đổ xúc xắc Tốc Độ được 5+ để khỏi ngã. Nếu thất bại, rút 1 lát tầng hầm và đặt nó vào trong game. Bạn sẽ rơi xuống đó và nhận 1 xúc xắc sát thương vật lý."
+        },
+        {
+          "en": "Library",
+          "vi": "Thư Viện",
+          "desc": "Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Trí Tuệ."
+        },
+        {
+          "en": "Chapel",
+          "vi": "Nhà Thờ",
+          "desc": "Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Tinh Táo."
+        },
+        {
+          "en": "Coal Chute",
+          "vi": "Ống Dẫn Than",
+          "desc": "Cầu trượt 1 chiều tới Chiếu Nghỉ Tầng Hầm."
+        },
+        {
+          "en": "Graveyard",
+          "vi": "Nghĩa Địa",
+          "desc": "Ai rời khỏi căn phòng này phải đổ xúc xắc Tinh Táo được 4+. Nếu thất bại, mất 1 điểm Trí Tuệ (nhưng vẫn tiếp tục di chuyển)."
+        },
+        {
+          "en": "Gymnasium",
+          "vi": "Phòng Thể Dục",
+          "desc": "Mỗi game 1 lần, nếu bạn kết thúc lượt ở đây, tăng 1 điểm Tốc Độ."
+        },
+        {
+          "en": "Vault",
+          "vi": "Hầm Chứa",
+          "desc": "Bạn có thể đổ xúc xắc Trí Tuệ được 6+ để mở và lấy hết đồ trong hầm chứa."
+        },
+        {
+          "en": "Tower",
+          "vi": "Tòa Tháp",
+          "desc": "Bạn có thể đổ xúc xắc Sức Mạnh được 3+ để băng qua. Nếu thất bại, ngừng di chuyển."
+        },
+        {
+          "en": "Attic",
+          "vi": "Gác Mái",
+          "desc": "Ai rời khỏi căn phòng này phải đổ xúc xắc Tốc Độ được 3+. Nếu thất bại, mất 1 điểm Sức Mạnh (nhưng vẫn tiếp tục di chuyển)."
+        },
+        {
+          "en": "Gallery",
+          "vi": "Khán Đài",
+          "desc": "Bạn có thể nhảy xuống Phòng Khiêu Vũ nếu đã có nó trong nhà. Nếu làm vậy, nhận 1 xúc xắc sát thương vật lý."
+        }
+      ]
+    },
+    {
+      "id": "tokens",
+      "title": "Miếng khác (Tokens)",
+      "entries": [
+        { "vi": "Sức Mạnh", "en": "Might Roll" },
+        { "vi": "Tinh Táo", "en": "Sanity Roll" },
+        { "vi": "Trí Tuệ", "en": "Knowledge Roll" },
+        { "vi": "Tốc Độ", "en": "Speed Roll" }
+      ]
+    },
+    {
+      "id": "big-monsters",
+      "title": "Miếng quái vật lớn (Big monster tokens)",
+      "entries": [
+        { "vi": "Chúa Quỷ", "en": "Demon Lord" },
+        { "vi": "Đầu Rắn", "en": "Ouroboros Head" },
+        { "vi": "Jack Mặt Máu", "en": "Crimson Jack" },
+        { "vi": "Ma Nữ", "en": "Banshee" },
+        { "vi": "Nhện", "en": "Spider" },
+        { "vi": "Phù Thủy", "en": "Witch" },
+        { "vi": "Quái Vật Frankenstein", "en": "Frankenstein's Monster" },
+        { "vi": "Rồng", "en": "Dragon" },
+        { "vi": "Thây Ma Chúa", "en": "Zombie Lord" },
+        { "vi": "Xác Ướp", "en": "Mummy" }
+      ]
+    },
+    {
+      "id": "square-tokens",
+      "title": "Miếng hình vuông (Square tokens)",
+      "entries": [
+        { "vi": "Bộ Xương", "en": "Skeletons" },
+        { "vi": "Cần Gạt Trên Tường", "en": "Wall Switch" },
+        { "vi": "Cầu Thang Bí Mật", "en": "Secret Stairs" },
+        { "vi": "Cầu Trượt", "en": "Slide" }
+      ]
+    }
+  ]
+}
