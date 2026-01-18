@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "bahoth-game-info": {
+      "command": "D:/Working/games-project/Betrayal At House On The Hill/BAHOTH/ai_server/venv/Scripts/python.exe",
+      "args": ["ai_server/run_mcp_server.py"],
+      "cwd": "D:/Working/games-project/Betrayal At House On The Hill/BAHOTH"
+    }
+  }
+}
