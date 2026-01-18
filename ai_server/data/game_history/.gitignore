@@ -1,0 +1,5 @@
+# Ignore all game session files
+*.json
+
+# Keep the directory structure
+!.gitignore
