@@ -489,6 +489,85 @@ export function socketIOPlugin() {
                     io.to(room.id).emit('game:state', fullState);
                 });
 
+                // End turn early (player chooses to skip remaining moves)
+                socket.on('game:end-turn', (data, callback) => {
+                    const room = roomManager.getRoomBySocket(socket.id);
+
+                    if (!room) {
+                        if (callback) {
+                            callback({ success: false, error: 'Not in a room' });
+                        }
+                        return;
+                    }
+
+                    if (room.gamePhase !== 'playing') {
+                        if (callback) {
+                            callback({ success: false, error: 'Game not in playing phase' });
+                        }
+                        return;
+                    }
+
+                    // Check if it's this player's turn
+                    const currentPlayerId = room.turnOrder[room.currentTurnIndex];
+                    if (socket.id !== currentPlayerId) {
+                        if (callback) {
+                            callback({ success: false, error: 'Not your turn' });
+                        }
+                        return;
+                    }
+
+                    console.log(`[Socket.IO] Player ${socket.id} ending turn early`);
+
+                    // Set current player's moves to 0
+                    room.playerMoves[socket.id] = 0;
+
+                    // Advance to next player
+                    room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+
+                    // Set moves for next player based on their speed stat
+                    const nextPlayerId = room.turnOrder[room.currentTurnIndex];
+                    let nextPlayerSpeed = null;
+
+                    // Try to get speed from playerManager stats
+                    const nextPlayerStats = playerManager.getAllStatValues(room.id, nextPlayerId);
+                    if (nextPlayerStats) {
+                        nextPlayerSpeed = nextPlayerStats.speed;
+                    } else {
+                        // Fallback: get speed from character's starting stats
+                        const nextPlayer = room.players.find(p => p.id === nextPlayerId);
+                        if (nextPlayer && nextPlayer.characterId) {
+                            nextPlayerSpeed = playerManager.getStartingSpeed(nextPlayer.characterId);
+                        }
+                    }
+
+                    if (nextPlayerSpeed !== null) {
+                        room.playerMoves[nextPlayerId] = nextPlayerSpeed;
+                        console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, moves set to ${nextPlayerSpeed}`);
+                    } else {
+                        // Last fallback: default to 4 moves
+                        room.playerMoves[nextPlayerId] = 4;
+                        console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, using default moves: 4`);
+                    }
+
+                    // Save room state
+                    roomManager.saveRooms();
+
+                    if (callback) {
+                        callback({ success: true });
+                    }
+
+                    // Broadcast updated game state to all players
+                    const mapState = mapManager.getFullMapState(room.id);
+                    const playerState = playerManager.getFullPlayerState(room.id);
+                    const fullState = {
+                        ...room,
+                        map: mapState,
+                        playerState: playerState,
+                    };
+                    io.to(room.id).emit('game:state', fullState);
+                    io.to(room.id).emit('room:state', room);
+                });
+
                 // ============================================
                 // Debug Mode Events
                 // ============================================

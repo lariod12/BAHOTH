@@ -60,7 +60,7 @@ function renderRoute({ mountEl }) {
         return;
     }
 
-    // Room with specific ID: /room/BAH-XXXXXX
+    // Room with specific ID: /room/XXXXXX
     if (path === '/room/:roomId') {
         renderRoomView({ mountEl, onNavigate: navigateTo, roomId: params.roomId });
         return;
@@ -72,7 +72,7 @@ function renderRoute({ mountEl }) {
         return;
     }
 
-    // Game with specific ID: /game/BAH-XXXXXX
+    // Game with specific ID: /game/XXXXXX
     if (path === '/game/:roomId') {
         renderGameView({ mountEl, onNavigate: navigateTo, roomId: params.roomId });
         return;

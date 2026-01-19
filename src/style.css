@@ -1343,6 +1343,42 @@ select.field__input option {
     background: rgba(255, 255, 255, 0.1);
 }
 
+.form-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.form-input-group .form-input {
+    flex: 1;
+}
+
+.random-name-btn {
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.random-name-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: scale(1.05);
+}
+
+.random-name-btn:active {
+    transform: scale(0.95);
+}
+
 @media (max-width: 640px) {
     .join-modal__content {
         width: 95%;

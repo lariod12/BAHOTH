@@ -1822,12 +1822,11 @@ function getStairsAvailability(gameState, myId) {
     const currentRoomId = playerPositions[myId];
     const revealedRooms = gameState?.map?.revealedRooms || {};
     const currentRoom = revealedRooms[currentRoomId];
-    const staircaseConnections = gameState?.map?.staircaseConnections || {};
 
     const defaultResult = { canGoUp: false, canGoDown: false, targetRoom: null, isMysticElevator: false, availableFloors: [] };
 
     if (!currentRoom) return defaultResult;
-    
+
     // Special case: Mystic Elevator - can go to any floor
     if (currentRoom.name === 'Mystic Elevator') {
         const currentFloor = currentRoom.floor;
@@ -1840,7 +1839,7 @@ function getStairsAvailability(gameState, myId) {
             availableFloors
         };
     }
-    
+
     // Special case: Stairs From Basement - goes UP to Foyer
     if (currentRoom.name === 'Stairs From Basement') {
         // Find Foyer room
@@ -1861,7 +1860,7 @@ function getStairsAvailability(gameState, myId) {
             };
         }
     }
-    
+
     // Special case: Foyer - can go DOWN to Stairs From Basement (if revealed)
     if (currentRoom.name === 'Foyer') {
         // Find Stairs From Basement room
@@ -1872,28 +1871,25 @@ function getStairsAvailability(gameState, myId) {
                 break;
             }
         }
-        
-        // Check if Grand Staircase connection exists (for UP)
-        const grandStaircaseTarget = staircaseConnections[currentRoomId];
-        const canGoUpToGrandStaircase = !!grandStaircaseTarget;
-        
+
+        // Foyer doesn't have stairsTo property - only can go DOWN to Stairs From Basement
         if (stairsFromBasementId) {
             return {
-                canGoUp: canGoUpToGrandStaircase,
+                canGoUp: false,
                 canGoDown: true,
                 targetRoom: stairsFromBasementId, // DOWN goes to Stairs From Basement
-                targetRoomUp: grandStaircaseTarget, // UP goes to Grand Staircase target
                 isMysticElevator: false,
                 availableFloors: []
             };
         }
     }
 
-    if (!staircaseConnections[currentRoomId]) {
+    // Check room's stairsTo property (e.g., Grand Staircase -> Upper Landing)
+    if (!currentRoom.stairsTo) {
         return defaultResult;
     }
 
-    const targetRoomId = staircaseConnections[currentRoomId];
+    const targetRoomId = currentRoom.stairsTo;
     const targetRoom = revealedRooms[targetRoomId];
 
     if (!targetRoom) {
@@ -2029,6 +2025,7 @@ function renderGameControls(gameState, myId) {
     const canMoveRight = canMove && availableDirs.east;
 
     console.log('[Controls] myTurn:', myTurn, 'movesLeft:', movesLeft, 'canMove:', canMove, 'availableDirs:', availableDirs);
+    console.log('[Controls] stairs:', stairs, 'showUpBtn:', showUpBtn, 'showDownBtn:', showDownBtn);
     
     // Elevator floor buttons - sorted: upper on top, ground middle, basement bottom
     const floorNames = { upper: 'Tang tren', ground: 'Tang tret', basement: 'Tang ham' };
@@ -3225,7 +3222,28 @@ function attachEventListeners(mountEl, roomId) {
 
         // === Room Discovery Modal Actions (same as debug mode) ===
 
-        // Confirm room selection (go to rotation step)
+        // Select room and go to rotation step (matches button action)
+        if (action === 'select-room-next') {
+            const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
+            const selectedRoom = hiddenInput?.value;
+            if (selectedRoom && roomDiscoveryModal) {
+                const roomDef = ROOMS.find(r => r.name.en === selectedRoom);
+
+                // Find first valid rotation
+                const initialRotation = roomDef
+                    ? findFirstValidRotation(roomDef, roomDiscoveryModal.doorSide)
+                    : 0;
+
+                roomDiscoveryModal.selectedRoom = selectedRoom;
+                roomDiscoveryModal.currentRotation = initialRotation;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            } else {
+                alert('Vui long chon mot phong');
+            }
+            return;
+        }
+
+        // Confirm room selection (go to rotation step) - legacy action name
         if (action === 'confirm-room-select') {
             const hiddenInput = mountEl.querySelector('#room-select-value');
             const selectedRoom = hiddenInput?.value;
@@ -3329,7 +3347,8 @@ function attachEventListeners(mountEl, roomId) {
         // === Stairs/Elevator Actions (same as debug mode) ===
 
         if (action === 'use-stairs') {
-            const targetRoom = actionEl?.dataset.targetRoom;
+            const stairsEl = target.closest('[data-action="use-stairs"]');
+            const targetRoom = stairsEl?.dataset.target;
             if (targetRoom) {
                 handleDebugUseStairs(mountEl, targetRoom);
             }
@@ -3337,7 +3356,8 @@ function attachEventListeners(mountEl, roomId) {
         }
 
         if (action === 'use-elevator') {
-            const targetFloor = actionEl?.dataset.targetFloor;
+            const elevatorEl = target.closest('[data-action="use-elevator"]');
+            const targetFloor = elevatorEl?.dataset.floor;
             if (targetFloor) {
                 handleDebugUseElevator(mountEl, targetFloor);
             }
@@ -3612,6 +3632,35 @@ function attachEventListeners(mountEl, roomId) {
         if (e.key === 'Enter' && e.target.id === 'dice-manual-input') {
             const btn = mountEl.querySelector('[data-action="roll-manual"]');
             btn?.click();
+        }
+    });
+
+    // Room search input handler
+    mountEl.addEventListener('input', (e) => {
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        if (target.id === 'room-search-input') {
+            const searchText = target.value.toLowerCase().trim();
+            const items = mountEl.querySelectorAll('.room-discovery__item');
+
+            items.forEach(item => {
+                const itemEl = /** @type {HTMLElement} */ (item);
+                const searchData = itemEl.dataset.searchText || '';
+                const matches = searchText === '' || searchData.includes(searchText);
+                itemEl.style.display = matches ? '' : 'none';
+            });
+        }
+
+        // Token card search
+        if (target.id === 'token-card-search-input') {
+            const searchText = target.value.toLowerCase().trim();
+            const items = mountEl.querySelectorAll('.token-card__item');
+
+            items.forEach(item => {
+                const itemEl = /** @type {HTMLElement} */ (item);
+                const searchData = itemEl.dataset.searchText || '';
+                const matches = searchText === '' || searchData.includes(searchText);
+                itemEl.style.display = matches ? '' : 'none';
+            });
         }
     });
 }
@@ -4729,11 +4778,9 @@ function handleEndTurn(mountEl) {
         return;
     }
 
-    // Set moves to 0 to end turn
-    currentGameState.playerMoves[playerId] = 0;
-
     if (isDebugMode) {
-        // Debug mode: auto-switch to next player locally
+        // Debug mode: update local state and switch to next player
+        currentGameState.playerMoves[playerId] = 0;
         currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
 
         const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
@@ -4750,14 +4797,18 @@ function handleEndTurn(mountEl) {
             debugCurrentPlayerIndex = nextIdx;
             mySocketId = nextPlayerId;
         }
+
+        updateGameUI(mountEl, currentGameState, mySocketId);
     } else {
-        // Multiplayer mode: notify server to end turn
-        socketClient.endTurn().then(result => {
-            console.log('[EndTurn] Server response:', result);
+        // Multiplayer mode: sync current state first, then end turn
+        // This ensures any newly revealed rooms/cards are saved before turn ends
+        syncGameStateToServer().then(() => {
+            socketClient.endTurn().then(result => {
+                console.log('[EndTurn] Server response:', result);
+                // Server will broadcast updated game state, no need to update UI here
+            });
         });
     }
-
-    updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**

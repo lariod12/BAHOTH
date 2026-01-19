@@ -1,7 +1,7 @@
 import { CHARACTERS, CHARACTER_BY_ID } from '../data/charactersData.js';
 import * as socketClient from '../services/socketClient.js';
 
-const MIN_PLAYERS = 3;
+const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 6;
 
 // Current room state

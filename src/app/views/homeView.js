@@ -2,7 +2,32 @@ import * as socketClient from '../services/socketClient.js';
 
 // Debug mode state
 let isDebugMode = false;
-let debugPlayerCount = 3;
+let debugPlayerCount = 2;
+
+// Random name generator - Horror/Haunted theme
+const ADJECTIVES = [
+    'Shadow', 'Dark', 'Mystic', 'Haunted', 'Cursed', 'Silent', 'Ghostly', 'Creepy',
+    'Wicked', 'Eerie', 'Sinister', 'Cryptic', 'Midnight', 'Hollow', 'Grim', 'Spectral',
+    'Phantom', 'Bloody', 'Ancient', 'Twisted', 'Lurking', 'Hidden', 'Forgotten', 'Lost',
+    'Doomed', 'Fallen', 'Raven', 'Storm', 'Thunder', 'Frost', 'Iron', 'Steel'
+];
+
+const NOUNS = [
+    'Hunter', 'Walker', 'Seeker', 'Watcher', 'Keeper', 'Slayer', 'Reaper', 'Stalker',
+    'Wanderer', 'Explorer', 'Survivor', 'Warrior', 'Knight', 'Rogue', 'Phantom', 'Specter',
+    'Wolf', 'Raven', 'Spider', 'Serpent', 'Dragon', 'Phoenix', 'Crow', 'Owl',
+    'Blade', 'Fang', 'Claw', 'Thorn', 'Shadow', 'Storm', 'Flame', 'Frost'
+];
+
+/**
+ * Generate a random name
+ * @returns {string}
+ */
+function generateRandomName() {
+    const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+    return `${adjective}${noun}`;
+}
 
 function renderHomeMarkup() {
     return `
@@ -24,6 +49,7 @@ function renderHomeMarkup() {
                     <div class="debug-options" id="debug-options">
                         <label class="debug-options__label">Players:</label>
                         <select class="debug-options__select" id="debug-player-count">
+                            <option value="2" selected>2</option>
                             <option value="3">3</option>
                             <option value="4">4</option>
                             <option value="5">5</option>
@@ -47,11 +73,14 @@ function renderHomeMarkup() {
                 <div class="join-modal__body">
                     <div class="form-group">
                         <label class="form-label" for="player-name">Your Name</label>
-                        <input class="form-input" type="text" id="player-name" placeholder="Enter your name" maxlength="20" />
+                        <div class="form-input-group">
+                            <input class="form-input" type="text" id="player-name" placeholder="Enter your name" maxlength="20" />
+                            <button class="random-name-btn" type="button" data-action="random-player-name" title="Random name">🎲</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="room-id-input">Room ID</label>
-                        <input class="form-input" type="text" id="room-id-input" placeholder="BAH-XXXXXX" maxlength="10" />
+                        <input class="form-input" type="text" id="room-id-input" placeholder="XXXXXX" maxlength="6" />
                     </div>
                     <div class="room-status" id="room-status" style="display: none;">
                         <span class="room-status__text" id="room-status-text"></span>
@@ -77,12 +106,16 @@ function renderHomeMarkup() {
                 <div class="join-modal__body">
                     <div class="form-group">
                         <label class="form-label" for="host-name">Your Name</label>
-                        <input class="form-input" type="text" id="host-name" placeholder="Enter your name" maxlength="20" />
+                        <div class="form-input-group">
+                            <input class="form-input" type="text" id="host-name" placeholder="Enter your name" maxlength="20" />
+                            <button class="random-name-btn" type="button" data-action="random-host-name" title="Random name">🎲</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="max-players">Max Players</label>
                         <select class="form-input form-select" id="max-players">
-                            <option value="3" selected>3 players</option>
+                            <option value="2" selected>2 players</option>
+                            <option value="3">3 players</option>
                             <option value="4">4 players</option>
                             <option value="5">5 players</option>
                             <option value="6">6 players</option>
@@ -247,6 +280,22 @@ export function renderHomeView({ mountEl, onNavigate }) {
 
     tutorialButton?.addEventListener('click', () => {
         onNavigate('#/tutorial');
+    });
+
+    // Random name buttons
+    const randomHostNameBtn = mountEl.querySelector('[data-action="random-host-name"]');
+    const randomPlayerNameBtn = mountEl.querySelector('[data-action="random-player-name"]');
+
+    randomHostNameBtn?.addEventListener('click', () => {
+        if (hostNameInput) {
+            hostNameInput.value = generateRandomName();
+        }
+    });
+
+    randomPlayerNameBtn?.addEventListener('click', () => {
+        if (playerNameInput) {
+            playerNameInput.value = generateRandomName();
+        }
     });
 
     // Submit create room

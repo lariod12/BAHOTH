@@ -163,12 +163,12 @@ export function saveRooms() {
 loadRooms();
 
 /**
- * Generate a random room ID like BAH-XXXXXX
+ * Generate a random room ID (6 characters)
  * @returns {string}
  */
 function generateRoomId() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let id = 'BAH-';
+    let id = '';
     for (let i = 0; i < 6; i++) {
         id += chars[Math.floor(Math.random() * chars.length)];
     }
@@ -190,7 +190,7 @@ export function createRoom(hostSocketId, hostName, maxPlayers = 6) {
     }
 
     // Validate maxPlayers (3-6)
-    const validMax = Math.max(3, Math.min(6, maxPlayers));
+    const validMax = Math.max(2, Math.min(6, maxPlayers));
 
     const room = {
         id: roomId,
@@ -204,7 +204,7 @@ export function createRoom(hostSocketId, hostName, maxPlayers = 6) {
             },
         ],
         maxPlayers: validMax,
-        minPlayers: 3,
+        minPlayers: 2,
         createdAt: new Date().toISOString(),
         // Game state
         gamePhase: 'lobby',
@@ -229,7 +229,7 @@ export function createRoom(hostSocketId, hostName, maxPlayers = 6) {
  * @returns {Room}
  */
 export function createDebugRoom(hostSocketId, playerCount) {
-    const validCount = Math.max(3, Math.min(6, playerCount));
+    const validCount = Math.max(2, Math.min(6, playerCount));
 
     let roomId = generateRoomId();
     while (rooms.has(roomId)) {
@@ -260,7 +260,7 @@ export function createDebugRoom(hostSocketId, playerCount) {
         hostId: hostSocketId,
         players,
         maxPlayers: validCount,
-        minPlayers: 3,
+        minPlayers: 2,
         createdAt: new Date().toISOString(),
         gamePhase: 'lobby',
         // Debug mode specific

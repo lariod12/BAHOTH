@@ -206,6 +206,7 @@ export function initializeMap(gameId) {
     const state = {
         revealedRooms: {},
         connections: {},
+        elevatorShafts: {},
     };
 
     // Add starting rooms
@@ -399,6 +400,7 @@ export function getFullMapState(gameId) {
     return {
         revealedRooms: { ...state.revealedRooms },
         connections: { ...state.connections },
+        elevatorShafts: state.elevatorShafts ? { ...state.elevatorShafts } : {},
     };
 }
 
@@ -411,23 +413,24 @@ export function updateMapState(gameId, updates) {
     let state = maps.get(gameId);
     if (!state) {
         // Initialize if not exists
-        state = { revealedRooms: {}, connections: {} };
+        state = { revealedRooms: {}, connections: {}, elevatorShafts: {} };
         maps.set(gameId, state);
     }
 
-    // Merge revealed rooms
+    // For client-authoritative sync, replace entire state sections
+    // This handles both additions and deletions (e.g., elevator shaft removal)
     if (updates.revealedRooms) {
-        state.revealedRooms = { ...state.revealedRooms, ...updates.revealedRooms };
+        state.revealedRooms = { ...updates.revealedRooms };
     }
 
-    // Merge connections
+    // Replace connections entirely from client
     if (updates.connections) {
-        for (const [roomId, roomConnections] of Object.entries(updates.connections)) {
-            if (!state.connections[roomId]) {
-                state.connections[roomId] = {};
-            }
-            state.connections[roomId] = { ...state.connections[roomId], ...roomConnections };
-        }
+        state.connections = { ...updates.connections };
+    }
+
+    // Replace elevator shafts entirely from client (for Mystic Elevator tracking)
+    if (updates.elevatorShafts !== undefined) {
+        state.elevatorShafts = updates.elevatorShafts ? { ...updates.elevatorShafts } : {};
     }
 
     saveMaps();
