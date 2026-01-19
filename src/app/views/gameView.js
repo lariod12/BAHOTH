@@ -65,6 +65,11 @@ let damageDiceModal = null;
 let showingDiceResults = false;
 let diceResultsTimeout = null;
 
+// Reconnection subscriptions
+let unsubscribeReconnectResult = null;
+let unsubscribePlayerDisconnected = null;
+let unsubscribePlayerReconnected = null;
+
 /** @type {any} */
 let currentGameState = null;
 let mySocketId = null;
@@ -102,6 +107,44 @@ const DICE_ROLL_ROOMS = new Set([
     'Attic',               // Speed roll 3+ when exiting
     'Mystic Elevator',     // Roll 2 dice for floor
 ]);
+
+/**
+ * Show a toast notification
+ * @param {string} message - Message to display
+ * @param {'success' | 'warning' | 'info'} [type='info'] - Toast type
+ * @param {number} [duration=3000] - Duration in milliseconds
+ */
+function showToast(message, type = 'info', duration = 3000) {
+    // Remove existing toast if any
+    const existing = document.querySelector('.game-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `game-toast game-toast--${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        z-index: 10000;
+        animation: toast-slide-in 0.3s ease;
+        ${type === 'success' ? 'background: #10b981; color: white;' : ''}
+        ${type === 'warning' ? 'background: #f59e0b; color: white;' : ''}
+        ${type === 'info' ? 'background: #3b82f6; color: white;' : ''}
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'toast-slide-out 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
 
 /**
  * Check if current room requires dice roll
@@ -1724,6 +1767,7 @@ function renderTurnOrder(gameState, myId) {
         const charName = getCharacterName(player.characterId);
         const isMe = socketId === myId;
         const isCurrent = idx === currentIndex;
+        const isDisconnected = player.status === 'disconnected';
 
         const position = playerPositions[socketId] || 'Unknown';
 
@@ -1737,13 +1781,14 @@ function renderTurnOrder(gameState, myId) {
         const isMyEnemy = hauntActive ? isEnemy(gameState, myId, socketId) : false;
         const isMyAlly = hauntActive ? isAlly(gameState, myId, socketId) && !isMe : false;
         const relationClass = isMyEnemy ? 'is-enemy' : (isMyAlly ? 'is-ally' : '');
+        const disconnectedClass = isDisconnected ? 'is-disconnected' : '';
 
         return `
-            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass} ${factionClass} ${relationClass}" ${clickableAttr}>
+            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass} ${factionClass} ${relationClass} ${disconnectedClass}" ${clickableAttr}>
                 <span class="turn-indicator__order">${idx + 1}</span>
                 <div class="turn-indicator__info">
-                    <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}${playerFaction === 'traitor' ? ' ☠' : ''}</span>
-                    <span class="turn-indicator__room">${position}</span>
+                    <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}${playerFaction === 'traitor' ? ' ☠' : ''}${isDisconnected ? ' ⚠' : ''}</span>
+                    <span class="turn-indicator__room">${isDisconnected ? 'Mat ket noi...' : position}</span>
                 </div>
             </div>
         `;
@@ -4397,7 +4442,8 @@ async function syncGameStateToServer() {
             playerMoves: currentGameState.playerMoves,
             playerPositions: currentGameState.playerState?.playerPositions,
             map: currentGameState.map,
-            drawnRooms: currentGameState.playerState?.drawnRooms
+            drawnRooms: currentGameState.playerState?.drawnRooms,
+            playerCards: currentGameState.playerState?.playerCards
         });
         console.log('[Sync] Game state synced to server:', result);
     } catch (error) {
@@ -5499,10 +5545,44 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
     // Initial loading state
     mountEl.innerHTML = renderGameScreen(null, mySocketId);
 
+    // Loading timeout - redirect to home if stuck too long
+    const LOADING_TIMEOUT = 10000; // 10 seconds
+    let loadingTimeoutId = setTimeout(() => {
+        if (!currentGameState) {
+            console.log('[GameView] Loading timeout - room may not exist');
+            socketClient.clearSession();
+            showToast('Phong khong ton tai hoac da het han', 'error', 3000);
+            setTimeout(() => {
+                onNavigate('#/');
+            }, 1500);
+        }
+    }, LOADING_TIMEOUT);
+
+    // Clear loading timeout when game state is received
+    const clearLoadingTimeout = () => {
+        if (loadingTimeoutId) {
+            clearTimeout(loadingTimeoutId);
+            loadingTimeoutId = null;
+        }
+    };
+
     // Subscribe to game state updates
     unsubscribeGameState = socketClient.onGameState((state) => {
+        clearLoadingTimeout();
         currentGameState = state;
         mySocketId = socketClient.getSocketId();
+
+        // Debug: Log turn info on state update
+        const currentTurnPlayer = state.turnOrder?.[state.currentTurnIndex];
+        const myMoves = state.playerMoves?.[mySocketId] ?? 0;
+        const currentPlayerMoves = state.playerMoves?.[currentTurnPlayer] ?? 0;
+        console.log('[GameState] Update received - currentTurnIndex:', state.currentTurnIndex,
+            'currentTurnPlayer:', currentTurnPlayer,
+            'mySocketId:', mySocketId,
+            'isMyTurn:', currentTurnPlayer === mySocketId,
+            'myMoves:', myMoves,
+            'currentPlayerMoves:', currentPlayerMoves);
+
         updateGameUI(mountEl, currentGameState, mySocketId);
     });
 
@@ -5513,17 +5593,57 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         checkAllPlayersActive(activePlayerIds, allPlayers, mountEl);
     });
 
+    // Subscribe to reconnection events
+    unsubscribeReconnectResult = socketClient.onReconnectResult((result) => {
+        if (result.success) {
+            showToast('Ket noi lai thanh cong!', 'success');
+        } else if (!result.canRejoin) {
+            // Room doesn't exist anymore - redirect to home
+            clearLoadingTimeout();
+            socketClient.clearSession();
+            showToast('Phong da bi huy', 'error', 3000);
+            setTimeout(() => {
+                onNavigate('#/');
+            }, 1500);
+        }
+    });
+
+    unsubscribePlayerDisconnected = socketClient.onPlayerDisconnected(({ playerId, gracePeriod }) => {
+        const player = currentGameState?.players?.find(p => p.id === playerId);
+        const playerName = player?.name || 'Player';
+        const minutes = Math.round(gracePeriod / 60000);
+        showToast(`${playerName} mat ket noi. Cho ${minutes} phut de ket noi lai...`, 'warning', 5000);
+    });
+
+    unsubscribePlayerReconnected = socketClient.onPlayerReconnected(({ playerName }) => {
+        showToast(`${playerName} da ket noi lai!`, 'success');
+    });
+
     // Setup visibility tracking for active status
     setupVisibilityTracking();
 
-    // Request game state
-    socketClient.getGameState(roomId);
+    // Request game state and validate room exists
+    socketClient.getGameState(roomId).then((response) => {
+        if (!response.success) {
+            // Room doesn't exist
+            clearLoadingTimeout();
+            console.log('[GameView] Room not found:', roomId);
+            socketClient.clearSession();
+            showToast('Phong khong ton tai', 'error', 3000);
+            setTimeout(() => {
+                onNavigate('#/');
+            }, 1500);
+        }
+    });
 
     // Attach event listeners
     attachEventListeners(mountEl, roomId);
 
     // Cleanup on navigate away
     window.addEventListener('hashchange', () => {
+        // Clear loading timeout
+        clearLoadingTimeout();
+
         if (unsubscribeGameState) {
             unsubscribeGameState();
             unsubscribeGameState = null;
@@ -5531,6 +5651,18 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         if (unsubscribePlayersActive) {
             unsubscribePlayersActive();
             unsubscribePlayersActive = null;
+        }
+        if (unsubscribeReconnectResult) {
+            unsubscribeReconnectResult();
+            unsubscribeReconnectResult = null;
+        }
+        if (unsubscribePlayerDisconnected) {
+            unsubscribePlayerDisconnected();
+            unsubscribePlayerDisconnected = null;
+        }
+        if (unsubscribePlayerReconnected) {
+            unsubscribePlayerReconnected();
+            unsubscribePlayerReconnected = null;
         }
         if (introTimeout) {
             clearTimeout(introTimeout);

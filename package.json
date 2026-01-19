@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest --run",
     "test:watch": "vitest",
-    "clear-data": "node -e \"const fs=require('fs');const path='server/data';fs.readdirSync(path).forEach(f=>fs.writeFileSync(path+'/'+f,'[]'))\" && echo Data cleared!"
+    "clean": "node -e \"const fs=require('fs');fs.writeFileSync('server/data/rooms.json','{}');fs.writeFileSync('server/data/players.json','{}');fs.writeFileSync('server/data/maps.json','{}');\" && echo All game data cleared!"
   },
   "devDependencies": {
     "fast-check": "^4.5.3",

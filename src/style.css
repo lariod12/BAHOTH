@@ -6353,3 +6353,64 @@ select.field__input option {
     background: linear-gradient(135deg, #d65c5c 0%, #c94c4c 100%);
     transform: translateY(-1px);
 }
+
+
+/* ============================================
+   Toast Notifications
+   ============================================ */
+
+@keyframes toast-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@keyframes toast-slide-out {
+    from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+}
+
+.game-toast {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   Disconnected Player State
+   ============================================ */
+
+.turn-indicator.is-disconnected {
+    opacity: 0.5;
+    background: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.5);
+}
+
+.turn-indicator.is-disconnected .turn-indicator__room {
+    color: #f59e0b;
+    font-style: italic;
+}
+
+.player-slot.is-disconnected {
+    opacity: 0.5;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.player-slot.is-disconnected .player-name {
+    color: #f59e0b;
+}
+
+.badge--disconnected {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}

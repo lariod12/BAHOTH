@@ -22,6 +22,167 @@ const playersActiveListeners = [];
 /** @type {((room: any) => void)[]} */
 const debugRoomStateListeners = [];
 
+// ============================================
+// Session Management for Reconnection
+// ============================================
+
+const SESSION_KEY = 'bahoth_session';
+const SESSION_BACKUP_KEY = 'bahoth_session_backup';
+const SESSION_EXPIRY = 5 * 60 * 1000; // 5 minutes (matches server grace period)
+
+/**
+ * @typedef {{
+ *   roomId: string;
+ *   oldSocketId: string;
+ *   playerName: string;
+ *   characterId: string | null;
+ *   timestamp: number;
+ * }} SessionInfo
+ */
+
+/** @type {SessionInfo | null} */
+let currentSession = null;
+
+/** @type {((result: { success: boolean; canRejoin?: boolean; roomId?: string }) => void)[]} */
+const reconnectResultListeners = [];
+
+/** @type {((data: { playerId: string; gracePeriod: number }) => void)[]} */
+const playerDisconnectedListeners = [];
+
+/** @type {((data: { playerId: string; playerName: string }) => void)[]} */
+const playerReconnectedListeners = [];
+
+/**
+ * Save session info for reconnection
+ * @param {string} roomId
+ * @param {string} playerName
+ * @param {string | null} [characterId]
+ */
+export function saveSession(roomId, playerName, characterId = null) {
+    if (!socket?.id) return;
+
+    const sessionInfo = {
+        roomId,
+        oldSocketId: socket.id,
+        playerName,
+        characterId,
+        timestamp: Date.now()
+    };
+
+    currentSession = sessionInfo;
+
+    try {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionInfo));
+        localStorage.setItem(SESSION_BACKUP_KEY, JSON.stringify(sessionInfo));
+        console.log('[SocketClient] Session saved:', sessionInfo.roomId);
+    } catch (e) {
+        console.warn('[SocketClient] Failed to save session:', e);
+    }
+}
+
+/**
+ * Update session with character selection
+ * @param {string} characterId
+ */
+export function updateSessionCharacter(characterId) {
+    if (!currentSession) return;
+
+    currentSession.characterId = characterId;
+    saveSession(currentSession.roomId, currentSession.playerName, characterId);
+}
+
+/**
+ * Load saved session info
+ * @returns {SessionInfo | null}
+ */
+export function loadSession() {
+    try {
+        // Try sessionStorage first (current browser session)
+        let data = sessionStorage.getItem(SESSION_KEY);
+
+        if (!data) {
+            // Fallback to localStorage (browser crash recovery)
+            data = localStorage.getItem(SESSION_BACKUP_KEY);
+        }
+
+        if (!data) return null;
+
+        const session = JSON.parse(data);
+
+        // Check if session is expired
+        if (Date.now() - session.timestamp > SESSION_EXPIRY) {
+            clearSession();
+            return null;
+        }
+
+        return session;
+    } catch (e) {
+        console.warn('[SocketClient] Failed to load session:', e);
+        return null;
+    }
+}
+
+/**
+ * Clear saved session
+ */
+export function clearSession() {
+    currentSession = null;
+    try {
+        sessionStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(SESSION_BACKUP_KEY);
+        console.log('[SocketClient] Session cleared');
+    } catch (e) {
+        console.warn('[SocketClient] Failed to clear session:', e);
+    }
+}
+
+/**
+ * Attempt to reconnect to a previous session
+ * @returns {Promise<{ success: boolean; room?: any; error?: string; canRejoin?: boolean }>}
+ */
+export function attemptReconnect() {
+    return new Promise((resolve) => {
+        const session = loadSession();
+
+        if (!session) {
+            resolve({ success: false, error: 'No session found' });
+            return;
+        }
+
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        console.log('[SocketClient] Attempting reconnect:', session.roomId, session.oldSocketId);
+
+        socket.emit('room:reconnect', {
+            roomId: session.roomId,
+            oldSocketId: session.oldSocketId,
+            playerName: session.playerName
+        }, (response) => {
+            if (response.success) {
+                // Update session with new socket ID
+                saveSession(session.roomId, session.playerName, session.characterId);
+                console.log('[SocketClient] Reconnection successful');
+            } else {
+                // Clear invalid session
+                clearSession();
+                console.log('[SocketClient] Reconnection failed:', response.error);
+            }
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Get current session info
+ * @returns {SessionInfo | null}
+ */
+export function getCurrentSession() {
+    return currentSession || loadSession();
+}
+
 /**
  * Connect to Socket.IO server
  * @returns {import('socket.io-client').Socket}
@@ -34,10 +195,28 @@ export function connect() {
     // Connect to same origin (Vite dev server)
     socket = io({
         transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
     });
 
-    socket.on('connect', () => {
+    socket.on('connect', async () => {
         console.log('[SocketClient] Connected:', socket.id);
+
+        // Check for saved session and attempt reconnect
+        const session = loadSession();
+        if (session) {
+            console.log('[SocketClient] Found saved session, attempting reconnect...');
+            const result = await attemptReconnect();
+
+            // Notify listeners of reconnect result
+            reconnectResultListeners.forEach(fn => fn({
+                success: result.success,
+                canRejoin: result.canRejoin,
+                roomId: session.roomId
+            }));
+        }
     });
 
     socket.on('disconnect', (reason) => {
@@ -65,6 +244,18 @@ export function connect() {
 
     socket.on('room:player-left', (data) => {
         console.log('[SocketClient] Player left:', data);
+    });
+
+    // Player disconnected with grace period
+    socket.on('room:player-disconnected', (data) => {
+        console.log('[SocketClient] Player disconnected (grace period):', data);
+        playerDisconnectedListeners.forEach((fn) => fn(data));
+    });
+
+    // Player reconnected
+    socket.on('room:player-reconnected', (data) => {
+        console.log('[SocketClient] Player reconnected:', data);
+        playerReconnectedListeners.forEach((fn) => fn(data));
     });
 
     socket.on('game:state', (state) => {
@@ -542,6 +733,55 @@ export function onDebugRoomState(callback) {
         const index = debugRoomStateListeners.indexOf(callback);
         if (index > -1) {
             debugRoomStateListeners.splice(index, 1);
+        }
+    };
+}
+
+// ============================================
+// Reconnection Event Subscriptions
+// ============================================
+
+/**
+ * Subscribe to reconnect result events
+ * @param {(result: { success: boolean; canRejoin?: boolean; roomId?: string }) => void} callback
+ * @returns {() => void} Unsubscribe function
+ */
+export function onReconnectResult(callback) {
+    reconnectResultListeners.push(callback);
+    return () => {
+        const index = reconnectResultListeners.indexOf(callback);
+        if (index > -1) {
+            reconnectResultListeners.splice(index, 1);
+        }
+    };
+}
+
+/**
+ * Subscribe to player disconnected events (with grace period)
+ * @param {(data: { playerId: string; gracePeriod: number }) => void} callback
+ * @returns {() => void} Unsubscribe function
+ */
+export function onPlayerDisconnected(callback) {
+    playerDisconnectedListeners.push(callback);
+    return () => {
+        const index = playerDisconnectedListeners.indexOf(callback);
+        if (index > -1) {
+            playerDisconnectedListeners.splice(index, 1);
+        }
+    };
+}
+
+/**
+ * Subscribe to player reconnected events
+ * @param {(data: { playerId: string; playerName: string }) => void} callback
+ * @returns {() => void} Unsubscribe function
+ */
+export function onPlayerReconnected(callback) {
+    playerReconnectedListeners.push(callback);
+    return () => {
+        const index = playerReconnectedListeners.indexOf(callback);
+        if (index > -1) {
+            playerReconnectedListeners.splice(index, 1);
         }
     };
 }

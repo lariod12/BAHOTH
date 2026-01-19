@@ -13,7 +13,7 @@ const DATA_DIR = join(__dirname, 'data');
 const ROOMS_FILE = join(DATA_DIR, 'rooms.json');
 
 /**
- * @typedef {'joined' | 'selecting' | 'ready'} PlayerStatus
+ * @typedef {'joined' | 'selecting' | 'ready' | 'disconnected'} PlayerStatus
  * @typedef {'lobby' | 'rolling' | 'playing'} GamePhase
  *
  * @typedef {{
@@ -22,6 +22,7 @@ const ROOMS_FILE = join(DATA_DIR, 'rooms.json');
  *   status: PlayerStatus;
  *   characterId: string | null;
  *   isAutoPlayer?: boolean;
+ *   disconnectedAt?: number;
  * }} Player
  *
  * @typedef {{
@@ -54,6 +55,26 @@ const rooms = new Map();
 
 /** @type {Map<string, string>} */
 const socketToRoom = new Map();
+
+// ============================================
+// Reconnection Grace Period Management
+// ============================================
+
+/** Grace period for reconnection (5 minutes) */
+const RECONNECT_GRACE_PERIOD = 5 * 60 * 1000;
+
+/**
+ * @typedef {{
+ *   roomId: string;
+ *   playerId: string;
+ *   playerData: Player;
+ *   disconnectTime: number;
+ *   timeout: ReturnType<typeof setTimeout>;
+ * }} DisconnectedPlayerInfo
+ */
+
+/** @type {Map<string, DisconnectedPlayerInfo>} oldSocketId -> info */
+const disconnectedPlayers = new Map();
 
 // Default player names for debug mode
 const DEFAULT_PLAYER_NAMES = [
@@ -122,7 +143,7 @@ function loadRooms() {
 /**
  * Save rooms to JSON file
  */
-function saveRooms() {
+export function saveRooms() {
     ensureDataDir();
 
     const data = {
@@ -528,12 +549,179 @@ export function cleanupStaleRooms() {
 }
 
 /**
+ * Mark a player as disconnected (for grace period reconnection)
+ * @param {string} socketId
+ * @param {Function} onGracePeriodExpired - Callback when grace period expires
+ * @returns {{ success: boolean; room?: Room; error?: string }}
+ */
+export function markPlayerDisconnected(socketId, onGracePeriodExpired) {
+    const roomId = socketToRoom.get(socketId);
+    if (!roomId) {
+        return { success: false, error: 'Player not in a room' };
+    }
+
+    const room = rooms.get(roomId);
+    if (!room) {
+        return { success: false, error: 'Room not found' };
+    }
+
+    const player = room.players.find((p) => p.id === socketId);
+    if (!player) {
+        return { success: false, error: 'Player not found' };
+    }
+
+    // Mark player as disconnected
+    player.status = 'disconnected';
+    player.disconnectedAt = Date.now();
+
+    // Set timeout for cleanup after grace period
+    const timeout = setTimeout(() => {
+        cleanupDisconnectedPlayer(socketId, roomId, onGracePeriodExpired);
+    }, RECONNECT_GRACE_PERIOD);
+
+    // Store disconnection info
+    disconnectedPlayers.set(socketId, {
+        roomId,
+        playerId: socketId,
+        playerData: { ...player },
+        disconnectTime: Date.now(),
+        timeout
+    });
+
+    saveRooms();
+    console.log(`[RoomManager] Player ${socketId} marked as disconnected. Grace period: ${RECONNECT_GRACE_PERIOD / 1000}s`);
+
+    return { success: true, room };
+}
+
+/**
+ * Get info about a disconnected player
+ * @param {string} oldSocketId
+ * @returns {DisconnectedPlayerInfo | undefined}
+ */
+export function getDisconnectedPlayer(oldSocketId) {
+    return disconnectedPlayers.get(oldSocketId);
+}
+
+/**
+ * Cleanup a disconnected player after grace period expires
+ * @param {string} oldSocketId
+ * @param {string} roomId
+ * @param {Function} [onCleanup] - Callback with cleanup result
+ */
+function cleanupDisconnectedPlayer(oldSocketId, roomId, onCleanup) {
+    console.log(`[RoomManager] Grace period expired for ${oldSocketId}`);
+
+    // Remove from disconnected tracking
+    disconnectedPlayers.delete(oldSocketId);
+
+    // Actually remove the player from the room
+    const room = rooms.get(roomId);
+    if (!room) {
+        if (onCleanup) onCleanup({ success: false, error: 'Room not found' });
+        return;
+    }
+
+    const wasHost = room.hostId === oldSocketId;
+
+    // Remove player from room
+    room.players = room.players.filter((p) => p.id !== oldSocketId);
+    socketToRoom.delete(oldSocketId);
+
+    // Remove from turn order if game is in progress
+    if (room.turnOrder.includes(oldSocketId)) {
+        const currentPlayerBeforeRemoval = room.turnOrder[room.currentTurnIndex];
+        room.turnOrder = room.turnOrder.filter(id => id !== oldSocketId);
+
+        // Adjust currentTurnIndex if needed
+        if (room.turnOrder.length > 0) {
+            if (currentPlayerBeforeRemoval === oldSocketId) {
+                // Was this player's turn - index stays same but wraps if needed
+                room.currentTurnIndex = room.currentTurnIndex % room.turnOrder.length;
+            } else {
+                // Find new index of current player
+                const newIndex = room.turnOrder.indexOf(currentPlayerBeforeRemoval);
+                room.currentTurnIndex = newIndex >= 0 ? newIndex : 0;
+            }
+        }
+    }
+
+    // Remove player moves
+    delete room.playerMoves[oldSocketId];
+
+    // If room is empty, delete it
+    if (room.players.length === 0) {
+        rooms.delete(roomId);
+        saveRooms();
+        if (onCleanup) onCleanup({ success: true, room: null, wasHost, roomDeleted: true });
+        return;
+    }
+
+    // If host left, assign new host
+    if (wasHost && room.players.length > 0) {
+        room.hostId = room.players[0].id;
+    }
+
+    saveRooms();
+
+    if (onCleanup) {
+        onCleanup({ success: true, room, wasHost, roomDeleted: false });
+    }
+}
+
+/**
  * Reconnect a player to their room (for reconnection handling)
  * @param {string} oldSocketId
  * @param {string} newSocketId
  * @returns {Room | undefined}
  */
 export function reconnectPlayer(oldSocketId, newSocketId) {
+    // Check if player is in disconnected tracking
+    const disconnectedInfo = disconnectedPlayers.get(oldSocketId);
+
+    if (disconnectedInfo) {
+        // Clear the cleanup timeout
+        clearTimeout(disconnectedInfo.timeout);
+        disconnectedPlayers.delete(oldSocketId);
+
+        const roomId = disconnectedInfo.roomId;
+        const room = rooms.get(roomId);
+        if (!room) return undefined;
+
+        const player = room.players.find((p) => p.id === oldSocketId);
+        if (!player) return undefined;
+
+        // Restore player
+        player.id = newSocketId;
+        player.status = player.characterId ? 'ready' : 'joined';
+        delete player.disconnectedAt;
+
+        // Update host if needed
+        if (room.hostId === oldSocketId) {
+            room.hostId = newSocketId;
+        }
+
+        // Update socket mapping
+        socketToRoom.delete(oldSocketId);
+        socketToRoom.set(newSocketId, roomId);
+
+        // Update turn order if game is in progress
+        if (room.turnOrder.includes(oldSocketId)) {
+            room.turnOrder = room.turnOrder.map(id => id === oldSocketId ? newSocketId : id);
+        }
+
+        // Update player moves mapping
+        if (room.playerMoves[oldSocketId] !== undefined) {
+            room.playerMoves[newSocketId] = room.playerMoves[oldSocketId];
+            delete room.playerMoves[oldSocketId];
+        }
+
+        saveRooms();
+        console.log(`[RoomManager] Player reconnected: ${oldSocketId} -> ${newSocketId}`);
+        return room;
+    }
+
+    // Fallback: Try original behavior (player still in socketToRoom mapping)
     const roomId = socketToRoom.get(oldSocketId);
     if (!roomId) return undefined;
 
@@ -557,6 +745,14 @@ export function reconnectPlayer(oldSocketId, newSocketId) {
 
     saveRooms();
     return room;
+}
+
+/**
+ * Get the grace period constant (for client)
+ * @returns {number}
+ */
+export function getReconnectGracePeriod() {
+    return RECONNECT_GRACE_PERIOD;
 }
 
 /**

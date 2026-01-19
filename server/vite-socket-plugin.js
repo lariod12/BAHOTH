@@ -415,16 +415,63 @@ export function socketIOPlugin() {
                         }
                     }
 
-                    // Update player moves if provided
+                    // Update player moves if provided (update room directly, not playerManager)
+                    let turnAdvanced = false;
                     if (stateUpdate.playerMoves) {
                         for (const [playerId, moves] of Object.entries(stateUpdate.playerMoves)) {
-                            playerManager.setPlayerMoves(room.id, playerId, moves);
+                            room.playerMoves[playerId] = moves;
                         }
+
+                        // Check if current player's turn should end (moves <= 0)
+                        const currentPlayerId = room.turnOrder[room.currentTurnIndex];
+                        if (currentPlayerId && room.playerMoves[currentPlayerId] <= 0) {
+                            // Advance to next player
+                            room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
+                            turnAdvanced = true;
+
+                            // Set moves for next player based on their speed stat
+                            const nextPlayerId = room.turnOrder[room.currentTurnIndex];
+                            let nextPlayerSpeed = null;
+
+                            // Try to get speed from playerManager stats
+                            const nextPlayerStats = playerManager.getAllStatValues(room.id, nextPlayerId);
+                            if (nextPlayerStats) {
+                                nextPlayerSpeed = nextPlayerStats.speed;
+                            } else {
+                                // Fallback: get speed from character's starting stats
+                                const nextPlayer = room.players.find(p => p.id === nextPlayerId);
+                                if (nextPlayer && nextPlayer.characterId) {
+                                    nextPlayerSpeed = playerManager.getStartingSpeed(nextPlayer.characterId);
+                                }
+                            }
+
+                            if (nextPlayerSpeed !== null) {
+                                room.playerMoves[nextPlayerId] = nextPlayerSpeed;
+                                console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, moves set to ${nextPlayerSpeed}`);
+                            } else {
+                                // Last fallback: default to 4 moves
+                                room.playerMoves[nextPlayerId] = 4;
+                                console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, using default moves: 4`);
+                            }
+                        }
+
+                        // Save room state
+                        roomManager.saveRooms();
                     }
 
                     // Update map if provided
                     if (stateUpdate.map) {
                         mapManager.updateMapState(room.id, stateUpdate.map);
+                    }
+
+                    // Update player cards if provided
+                    if (stateUpdate.playerCards) {
+                        playerManager.updateAllPlayerCards(room.id, stateUpdate.playerCards);
+                    }
+
+                    // Update drawn rooms if provided
+                    if (stateUpdate.drawnRooms) {
+                        playerManager.updateDrawnRooms(room.id, stateUpdate.drawnRooms);
                     }
 
                     if (callback) {
@@ -508,17 +555,133 @@ export function socketIOPlugin() {
                     }
                 });
 
+                // ============================================
+                // Reconnection Handling
+                // ============================================
+
+                // Attempt to reconnect to a previous session
+                socket.on('room:reconnect', ({ roomId, oldSocketId, playerName }, callback) => {
+                    console.log(`[Socket.IO] Reconnect attempt: ${oldSocketId} -> ${socket.id} for room ${roomId}`);
+
+                    // Check if player is in disconnected tracking
+                    const disconnectedInfo = roomManager.getDisconnectedPlayer(oldSocketId);
+
+                    if (!disconnectedInfo || disconnectedInfo.roomId !== roomId) {
+                        // Check if room still exists for potential rejoin
+                        const roomExists = roomManager.getRoom(roomId);
+                        if (callback) {
+                            callback({
+                                success: false,
+                                error: 'Session expired or invalid',
+                                canRejoin: !!roomExists
+                            });
+                        }
+                        return;
+                    }
+
+                    // Perform reconnection
+                    const room = roomManager.reconnectPlayer(oldSocketId, socket.id);
+
+                    if (!room) {
+                        if (callback) {
+                            callback({ success: false, error: 'Reconnection failed' });
+                        }
+                        return;
+                    }
+
+                    // Update playerManager mappings if game is in progress
+                    if (room.gamePhase === 'playing' || room.gamePhase === 'rolling') {
+                        playerManager.updatePlayerId(room.id, oldSocketId, socket.id);
+                    }
+
+                    // Join socket room
+                    socket.join(room.id);
+
+                    console.log(`[Socket.IO] Player reconnected successfully: ${oldSocketId} -> ${socket.id} in room ${room.id}`);
+
+                    if (callback) {
+                        callback({ success: true, room });
+                    }
+
+                    // Broadcast full game state to all players
+                    const mapState = mapManager.getFullMapState(room.id);
+                    const playerState = playerManager.getFullPlayerState(room.id);
+                    const fullState = {
+                        ...room,
+                        map: mapState,
+                        playerState: playerState,
+                    };
+
+                    io.to(room.id).emit('game:state', fullState);
+                    io.to(room.id).emit('room:state', room);
+
+                    // Notify others that player reconnected
+                    socket.to(room.id).emit('room:player-reconnected', {
+                        playerId: socket.id,
+                        playerName: playerName || 'Player'
+                    });
+                });
+
                 // Disconnect
                 socket.on('disconnect', () => {
                     console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
-                    const result = roomManager.leaveRoom(socket.id);
 
-                    if (result.room) {
-                        io.to(result.room.id).emit('room:state', result.room);
-                        io.to(result.room.id).emit('room:player-left', {
-                            playerId: socket.id,
-                            wasHost: result.wasHost,
+                    const room = roomManager.getRoomBySocket(socket.id);
+
+                    if (room && room.gamePhase !== 'lobby') {
+                        // Game in progress - use grace period instead of immediate removal
+                        const gracePeriod = roomManager.getReconnectGracePeriod();
+
+                        const result = roomManager.markPlayerDisconnected(socket.id, (cleanupResult) => {
+                            // This callback runs when grace period expires
+                            if (cleanupResult.room) {
+                                io.to(cleanupResult.room.id).emit('room:state', cleanupResult.room);
+                                io.to(cleanupResult.room.id).emit('room:player-left', {
+                                    playerId: socket.id,
+                                    wasHost: cleanupResult.wasHost,
+                                    reason: 'grace_period_expired'
+                                });
+
+                                // Broadcast updated game state
+                                const mapState = mapManager.getFullMapState(cleanupResult.room.id);
+                                const playerState = playerManager.getFullPlayerState(cleanupResult.room.id);
+                                const fullState = {
+                                    ...cleanupResult.room,
+                                    map: mapState,
+                                    playerState: playerState,
+                                };
+                                io.to(cleanupResult.room.id).emit('game:state', fullState);
+                            }
                         });
+
+                        if (result.room) {
+                            io.to(result.room.id).emit('room:state', result.room);
+                            io.to(result.room.id).emit('room:player-disconnected', {
+                                playerId: socket.id,
+                                gracePeriod: gracePeriod
+                            });
+
+                            // Broadcast updated game state with disconnected status
+                            const mapState = mapManager.getFullMapState(result.room.id);
+                            const playerState = playerManager.getFullPlayerState(result.room.id);
+                            const fullState = {
+                                ...result.room,
+                                map: mapState,
+                                playerState: playerState,
+                            };
+                            io.to(result.room.id).emit('game:state', fullState);
+                        }
+                    } else {
+                        // In lobby or no room - remove immediately (original behavior)
+                        const result = roomManager.leaveRoom(socket.id);
+
+                        if (result.room) {
+                            io.to(result.room.id).emit('room:state', result.room);
+                            io.to(result.room.id).emit('room:player-left', {
+                                playerId: socket.id,
+                                wasHost: result.wasHost,
+                            });
+                        }
                     }
                 });
             });

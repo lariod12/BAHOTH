@@ -227,6 +227,8 @@ export function renderHomeView({ mountEl, onNavigate }) {
 
     createRoomButton?.addEventListener('click', async () => {
         if (isDebugMode) {
+            // Clear any existing session before creating debug room
+            socketClient.clearSession();
             // Create debug room directly without modal
             const result = await socketClient.createDebugRoom(debugPlayerCount);
             if (result.success && result.room) {
@@ -257,6 +259,9 @@ export function renderHomeView({ mountEl, onNavigate }) {
 
         if (createError) createError.textContent = '';
 
+        // Clear any existing session before creating new room
+        socketClient.clearSession();
+
         const result = await socketClient.createRoom(name, maxPlayers);
 
         if (result.success && result.room) {
@@ -281,6 +286,9 @@ export function renderHomeView({ mountEl, onNavigate }) {
             if (joinError) joinError.textContent = 'Please enter a Room ID';
             return;
         }
+
+        // Clear any existing session before joining new room
+        socketClient.clearSession();
 
         const result = await socketClient.joinRoom(roomId, name);
 

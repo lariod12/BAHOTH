@@ -27,11 +27,19 @@ const PLAYERS_FILE = join(DATA_DIR, 'players.json');
  * }} PlayerCharacterData
  *
  * @typedef {{
+ *   omens: string[];
+ *   events: string[];
+ *   items: string[];
+ * }} PlayerCards
+ *
+ * @typedef {{
  *   turnOrder: string[];
  *   currentTurnIndex: number;
  *   playerMoves: Record<string, number>;
  *   playerPositions: Record<string, string>;
  *   characterData: Record<string, PlayerCharacterData>;
+ *   playerCards: Record<string, PlayerCards>;
+ *   drawnRooms: string[];
  * }} PlayerState
  *
  * @typedef {{
@@ -114,6 +122,8 @@ export function initializeGame(roomId, players, startingRoom = 'entrance-hall') 
         playerMoves: {},
         playerPositions: {},
         characterData: {},
+        playerCards: {},
+        drawnRooms: [],
     };
 
     // Set all players to starting position and initialize character stats
@@ -319,6 +329,50 @@ export function cleanupGame(roomId) {
 }
 
 /**
+ * Update player ID across all state (for reconnection handling)
+ * @param {string} roomId
+ * @param {string} oldId
+ * @param {string} newId
+ * @returns {PlayerState | undefined}
+ */
+export function updatePlayerId(roomId, oldId, newId) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    // Update turnOrder
+    state.turnOrder = state.turnOrder.map(id => id === oldId ? newId : id);
+
+    // Update playerMoves
+    if (state.playerMoves[oldId] !== undefined) {
+        state.playerMoves[newId] = state.playerMoves[oldId];
+        delete state.playerMoves[oldId];
+    }
+
+    // Update playerPositions
+    if (state.playerPositions[oldId]) {
+        state.playerPositions[newId] = state.playerPositions[oldId];
+        delete state.playerPositions[oldId];
+    }
+
+    // Update characterData
+    if (state.characterData && state.characterData[oldId]) {
+        state.characterData[newId] = state.characterData[oldId];
+        delete state.characterData[oldId];
+    }
+
+    // Update playerCards
+    if (state.playerCards && state.playerCards[oldId]) {
+        state.playerCards[newId] = state.playerCards[oldId];
+        delete state.playerCards[oldId];
+    }
+
+    savePlayers();
+    console.log(`[PlayerManager] Updated player ID: ${oldId} -> ${newId}`);
+
+    return state;
+}
+
+/**
  * Get combined player state for broadcasting
  * @param {string} roomId
  * @returns {PlayerState | null}
@@ -333,6 +387,8 @@ export function getFullPlayerState(roomId) {
         playerMoves: { ...state.playerMoves },
         playerPositions: { ...state.playerPositions },
         characterData: state.characterData ? { ...state.characterData } : {},
+        playerCards: state.playerCards ? JSON.parse(JSON.stringify(state.playerCards)) : {},
+        drawnRooms: state.drawnRooms ? [...state.drawnRooms] : [],
     };
 }
 
@@ -474,4 +530,115 @@ export function getAllStatValues(roomId, playerId) {
         sanity: getStatValue(characterId, 'sanity', stats.sanity),
         knowledge: getStatValue(characterId, 'knowledge', stats.knowledge),
     };
+}
+
+/**
+ * Get starting speed value for a character (from character definition)
+ * @param {string} characterId
+ * @returns {number | null}
+ */
+export function getStartingSpeed(characterId) {
+    const character = CHARACTER_BY_ID[characterId];
+    if (!character) return null;
+
+    const startIndex = character.traits.speed.startIndex;
+    return character.traits.speed.track[startIndex];
+}
+
+// ============================================
+// Player Cards Functions
+// ============================================
+
+/**
+ * Get player cards for a player
+ * @param {string} roomId
+ * @param {string} playerId
+ * @returns {PlayerCards | undefined}
+ */
+export function getPlayerCards(roomId, playerId) {
+    const state = games.get(roomId);
+    if (!state || !state.playerCards) return undefined;
+
+    return state.playerCards[playerId];
+}
+
+/**
+ * Set player cards for a player
+ * @param {string} roomId
+ * @param {string} playerId
+ * @param {PlayerCards} cards
+ * @returns {PlayerState | undefined}
+ */
+export function setPlayerCards(roomId, playerId, cards) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    // Initialize playerCards if not exists
+    if (!state.playerCards) {
+        state.playerCards = {};
+    }
+
+    state.playerCards[playerId] = cards;
+    savePlayers();
+
+    return state;
+}
+
+/**
+ * Update all player cards (batch update)
+ * @param {string} roomId
+ * @param {Record<string, PlayerCards>} allPlayerCards
+ * @returns {PlayerState | undefined}
+ */
+export function updateAllPlayerCards(roomId, allPlayerCards) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    // Initialize playerCards if not exists
+    if (!state.playerCards) {
+        state.playerCards = {};
+    }
+
+    // Update each player's cards
+    for (const [playerId, cards] of Object.entries(allPlayerCards)) {
+        state.playerCards[playerId] = cards;
+    }
+
+    savePlayers();
+    console.log(`[PlayerManager] Updated player cards for room ${roomId}`);
+
+    return state;
+}
+
+// ============================================
+// Drawn Rooms Functions
+// ============================================
+
+/**
+ * Get drawn rooms list
+ * @param {string} roomId
+ * @returns {string[]}
+ */
+export function getDrawnRooms(roomId) {
+    const state = games.get(roomId);
+    if (!state || !state.drawnRooms) return [];
+
+    return [...state.drawnRooms];
+}
+
+/**
+ * Update drawn rooms list (rooms where tokens have been drawn)
+ * @param {string} roomId
+ * @param {string[]} drawnRooms
+ * @returns {PlayerState | undefined}
+ */
+export function updateDrawnRooms(roomId, drawnRooms) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.drawnRooms = drawnRooms;
+    savePlayers();
+    console.log(`[PlayerManager] Updated drawn rooms for room ${roomId}:`, drawnRooms.length);
+
+    return state;
 }

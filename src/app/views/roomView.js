@@ -590,6 +590,9 @@ function attachCharacterCardListeners(mountEl, room, myId) {
                 const result = await socketClient.selectCharacter(charId);
                 if (!result.success) {
                     console.error('Failed to select character:', result.error);
+                } else {
+                    // Update session with selected character
+                    socketClient.updateSessionCharacter(charId);
                 }
             }
         });
@@ -710,6 +713,11 @@ export async function renderRoomView({ mountEl, onNavigate, roomId }) {
                     return;
                 }
                 currentRoom = joinResult.room;
+                // Save session for reconnection
+                socketClient.saveSession(roomId, 'Player');
+            } else {
+                // Already in room - save/update session
+                socketClient.saveSession(roomId, myPlayer.name, myPlayer.characterId);
             }
         } else {
             // Room doesn't exist
@@ -828,6 +836,8 @@ function setupEventListeners(mountEl, onNavigate) {
     const leaveButton = mountEl.querySelector('[data-action="leave-room"]');
     leaveButton?.addEventListener('click', async () => {
         await socketClient.leaveRoom();
+        // Clear session when manually leaving
+        socketClient.clearSession();
         if (unsubscribeRoomState) {
             unsubscribeRoomState();
             unsubscribeRoomState = null;
