@@ -444,6 +444,7 @@ function renderRoomMarkup(room, myId) {
                     <section class="room-panel room-panel--characters" data-panel="characters">
                         <div class="room-panel__header">
                             <p class="welcome-kicker">Chon nhan vat</p>
+                            <button class="chip-button chip-button--accent" type="button" data-action="pick-random-character">🎲 Random</button>
                         </div>
                         <div class="character-grid" id="character-grid">
                             ${renderCharacterGrid(room, myId)}
@@ -852,6 +853,40 @@ function setupEventListeners(mountEl, onNavigate) {
             unsubscribeDebugRoomState = null;
         }
         onNavigate(`#/game/${roomId}`);
+    });
+
+    // Pick random character
+    const pickRandomButton = mountEl.querySelector('[data-action="pick-random-character"]');
+    pickRandomButton?.addEventListener('click', async () => {
+        // Get available characters (not taken by other players)
+        const availableChars = CHARACTERS.filter(char => !isCharacterTaken(char.id, currentRoom, mySocketId));
+
+        if (availableChars.length === 0) {
+            console.log('No available characters');
+            return;
+        }
+
+        // Pick a random character
+        const randomChar = availableChars[Math.floor(Math.random() * availableChars.length)];
+
+        if (isDebugRoom(currentRoom)) {
+            // Debug mode: select character for current turn player
+            const currentPlayerId = getCurrentSelectionPlayer(currentRoom);
+            if (!currentPlayerId) {
+                console.log('All players have selected characters');
+                return;
+            }
+            const result = await socketClient.debugSelectCharacter(currentPlayerId, randomChar.id);
+            if (!result.success) {
+                console.error('Failed to select random character:', result.error);
+            }
+        } else {
+            // Normal mode: select character for self
+            const result = await socketClient.selectCharacter(randomChar.id);
+            if (!result.success) {
+                console.error('Failed to select random character:', result.error);
+            }
+        }
     });
 
     // Initial character card listeners

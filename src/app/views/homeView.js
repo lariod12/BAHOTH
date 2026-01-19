@@ -82,10 +82,10 @@ function renderHomeMarkup() {
                     <div class="form-group">
                         <label class="form-label" for="max-players">Max Players</label>
                         <select class="form-input form-select" id="max-players">
-                            <option value="3">3 players</option>
+                            <option value="3" selected>3 players</option>
                             <option value="4">4 players</option>
                             <option value="5">5 players</option>
-                            <option value="6" selected>6 players</option>
+                            <option value="6">6 players</option>
                         </select>
                     </div>
                     <p class="join-modal__error" id="create-error"></p>
