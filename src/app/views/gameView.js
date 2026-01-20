@@ -2549,7 +2549,22 @@ function attachDebugEventListeners(mountEl) {
 
         // Roll random (debug)
         if (action === 'roll-random') {
-            const randomValue = Math.floor(Math.random() * 16) + 1;
+            // Get already used dice values to avoid duplicates
+            const usedValues = new Set(Object.values(currentGameState?.diceRolls || {}));
+
+            // Build array of available values (1-16 excluding used ones)
+            const availableValues = [];
+            for (let i = 1; i <= 16; i++) {
+                if (!usedValues.has(i)) {
+                    availableValues.push(i);
+                }
+            }
+
+            // Pick random from available values (fallback to 1-16 if all used somehow)
+            const randomValue = availableValues.length > 0
+                ? availableValues[Math.floor(Math.random() * availableValues.length)]
+                : Math.floor(Math.random() * 16) + 1;
+
             handleDebugDiceRoll(mountEl, randomValue);
             return;
         }
@@ -3273,7 +3288,22 @@ function attachEventListeners(mountEl, roomId) {
 
         // Roll random
         if (action === 'roll-random') {
-            const randomValue = Math.floor(Math.random() * 16) + 1;
+            // Get already used dice values to avoid duplicates
+            const usedValues = new Set(Object.values(currentGameState?.diceRolls || {}));
+
+            // Build array of available values (1-16 excluding used ones)
+            const availableValues = [];
+            for (let i = 1; i <= 16; i++) {
+                if (!usedValues.has(i)) {
+                    availableValues.push(i);
+                }
+            }
+
+            // Pick random from available values (fallback to 1-16 if all used somehow)
+            const randomValue = availableValues.length > 0
+                ? availableValues[Math.floor(Math.random() * availableValues.length)]
+                : Math.floor(Math.random() * 16) + 1;
+
             await socketClient.rollDice(randomValue);
             return;
         }

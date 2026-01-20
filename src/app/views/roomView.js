@@ -819,16 +819,46 @@ function setupEventListeners(mountEl, onNavigate) {
     const copyButton = mountEl.querySelector('[data-action="copy-id"]');
     copyButton?.addEventListener('click', async () => {
         const roomIdText = currentRoom?.id || '';
-        const fullUrl = window.location.origin + window.location.pathname + '#/room/' + roomIdText;
-        try {
-            await navigator.clipboard.writeText(fullUrl);
+
+        // Try multiple methods to copy to clipboard
+        let copied = false;
+
+        // Method 1: Modern Clipboard API (requires HTTPS or localhost)
+        if (navigator.clipboard && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(roomIdText);
+                copied = true;
+            } catch (error) {
+                console.warn('Clipboard API failed:', error);
+            }
+        }
+
+        // Method 2: Fallback using execCommand (deprecated but widely supported)
+        if (!copied) {
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = roomIdText;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                textArea.style.top = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                copied = document.execCommand('copy');
+                document.body.removeChild(textArea);
+            } catch (error) {
+                console.warn('execCommand copy failed:', error);
+            }
+        }
+
+        if (copied) {
             copyButton.textContent = 'Copied';
             setTimeout(() => {
                 copyButton.textContent = 'Copy ID';
             }, 1800);
-        } catch (error) {
-            console.warn('Clipboard API unavailable', error);
-            prompt('Copy this link:', fullUrl);
+        } else {
+            // Last resort: show prompt for manual copy
+            prompt('Copy this ID:', roomIdText);
         }
     });
 
