@@ -474,6 +474,18 @@ export function socketIOPlugin() {
                         playerManager.updateDrawnRooms(room.id, stateUpdate.drawnRooms);
                     }
 
+                    // Update haunt state if provided
+                    if (stateUpdate.hauntState) {
+                        room.hauntState = stateUpdate.hauntState;
+                        console.log(`[Socket.IO] Haunt state updated - hauntTriggered: ${stateUpdate.hauntState.hauntTriggered}, traitorId: ${stateUpdate.hauntState.traitorId}`);
+                        roomManager.saveRooms();
+                    }
+
+                    // Update character data (factions, stats) if provided
+                    if (stateUpdate.playerState?.characterData) {
+                        playerManager.updateCharacterData(room.id, stateUpdate.playerState.characterData);
+                    }
+
                     if (callback) {
                         callback({ success: true });
                     }

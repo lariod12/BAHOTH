@@ -196,13 +196,29 @@ export function triggerHauntDebug(gameState, hauntData) {
         traitorId: traitorId,
     };
 
+    // Ensure playerState.characterData exists
+    if (!gameState.playerState) {
+        gameState.playerState = {};
+    }
+    if (!gameState.playerState.characterData) {
+        gameState.playerState.characterData = {};
+    }
+
     // Assign factions to all players
     const players = gameState.players || [];
     players.forEach(p => {
-        const charData = gameState.playerState?.characterData?.[p.id]
-            || gameState.characterData?.[p.id];
-        if (charData) {
-            charData.faction = p.id === traitorId ? 'traitor' : 'survivor';
+        // Get or create character data entry
+        let charData = gameState.playerState.characterData[p.id];
+        if (!charData) {
+            // Initialize if not exists
+            gameState.playerState.characterData[p.id] = {
+                characterId: p.characterId,
+                faction: null,
+            };
+            charData = gameState.playerState.characterData[p.id];
         }
+        // Set faction
+        charData.faction = p.id === traitorId ? 'traitor' : 'survivor';
+        console.log(`[Haunt] Player ${p.id} faction set to: ${charData.faction}`);
     });
 }

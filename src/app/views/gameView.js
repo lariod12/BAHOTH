@@ -109,6 +109,61 @@ const DICE_ROLL_ROOMS = new Set([
 ]);
 
 /**
+ * Show haunt announcement modal
+ * @param {HTMLElement} mountEl - Mount element
+ * @param {number} hauntNumber - Haunt scenario number
+ * @param {string} traitorName - Name of the traitor
+ * @param {boolean} amITraitor - Whether current player is the traitor
+ */
+function showHauntAnnouncementModal(mountEl, hauntNumber, traitorName, amITraitor) {
+    // Remove existing modal if any
+    const existing = document.querySelector('.haunt-announcement-overlay');
+    if (existing) existing.remove();
+
+    const factionText = amITraitor
+        ? 'Ban la KE PHAN BOI!'
+        : 'Ban la NGUOI SONG SOT!';
+    const factionClass = amITraitor ? 'traitor' : 'survivor';
+
+    const modal = document.createElement('div');
+    modal.className = `haunt-announcement-overlay haunt-announcement-overlay--${factionClass}`;
+    modal.innerHTML = `
+        <div class="haunt-announcement-modal haunt-announcement-modal--${factionClass}">
+            <div class="haunt-announcement__icon">👻</div>
+            <h2 class="haunt-announcement__title haunt-announcement__title--${factionClass}">THE HAUNT BEGINS!</h2>
+            <div class="haunt-announcement__number">Haunt #${hauntNumber}</div>
+            <div class="haunt-announcement__traitor">
+                <span class="haunt-announcement__traitor-label">Ke Phan Boi:</span>
+                <span class="haunt-announcement__traitor-name">${traitorName}</span>
+            </div>
+            <div class="haunt-announcement__faction haunt-announcement__faction--${factionClass}">
+                <span class="haunt-announcement__faction-text">${factionText}</span>
+            </div>
+            <button class="haunt-announcement__close haunt-announcement__close--${factionClass} action-button" type="button">
+                Bat dau chien dau!
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Close only on button click or tap anywhere on modal
+    const closeModal = () => {
+        modal.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => modal.remove(), 300);
+    };
+
+    modal.querySelector('.haunt-announcement__close')?.addEventListener('click', closeModal);
+
+    // Also close when clicking on overlay (outside modal)
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+}
+
+/**
  * Show a toast notification
  * @param {string} message - Message to display
  * @param {'success' | 'warning' | 'info'} [type='info'] - Toast type
@@ -2032,19 +2087,22 @@ function getAvailableDirections(gameState, myId) {
 }
 
 /**
- * Render debug haunt trigger button (only in debug mode, before haunt)
+ * Render haunt trigger button (before haunt, for both debug and multiplayer modes)
  * @param {Object} gameState
  * @returns {string}
  */
-function renderDebugHauntButton(gameState) {
-    if (!isDebugMode) return '';
+function renderHauntButton(gameState) {
     if (isHauntTriggered(gameState)) return '';
     if (gameState?.gamePhase !== 'playing') return '';
 
+    const buttonClass = isDebugMode ? 'debug-haunt-btn' : 'haunt-btn';
+    const action = isDebugMode ? 'debug-trigger-haunt' : 'trigger-haunt';
+    const title = isDebugMode ? '[DEBUG] Trigger Haunt' : 'Kich hoat Haunt - Chon ngau nhien Traitor';
+
     return `
-        <button class="debug-haunt-btn" type="button" data-action="debug-trigger-haunt" title="[DEBUG] Trigger Haunt">
-            <span class="debug-haunt-btn__icon">👻</span>
-            <span class="debug-haunt-btn__label">Haunt</span>
+        <button class="${buttonClass}" type="button" data-action="${action}" title="${title}">
+            <span class="${buttonClass}__icon">👻</span>
+            <span class="${buttonClass}__label">Haunt</span>
         </button>
     `;
 }
@@ -2284,7 +2342,7 @@ function renderGameScreen(gameState, myId) {
                 </div>
             </div>
             ${renderGameControls(gameState, myId)}
-            ${renderDebugHauntButton(gameState)}
+            ${renderHauntButton(gameState)}
             ${roomDiscoveryHtml}
             ${renderTokenDrawingModal()}
             ${renderCardsViewModal()}
@@ -3305,6 +3363,50 @@ function attachEventListeners(mountEl, roomId) {
                 : Math.floor(Math.random() * 16) + 1;
 
             await socketClient.rollDice(randomValue);
+            return;
+        }
+
+        // Trigger haunt (multiplayer mode) - random traitor selection
+        if (action === 'trigger-haunt') {
+            if (currentGameState && !isHauntTriggered(currentGameState)) {
+                const players = currentGameState.players || [];
+                if (players.length > 0) {
+                    // Random select traitor from all players
+                    const randomIndex = Math.floor(Math.random() * players.length);
+                    const traitorId = players[randomIndex].id;
+                    const traitorPlayer = players[randomIndex];
+                    const traitorName = getCharacterName(traitorPlayer.characterId);
+
+                    // Random haunt number (1-50)
+                    const hauntNumber = Math.floor(Math.random() * 50) + 1;
+
+                    // Trigger haunt locally
+                    triggerHauntDebug(currentGameState, {
+                        hauntNumber: hauntNumber,
+                        traitorId: traitorId,
+                        triggeredByPlayerId: mySocketId,
+                        triggerOmen: 'random',
+                        triggerRoom: 'Unknown',
+                    });
+
+                    console.log('[Haunt] Triggered! Traitor:', traitorId, 'Haunt #:', hauntNumber);
+
+                    // Sync haunt state to server for multiplayer
+                    await socketClient.syncGameState({
+                        hauntState: currentGameState.hauntState,
+                        playerState: {
+                            characterData: currentGameState.playerState?.characterData || currentGameState.characterData
+                        }
+                    });
+
+                    // Show haunt announcement modal
+                    const myFaction = getFaction(currentGameState, mySocketId);
+                    const amITraitor = myFaction === 'traitor';
+                    showHauntAnnouncementModal(mountEl, hauntNumber, traitorName, amITraitor);
+
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+            }
             return;
         }
 
@@ -4965,10 +5067,23 @@ function handleEndTurn(mountEl) {
     } else {
         // Multiplayer mode: sync current state first, then end turn
         // This ensures any newly revealed rooms/cards are saved before turn ends
-        syncGameStateToServer().then(() => {
+        syncGameStateToServer().then((syncResult) => {
+            // Check if connected before trying to end turn
+            if (!socketClient.isConnected()) {
+                console.warn('[EndTurn] Not connected to server');
+                showToast('Mat ket noi voi server. Dang thu ket noi lai...', 'warning');
+                return;
+            }
+
             socketClient.endTurn().then(result => {
                 console.log('[EndTurn] Server response:', result);
+                if (!result.success) {
+                    showToast('Khong the ket thuc luot. Thu lai sau.', 'warning');
+                }
                 // Server will broadcast updated game state, no need to update UI here
+            }).catch(err => {
+                console.error('[EndTurn] Error:', err);
+                showToast('Loi ket noi. Vui long thu lai.', 'warning');
             });
         });
     }
@@ -5780,9 +5895,17 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         }
     };
 
+    // Track if haunt announcement has been shown
+    let hauntAnnouncementShown = false;
+
     // Subscribe to game state updates
     unsubscribeGameState = socketClient.onGameState((state) => {
         clearLoadingTimeout();
+
+        // Check if haunt was just triggered (compare old vs new state)
+        const wasHauntTriggered = currentGameState?.hauntState?.hauntTriggered;
+        const isHauntTriggeredNow = state?.hauntState?.hauntTriggered;
+
         currentGameState = state;
         mySocketId = socketClient.getSocketId();
 
@@ -5796,6 +5919,20 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
             'isMyTurn:', currentTurnPlayer === mySocketId,
             'myMoves:', myMoves,
             'currentPlayerMoves:', currentPlayerMoves);
+
+        // Show haunt announcement if haunt was just triggered and we haven't shown it yet
+        if (!wasHauntTriggered && isHauntTriggeredNow && !hauntAnnouncementShown) {
+            hauntAnnouncementShown = true;
+            const hauntNumber = state.hauntState?.hauntNumber || 0;
+            const traitorId = state.hauntState?.traitorId;
+            const traitorPlayer = state.players?.find(p => p.id === traitorId);
+            const traitorName = traitorPlayer ? getCharacterName(traitorPlayer.characterId) : 'Unknown';
+            const myFaction = getFaction(state, mySocketId);
+            const amITraitor = myFaction === 'traitor';
+
+            console.log('[GameState] Haunt detected! Showing announcement modal. MyFaction:', myFaction);
+            showHauntAnnouncementModal(mountEl, hauntNumber, traitorName, amITraitor);
+        }
 
         updateGameUI(mountEl, currentGameState, mySocketId);
     });

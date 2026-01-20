@@ -524,6 +524,13 @@ export function getAllStatValues(roomId, playerId) {
     if (!playerData) return undefined;
 
     const { characterId, stats } = playerData;
+
+    // If stats is undefined, return undefined (character data may exist but without stats yet)
+    if (!stats) {
+        console.warn(`[PlayerManager] No stats found for player ${playerId} in room ${roomId}`);
+        return undefined;
+    }
+
     return {
         speed: getStatValue(characterId, 'speed', stats.speed),
         might: getStatValue(characterId, 'might', stats.might),
@@ -639,6 +646,43 @@ export function updateDrawnRooms(roomId, drawnRooms) {
     state.drawnRooms = drawnRooms;
     savePlayers();
     console.log(`[PlayerManager] Updated drawn rooms for room ${roomId}:`, drawnRooms.length);
+
+    return state;
+}
+
+// ============================================
+// Character Data Update (for faction changes)
+// ============================================
+
+/**
+ * Update character data (stats, factions) for all players
+ * @param {string} roomId
+ * @param {Record<string, PlayerCharacterData>} characterData
+ * @returns {PlayerState | undefined}
+ */
+export function updateCharacterData(roomId, characterData) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    // Merge character data - preserving existing data and updating with new data
+    if (!state.characterData) {
+        state.characterData = {};
+    }
+
+    for (const [playerId, data] of Object.entries(characterData)) {
+        if (state.characterData[playerId]) {
+            // Merge existing with new (new data takes precedence)
+            state.characterData[playerId] = {
+                ...state.characterData[playerId],
+                ...data,
+            };
+        } else {
+            state.characterData[playerId] = data;
+        }
+    }
+
+    savePlayers();
+    console.log(`[PlayerManager] Updated character data for room ${roomId}`);
 
     return state;
 }

@@ -1749,6 +1749,48 @@ select.field__input option {
     background: rgba(212, 175, 55, 0.3);
 }
 
+/* Faction styles for turn indicators (after haunt) */
+.turn-indicator.faction-traitor {
+    background: rgba(180, 40, 40, 0.2);
+    border: 1px solid rgba(200, 60, 60, 0.4);
+}
+
+.turn-indicator.faction-traitor .turn-indicator__name {
+    color: #ff6b6b;
+}
+
+.turn-indicator.faction-survivor {
+    background: rgba(40, 120, 80, 0.2);
+    border: 1px solid rgba(60, 180, 120, 0.4);
+}
+
+.turn-indicator.faction-survivor .turn-indicator__name {
+    color: #6bff9b;
+}
+
+/* Enemy/ally visual indicators */
+.turn-indicator.is-enemy {
+    background: rgba(180, 40, 40, 0.25);
+    border: 1px solid rgba(255, 80, 80, 0.5);
+    box-shadow: 0 0 8px rgba(255, 80, 80, 0.2);
+}
+
+.turn-indicator.is-ally {
+    background: rgba(40, 120, 80, 0.2);
+    border: 1px solid rgba(100, 200, 140, 0.4);
+}
+
+/* Current turn + faction combinations */
+.turn-indicator.is-current.faction-traitor {
+    background: rgba(180, 40, 40, 0.35);
+    border-color: rgba(255, 100, 100, 0.6);
+}
+
+.turn-indicator.is-current.faction-survivor {
+    background: rgba(40, 120, 80, 0.35);
+    border-color: rgba(100, 220, 150, 0.6);
+}
+
 /* Game area placeholder */
 .game-area {
     flex: 1;
@@ -3141,6 +3183,49 @@ select.field__input option {
 .sidebar-close:hover {
     background: rgba(255, 255, 255, 0.15);
     color: #fff;
+}
+
+/* Faction indicator in sidebar (after haunt) */
+.sidebar-faction {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.sidebar-faction--traitor {
+    background: linear-gradient(135deg, rgba(180, 40, 40, 0.3) 0%, rgba(120, 20, 20, 0.4) 100%);
+    border-bottom: 2px solid rgba(200, 60, 60, 0.6);
+    color: #ff6b6b;
+}
+
+.sidebar-faction--survivor {
+    background: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.sidebar-faction__icon {
+    font-size: 1.1rem;
+}
+
+.sidebar-faction__label {
+    font-size: 0.8rem;
+}
+
+/* Haunt active state for sidebar */
+.game-sidebar.is-haunt-active {
+    border-right-color: rgba(180, 40, 40, 0.4);
+}
+
+.game-sidebar.is-haunt-active .sidebar-header {
+    background: rgba(80, 20, 20, 0.3);
 }
 
 .sidebar-title {
@@ -6125,6 +6210,12 @@ select.field__input option {
     outline: none;
 }
 
+.event-dice-modal__select option {
+    background: #1a1a1a;
+    color: #fff;
+    padding: 8px;
+}
+
 .event-dice-modal__roll-info {
     text-align: center;
     padding: 12px;
@@ -6449,4 +6540,300 @@ select.field__input option {
     background: rgba(245, 158, 11, 0.2);
     color: #f59e0b;
     border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+/* ============================================
+   Haunt Button (both debug and multiplayer)
+   ============================================ */
+
+.debug-haunt-btn,
+.haunt-btn {
+    position: fixed;
+    bottom: 180px;
+    right: 16px;
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 12px 16px;
+    background: linear-gradient(145deg, rgba(139, 43, 43, 0.9) 0%, rgba(90, 20, 20, 0.95) 100%);
+    border: 2px solid rgba(200, 80, 80, 0.6);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(139, 43, 43, 0.4), 0 0 20px rgba(200, 80, 80, 0.2);
+}
+
+.debug-haunt-btn:hover,
+.haunt-btn:hover {
+    background: linear-gradient(145deg, rgba(160, 50, 50, 0.95) 0%, rgba(110, 30, 30, 0.98) 100%);
+    border-color: rgba(220, 100, 100, 0.8);
+    transform: scale(1.05);
+    box-shadow: 0 6px 24px rgba(160, 50, 50, 0.5), 0 0 30px rgba(220, 100, 100, 0.3);
+}
+
+.debug-haunt-btn:active,
+.haunt-btn:active {
+    transform: scale(0.98);
+}
+
+.debug-haunt-btn__icon,
+.haunt-btn__icon {
+    font-size: 1.5rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.debug-haunt-btn__label,
+.haunt-btn__label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* Multiplayer haunt button - slightly different color to distinguish */
+.haunt-btn {
+    background: linear-gradient(145deg, rgba(139, 43, 86, 0.9) 0%, rgba(90, 20, 60, 0.95) 100%);
+    border-color: rgba(200, 80, 150, 0.6);
+    box-shadow: 0 4px 16px rgba(139, 43, 86, 0.4), 0 0 20px rgba(200, 80, 150, 0.2);
+}
+
+.haunt-btn:hover {
+    background: linear-gradient(145deg, rgba(160, 50, 100, 0.95) 0%, rgba(110, 30, 70, 0.98) 100%);
+    border-color: rgba(220, 100, 170, 0.8);
+    box-shadow: 0 6px 24px rgba(160, 50, 100, 0.5), 0 0 30px rgba(220, 100, 170, 0.3);
+}
+
+@media (max-width: 768px) {
+    .debug-haunt-btn,
+    .haunt-btn {
+        bottom: 160px;
+        right: 12px;
+        padding: 10px 14px;
+    }
+
+    .debug-haunt-btn__icon,
+    .haunt-btn__icon {
+        font-size: 1.3rem;
+    }
+
+    .debug-haunt-btn__label,
+    .haunt-btn__label {
+        font-size: 0.6rem;
+    }
+}
+
+/* ============================================
+   Haunt Announcement Modal
+   ============================================ */
+
+.haunt-announcement-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 20px;
+    animation: fadeIn 0.5s ease;
+}
+
+/* Traitor theme - dark red */
+.haunt-announcement-overlay--traitor {
+    background: rgba(20, 5, 5, 0.95);
+}
+
+/* Survivor theme - dark blue/teal */
+.haunt-announcement-overlay--survivor {
+    background: rgba(5, 15, 20, 0.95);
+}
+
+.haunt-announcement-modal {
+    background: linear-gradient(165deg, #1a0a0a 0%, #0a0505 100%);
+    border: 2px solid rgba(180, 40, 40, 0.6);
+    border-radius: 16px;
+    padding: 32px 40px;
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+    box-shadow:
+        0 0 60px rgba(180, 40, 40, 0.4),
+        0 20px 60px rgba(0, 0, 0, 0.6);
+    animation: hauntModalIn 0.6s ease;
+}
+
+/* Survivor modal theme */
+.haunt-announcement-modal--survivor {
+    background: linear-gradient(165deg, #0a1a1a 0%, #051010 100%);
+    border-color: rgba(40, 160, 120, 0.6);
+    box-shadow:
+        0 0 60px rgba(40, 160, 120, 0.3),
+        0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes hauntModalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+.haunt-announcement__icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+    animation: hauntIconPulse 2s ease-in-out infinite;
+}
+
+@keyframes hauntIconPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.haunt-announcement__title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #ff4444;
+    margin: 0 0 12px;
+    text-shadow: 0 0 20px rgba(255, 68, 68, 0.5);
+    letter-spacing: 0.05em;
+}
+
+/* Survivor title - blue/teal color */
+.haunt-announcement__title--survivor {
+    color: #44ddaa;
+    text-shadow: 0 0 20px rgba(68, 221, 170, 0.5);
+}
+
+.haunt-announcement__number {
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 20px;
+}
+
+.haunt-announcement__traitor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: rgba(180, 40, 40, 0.2);
+    border-radius: 12px;
+    border: 1px solid rgba(180, 40, 40, 0.4);
+}
+
+/* Survivor theme for traitor info box */
+.haunt-announcement-modal--survivor .haunt-announcement__traitor {
+    background: rgba(180, 80, 40, 0.15);
+    border-color: rgba(180, 80, 40, 0.3);
+}
+
+.haunt-announcement__traitor-label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.haunt-announcement__traitor-name {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #ff6b6b;
+}
+
+.haunt-announcement__faction {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 20px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+}
+
+.haunt-announcement__faction--traitor {
+    background: linear-gradient(135deg, rgba(180, 40, 40, 0.4) 0%, rgba(120, 20, 20, 0.5) 100%);
+    border: 2px solid rgba(255, 80, 80, 0.6);
+}
+
+.haunt-announcement__faction--survivor {
+    background: linear-gradient(135deg, rgba(40, 140, 100, 0.4) 0%, rgba(20, 100, 80, 0.5) 100%);
+    border: 2px solid rgba(68, 221, 170, 0.6);
+}
+
+.haunt-announcement__faction-text {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.haunt-announcement__faction--traitor .haunt-announcement__faction-text {
+    color: #ff6b6b;
+}
+
+.haunt-announcement__faction--survivor .haunt-announcement__faction-text {
+    color: #44ddaa;
+}
+
+.haunt-announcement__close {
+    width: 100%;
+    padding: 14px 24px;
+    font-size: 1rem;
+    background: linear-gradient(135deg, rgba(180, 40, 40, 0.8) 0%, rgba(120, 20, 20, 0.9) 100%);
+    border: 1px solid rgba(255, 80, 80, 0.5);
+}
+
+.haunt-announcement__close:hover {
+    background: linear-gradient(135deg, rgba(200, 60, 60, 0.9) 0%, rgba(150, 40, 40, 0.95) 100%);
+    border-color: rgba(255, 100, 100, 0.7);
+}
+
+/* Survivor button theme */
+.haunt-announcement__close--survivor {
+    background: linear-gradient(135deg, rgba(40, 140, 100, 0.8) 0%, rgba(20, 100, 80, 0.9) 100%);
+    border-color: rgba(68, 221, 170, 0.5);
+}
+
+.haunt-announcement__close--survivor:hover {
+    background: linear-gradient(135deg, rgba(50, 160, 120, 0.9) 0%, rgba(30, 120, 100, 0.95) 100%);
+    border-color: rgba(68, 221, 170, 0.7);
+}
+
+@media (max-width: 480px) {
+    .haunt-announcement-modal {
+        padding: 24px 20px;
+    }
+
+    .haunt-announcement__icon {
+        font-size: 3rem;
+    }
+
+    .haunt-announcement__title {
+        font-size: 1.4rem;
+    }
+
+    .haunt-announcement__traitor-name {
+        font-size: 1.1rem;
+    }
+
+    .haunt-announcement__faction-text {
+        font-size: 1rem;
+    }
 }

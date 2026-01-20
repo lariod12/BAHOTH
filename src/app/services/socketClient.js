@@ -293,6 +293,14 @@ export function getSocketId() {
 }
 
 /**
+ * Check if socket is connected
+ * @returns {boolean}
+ */
+export function isConnected() {
+    return socket?.connected ?? false;
+}
+
+/**
  * Disconnect from server
  */
 export function disconnect() {
