@@ -6483,6 +6483,220 @@ select.field__input option {
 
 
 /* ============================================
+   Room Effect Dice Modal
+   ============================================ */
+
+.room-effect-dice-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+}
+
+.room-effect-dice-modal {
+    background: linear-gradient(135deg, #2a1f4e 0%, #1a1333 100%);
+    border: 2px solid #8b5cf6;
+    border-radius: 16px;
+    padding: 0;
+    max-width: 90%;
+    width: 380px;
+    color: #f0e6ff;
+    box-shadow: 0 20px 60px rgba(139, 92, 246, 0.3);
+}
+
+.room-effect-dice-modal__header {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.3);
+    text-align: center;
+}
+
+.room-effect-dice-modal__title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #c4b5fd;
+    margin: 0;
+    font-family: 'Playfair Display', Georgia, serif;
+}
+
+.room-effect-dice-modal__body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.room-effect-dice-modal__description {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.5;
+    margin: 0;
+    text-align: center;
+}
+
+.room-effect-dice-modal__requirement {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    padding: 14px;
+    background: rgba(139, 92, 246, 0.2);
+    border-radius: 10px;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.room-effect-dice-modal__stat-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #c4b5fd;
+}
+
+.room-effect-dice-modal__target {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.15);
+    padding: 4px 12px;
+    border-radius: 6px;
+}
+
+.room-effect-dice-modal__roll-info {
+    text-align: center;
+    padding: 12px;
+    background: rgba(139, 92, 246, 0.15);
+    border-radius: 8px;
+}
+
+.room-effect-dice-modal__roll-info p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #c4b5fd;
+}
+
+.room-effect-dice-modal__input-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.room-effect-dice-modal__label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.room-effect-dice-modal__input {
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 1.1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: 8px;
+    color: #fff;
+    text-align: center;
+}
+
+.room-effect-dice-modal__input:focus {
+    border-color: #8b5cf6;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+.room-effect-dice-modal__actions {
+    display: flex;
+    gap: 12px;
+}
+
+.room-effect-dice-modal__btn {
+    flex: 1;
+    padding: 14px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.room-effect-dice-modal__btn--confirm {
+    background: #8b5cf6;
+    color: #fff;
+}
+
+.room-effect-dice-modal__btn--confirm:hover {
+    background: #9d74f7;
+    transform: translateY(-1px);
+}
+
+.room-effect-dice-modal__btn--random {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.room-effect-dice-modal__btn--random:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.room-effect-dice-modal__btn--continue {
+    width: 100%;
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: #fff;
+}
+
+.room-effect-dice-modal__btn--continue:hover {
+    background: linear-gradient(135deg, #9d74f7 0%, #8b5cf6 100%);
+    transform: translateY(-1px);
+}
+
+.room-effect-dice-modal__result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: rgba(139, 92, 246, 0.15);
+    border-radius: 12px;
+}
+
+.room-effect-dice-modal__result-label {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.room-effect-dice-modal__result-value {
+    font-size: 3.5rem;
+    font-weight: 700;
+    color: #c4b5fd;
+    text-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+}
+
+.room-effect-dice-modal__result-status {
+    font-size: 1.3rem;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 8px;
+    text-align: center;
+    margin-top: 8px;
+}
+
+.room-effect-dice-modal__result-status--success {
+    color: #34d399;
+    background: rgba(52, 211, 153, 0.15);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.room-effect-dice-modal__result-status--fail {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.15);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+}
+
+
+/* ============================================
    Toast Notifications
    ============================================ */
 

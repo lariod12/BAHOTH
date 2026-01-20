@@ -61,6 +61,23 @@ let eventDiceModal = null;
  * } | null} */
 let damageDiceModal = null;
 
+/** Room effect dice modal state - for room-triggered dice rolls
+ * @type {{
+ *   isOpen: boolean;
+ *   roomName: string;
+ *   roomEffect: object;
+ *   diceCount: number;
+ *   inputValue: string;
+ *   result: number | null;
+ *   resultsApplied: boolean;
+ *   pendingMovement: {
+ *     direction: string;
+ *     targetRoomId: string | null;
+ *     targetRoomName: string | null;
+ *   } | null;
+ * } | null} */
+let roomEffectDiceModal = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -107,6 +124,131 @@ const DICE_ROLL_ROOMS = new Set([
     'Attic',               // Speed roll 3+ when exiting
     'Mystic Elevator',     // Roll 2 dice for floor
 ]);
+
+/**
+ * Room effects that require dice rolls when entering/exiting
+ * @typedef {'enter' | 'exit' | 'cross'} TriggerType
+ * @typedef {'speed' | 'might' | 'sanity' | 'knowledge'} StatType
+ */
+const ROOM_EFFECTS = {
+    // === ENTER/CROSS ROOMS ===
+    'Collapsed Room': {
+        trigger: 'enter',
+        rollStat: 'speed',
+        target: 5,
+        description: {
+            vi: 'Phong sap! Ban phai roll Speed 5+ de tranh roi xuong.',
+            en: 'Collapsed Room! Roll Speed 5+ to avoid falling.'
+        },
+        failEffect: {
+            type: 'fallToBasement',
+            damageType: 'physical',
+            dice: 1
+        },
+        continueOnFail: false
+    },
+    'Chasm': {
+        trigger: 'enter',
+        rollStat: 'speed',
+        target: 3,
+        description: {
+            vi: 'Khe vuc! Roll Speed 3+ de bang qua.',
+            en: 'Chasm! Roll Speed 3+ to cross.'
+        },
+        failEffect: {
+            type: 'stopMoving'
+        },
+        continueOnFail: false
+    },
+    'Tower': {
+        trigger: 'enter',
+        rollStat: 'might',
+        target: 3,
+        description: {
+            vi: 'Thap! Roll Might 3+ de bang qua.',
+            en: 'Tower! Roll Might 3+ to cross.'
+        },
+        failEffect: {
+            type: 'stopMoving'
+        },
+        continueOnFail: false
+    },
+    'Catacombs': {
+        trigger: 'enter',
+        rollStat: 'sanity',
+        target: 6,
+        description: {
+            vi: 'Ham mo! Roll Sanity 6+ de bang qua.',
+            en: 'Catacombs! Roll Sanity 6+ to cross.'
+        },
+        failEffect: {
+            type: 'stopMoving'
+        },
+        continueOnFail: false
+    },
+
+    // === EXIT ROOMS ===
+    'Graveyard': {
+        trigger: 'exit',
+        rollStat: 'sanity',
+        target: 4,
+        description: {
+            vi: 'Nghia dia! Roll Sanity 4+ khi roi di.',
+            en: 'Graveyard! Roll Sanity 4+ when leaving.'
+        },
+        failEffect: {
+            type: 'statLoss',
+            stat: 'knowledge',
+            amount: 1
+        },
+        continueOnFail: true
+    },
+    'Pentagram Chamber': {
+        trigger: 'exit',
+        rollStat: 'knowledge',
+        target: 4,
+        description: {
+            vi: 'Phong ngu giac! Roll Knowledge 4+ khi roi di.',
+            en: 'Pentagram Chamber! Roll Knowledge 4+ when leaving.'
+        },
+        failEffect: {
+            type: 'statLoss',
+            stat: 'sanity',
+            amount: 1
+        },
+        continueOnFail: true
+    },
+    'Junk Room': {
+        trigger: 'exit',
+        rollStat: 'might',
+        target: 3,
+        description: {
+            vi: 'Phong do dac! Roll Might 3+ khi roi di.',
+            en: 'Junk Room! Roll Might 3+ when leaving.'
+        },
+        failEffect: {
+            type: 'statLoss',
+            stat: 'speed',
+            amount: 1
+        },
+        continueOnFail: true
+    },
+    'Attic': {
+        trigger: 'exit',
+        rollStat: 'speed',
+        target: 3,
+        description: {
+            vi: 'Gac mai! Roll Speed 3+ khi roi di.',
+            en: 'Attic! Roll Speed 3+ when leaving.'
+        },
+        failEffect: {
+            type: 'statLoss',
+            stat: 'might',
+            amount: 1
+        },
+        continueOnFail: true
+    }
+};
 
 /**
  * Show haunt announcement modal
@@ -768,6 +910,165 @@ function openDamageDiceModal(mountEl, physicalDice, mentalDice) {
 
     console.log('[DamageDice] Opened modal - physical:', physicalDice, 'mental:', mentalDice);
     updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Open room effect dice modal
+ * @param {HTMLElement} mountEl
+ * @param {string} roomName - Room English name
+ * @param {object} pendingMovement - Movement info to resume after roll
+ */
+function openRoomEffectDiceModal(mountEl, roomName, pendingMovement) {
+    const roomEffect = ROOM_EFFECTS[roomName];
+    if (!roomEffect) {
+        console.error('[RoomEffect] No effect found for room:', roomName);
+        return;
+    }
+
+    const playerId = mySocketId;
+    const diceCount = getPlayerStatForDice(playerId, roomEffect.rollStat);
+
+    roomEffectDiceModal = {
+        isOpen: true,
+        roomName: roomName,
+        roomEffect: roomEffect,
+        diceCount: diceCount,
+        inputValue: '',
+        result: null,
+        resultsApplied: false,
+        pendingMovement: pendingMovement
+    };
+
+    console.log('[RoomEffect] Opened modal for:', roomName, 'stat:', roomEffect.rollStat, 'diceCount:', diceCount);
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Apply room effect dice result
+ * @param {HTMLElement} mountEl
+ * @param {number} result - Dice result
+ */
+function applyRoomEffectDiceResult(mountEl, result) {
+    if (!roomEffectDiceModal || !roomEffectDiceModal.roomEffect) return;
+
+    const { roomEffect, pendingMovement, roomName } = roomEffectDiceModal;
+    const isSuccess = result >= roomEffect.target;
+    const playerId = mySocketId;
+
+    console.log('[RoomEffect] Result:', result, 'Target:', roomEffect.target, 'Success:', isSuccess);
+
+    if (isSuccess) {
+        // Success - close modal and resume movement
+        roomEffectDiceModal = null;
+        continueMovementAfterRoomEffect(mountEl, pendingMovement, true, roomName);
+    } else {
+        // Fail - apply consequences
+        const failEffect = roomEffect.failEffect;
+
+        switch (failEffect.type) {
+            case 'stopMoving':
+                // Player stops - consume remaining moves
+                currentGameState.playerMoves[playerId] = 0;
+                showToast(`That bai! Ban dung lai o ${roomName}.`, 'error');
+                roomEffectDiceModal = null;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+                break;
+
+            case 'statLoss':
+                applyStatChange(playerId, failEffect.stat, -failEffect.amount);
+                showToast(`That bai! Mat ${failEffect.amount} ${failEffect.stat}.`, 'error');
+                roomEffectDiceModal = null;
+                // Continue moving if continueOnFail is true
+                if (roomEffect.continueOnFail) {
+                    continueMovementAfterRoomEffect(mountEl, pendingMovement, false, roomName);
+                } else {
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+                break;
+
+            case 'fallToBasement':
+                // Special case: Collapsed Room - for now just show message and stop
+                showToast(`That bai! Ban roi xuong tang ham va chiu ${failEffect.dice} dice physical damage.`, 'error');
+                roomEffectDiceModal = null;
+                // Open damage modal for physical damage
+                openDamageDiceModal(mountEl, failEffect.dice, 0);
+                break;
+
+            default:
+                roomEffectDiceModal = null;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+        }
+    }
+}
+
+/**
+ * Continue movement after room effect roll
+ * @param {HTMLElement} mountEl
+ * @param {object} pendingMovement
+ * @param {boolean} rollSuccess
+ * @param {string} roomName - Room that was checked
+ */
+function continueMovementAfterRoomEffect(mountEl, pendingMovement, rollSuccess, roomName) {
+    if (!pendingMovement) {
+        updateGameUI(mountEl, currentGameState, mySocketId);
+        return;
+    }
+
+    const playerId = mySocketId;
+
+    // Mark this room+trigger as rolled for this turn
+    if (!currentGameState.playerState) {
+        currentGameState.playerState = {};
+    }
+    if (!currentGameState.playerState.roomEffectRolls) {
+        currentGameState.playerState.roomEffectRolls = {};
+    }
+    if (!currentGameState.playerState.roomEffectRolls[playerId]) {
+        currentGameState.playerState.roomEffectRolls[playerId] = [];
+    }
+
+    const roomEffect = ROOM_EFFECTS[roomName];
+    const rollKey = `${roomName}_${roomEffect?.trigger || 'enter'}`;
+    if (!currentGameState.playerState.roomEffectRolls[playerId].includes(rollKey)) {
+        currentGameState.playerState.roomEffectRolls[playerId].push(rollKey);
+    }
+
+    console.log('[RoomEffect] Continuing movement after roll, success:', rollSuccess);
+
+    // Re-trigger movement in the same direction
+    const { direction } = pendingMovement;
+    handleDebugMovement(mountEl, direction);
+}
+
+/**
+ * Get room effect if exists
+ * @param {string} roomName - Room name
+ * @param {'enter' | 'exit'} trigger - Trigger type
+ * @returns {object | null}
+ */
+function getRoomEffect(roomName, trigger) {
+    const effect = ROOM_EFFECTS[roomName];
+    if (!effect) return null;
+    if (effect.trigger === trigger) return effect;
+    return null;
+}
+
+/**
+ * Check if player needs to roll for room effect
+ * @param {string} roomName - Room name
+ * @param {'enter' | 'exit'} trigger - Trigger type
+ * @param {string} playerId - Player ID
+ * @returns {boolean}
+ */
+function needsRoomEffectRoll(roomName, trigger, playerId) {
+    const effect = getRoomEffect(roomName, trigger);
+    if (!effect) return false;
+
+    // Check if player already rolled for this room this turn
+    const rolledRooms = currentGameState?.playerState?.roomEffectRolls?.[playerId] || [];
+    const rollKey = `${roomName}_${trigger}`;
+
+    return !rolledRooms.includes(rollKey);
 }
 
 /**
@@ -1460,6 +1761,98 @@ function renderEventDiceModal() {
                             ${isMultiRoll && currentRollIndex < totalRolls - 1 ? 'Tiep theo' : 'Ap dung ket qua'}
                         </button>
                     ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render room effect dice modal - for room-triggered dice rolls
+ * @returns {string} HTML string
+ */
+function renderRoomEffectDiceModal() {
+    if (!roomEffectDiceModal?.isOpen) return '';
+
+    const { roomName, roomEffect, diceCount, inputValue, result } = roomEffectDiceModal;
+    const hasResult = result !== null;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    const statLabel = statLabels[roomEffect.rollStat];
+    const targetDisplay = `${roomEffect.target}+`;
+    const maxDiceValue = diceCount * 2;
+
+    // Determine result status
+    let resultStatusHtml = '';
+    if (hasResult) {
+        const isSuccess = result >= roomEffect.target;
+        resultStatusHtml = `
+            <div class="room-effect-dice-modal__result-status room-effect-dice-modal__result-status--${isSuccess ? 'success' : 'fail'}">
+                ${isSuccess ? 'THANH CONG!' : 'THAT BAI!'}
+            </div>
+        `;
+    }
+
+    return `
+        <div class="room-effect-dice-overlay">
+            <div class="room-effect-dice-modal" data-modal-content="true">
+                <header class="room-effect-dice-modal__header">
+                    <h3 class="room-effect-dice-modal__title">${roomName}</h3>
+                </header>
+                <div class="room-effect-dice-modal__body">
+                    <p class="room-effect-dice-modal__description">${roomEffect.description.vi}</p>
+
+                    <div class="room-effect-dice-modal__requirement">
+                        <span class="room-effect-dice-modal__stat-label">${statLabel}</span>
+                        <span class="room-effect-dice-modal__target">${targetDisplay}</span>
+                    </div>
+
+                    ${hasResult ? `
+                        <div class="room-effect-dice-modal__result">
+                            <span class="room-effect-dice-modal__result-label">Ket qua:</span>
+                            <span class="room-effect-dice-modal__result-value">${result}</span>
+                        </div>
+                        ${resultStatusHtml}
+                        <button class="room-effect-dice-modal__btn room-effect-dice-modal__btn--continue"
+                                type="button"
+                                data-action="room-effect-dice-continue">
+                            Tiep tuc
+                        </button>
+                    ` : `
+                        <div class="room-effect-dice-modal__roll-info">
+                            <p>Do ${diceCount} vien xuc xac ${statLabel}</p>
+                        </div>
+                        <div class="room-effect-dice-modal__input-group">
+                            <label class="room-effect-dice-modal__label">Nhap so (0-${maxDiceValue}):</label>
+                            <input
+                                type="number"
+                                class="room-effect-dice-modal__input"
+                                min="0"
+                                max="${maxDiceValue}"
+                                value="${inputValue}"
+                                data-input="room-effect-dice-value"
+                                placeholder="0-${maxDiceValue}"
+                            />
+                        </div>
+                        <div class="room-effect-dice-modal__actions">
+                            <button class="room-effect-dice-modal__btn room-effect-dice-modal__btn--confirm"
+                                    type="button"
+                                    data-action="room-effect-dice-confirm">
+                                Xac nhan
+                            </button>
+                            <button class="room-effect-dice-modal__btn room-effect-dice-modal__btn--random"
+                                    type="button"
+                                    data-action="room-effect-dice-random">
+                                Ngau nhien
+                            </button>
+                        </div>
+                    `}
                 </div>
             </div>
         </div>
@@ -2350,6 +2743,7 @@ function renderGameScreen(gameState, myId) {
             ${renderDiceEventModal()}
             ${renderEventDiceModal()}
             ${renderDamageDiceModal()}
+            ${renderRoomEffectDiceModal()}
             ${renderEndTurnModal()}
             ${renderTutorialModal()}
         `;
@@ -3107,6 +3501,58 @@ function attachDebugEventListeners(mountEl) {
         // Damage dice apply
         if (action === 'damage-dice-apply') {
             closeDamageDiceModal(mountEl);
+            return;
+        }
+
+        // ===== ROOM EFFECT DICE MODAL HANDLERS =====
+
+        // Room effect dice input change (handled via onchange in render)
+        if (target.matches && target.matches('[data-input="room-effect-dice-value"]')) {
+            if (!roomEffectDiceModal) return;
+            roomEffectDiceModal.inputValue = target.value;
+            return;
+        }
+
+        // Room effect dice confirm
+        if (action === 'room-effect-dice-confirm') {
+            if (!roomEffectDiceModal) return;
+
+            const value = parseInt(roomEffectDiceModal.inputValue, 10);
+            const maxValue = roomEffectDiceModal.diceCount * 2;
+            if (isNaN(value) || value < 0 || value > maxValue) {
+                showToast('Nhap so tu 0 den ' + maxValue, 'error');
+                return;
+            }
+
+            roomEffectDiceModal.result = value;
+            roomEffectDiceModal.resultsApplied = true;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Room effect dice random
+        if (action === 'room-effect-dice-random') {
+            if (!roomEffectDiceModal) return;
+
+            const diceCount = roomEffectDiceModal.diceCount;
+            // Roll dice (each 0-2) and sum
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3);
+            }
+            roomEffectDiceModal.result = total;
+            roomEffectDiceModal.resultsApplied = true;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Room effect dice continue (after seeing result)
+        if (action === 'room-effect-dice-continue') {
+            if (!roomEffectDiceModal || roomEffectDiceModal.result === null) return;
+
+            applyRoomEffectDiceResult(mountEl, roomEffectDiceModal.result);
             return;
         }
 
@@ -4541,14 +4987,29 @@ function handleMove(mountEl, direction) {
     const mapConnections = currentGameState.map?.connections || {};
     const revealedRooms = currentGameState.map?.revealedRooms || {};
     const currentRoom = revealedRooms[currentRoomId];
-    
+
     // Convert UI direction to door direction
     const doorDirection = mapDirectionToDoor(direction);
-    
+
+    // === CHECK EXIT ROOM EFFECT ===
+    // Check if current room has EXIT effect that needs dice roll
+    if (currentRoom && currentRoom.name) {
+        const currentRoomName = currentRoom.name;
+        if (needsRoomEffectRoll(currentRoomName, 'exit', playerId)) {
+            console.log('[RoomEffect] EXIT effect triggered for room:', currentRoomName);
+            openRoomEffectDiceModal(mountEl, currentRoomName, {
+                direction: direction,
+                targetRoomId: null,
+                targetRoomName: null
+            });
+            return; // Wait for dice roll
+        }
+    }
+
     // Check if there's a connection in that direction
     const roomConnections = mapConnections[currentRoomId] || {};
     const targetRoomId = roomConnections[doorDirection];
-    
+
     if (!targetRoomId) {
         // No connection - check if current room has a door in that direction
         if (currentRoom && currentRoom.doors.includes(doorDirection)) {
@@ -4588,6 +5049,19 @@ function handleMove(mountEl, direction) {
                 const oppositeDir = getOppositeDoor(doorDirection);
                 // Check if target room has a door facing us
                 if (existingRoom.doors && existingRoom.doors.includes(oppositeDir)) {
+                    // === CHECK ENTER ROOM EFFECT ===
+                    // Check if target room has ENTER effect that needs dice roll
+                    const targetRoomName = existingRoom.name;
+                    if (targetRoomName && needsRoomEffectRoll(targetRoomName, 'enter', playerId)) {
+                        console.log('[RoomEffect] ENTER effect triggered for room:', targetRoomName);
+                        openRoomEffectDiceModal(mountEl, targetRoomName, {
+                            direction: direction,
+                            targetRoomId: existingRoomId,
+                            targetRoomName: targetRoomName
+                        });
+                        return; // Wait for dice roll
+                    }
+
                     // Create connection
                     if (!mapConnections[currentRoomId]) mapConnections[currentRoomId] = {};
                     if (!mapConnections[existingRoomId]) mapConnections[existingRoomId] = {};
@@ -4614,6 +5088,10 @@ function handleMove(mountEl, direction) {
                         }
                         if (!currentGameState.playerState.drawnRooms.includes(existingRoomId)) {
                             currentGameState.playerState.drawnRooms.push(existingRoomId);
+                            // Sync state BEFORE token drawing (so other players see position update)
+                            if (!isDebugMode) {
+                                syncGameStateToServer();
+                            }
                             initTokenDrawing(mountEl, existingRoom.tokens);
                             updateGameUI(mountEl, currentGameState, mySocketId);
                             return; // Don't end turn yet
@@ -4674,7 +5152,22 @@ function handleMove(mountEl, direction) {
         console.log(`No door to ${doorDirection} from ${currentRoomId}`);
         return;
     }
-    
+
+    // === CHECK ENTER ROOM EFFECT (for rooms with existing connection) ===
+    const targetRoom = revealedRooms[targetRoomId];
+    if (targetRoom && targetRoom.name) {
+        const targetRoomName = targetRoom.name;
+        if (needsRoomEffectRoll(targetRoomName, 'enter', playerId)) {
+            console.log('[RoomEffect] ENTER effect triggered for room:', targetRoomName);
+            openRoomEffectDiceModal(mountEl, targetRoomName, {
+                direction: direction,
+                targetRoomId: targetRoomId,
+                targetRoomName: targetRoomName
+            });
+            return; // Wait for dice roll
+        }
+    }
+
     // Move to target room
     currentGameState.playerState.playerPositions[playerId] = targetRoomId;
     
@@ -4687,30 +5180,34 @@ function handleMove(mountEl, direction) {
     
     // Decrease moves
     currentGameState.playerMoves[playerId] = moves - 1;
-    
+
     // Apply Vault spawn position if entering Vault room
-    const targetRoom = revealedRooms[targetRoomId];
     applyVaultSpawnPosition(playerId, targetRoom, currentGameState);
-    
+
     // Check if target room has tokens and hasn't been drawn yet
     if (targetRoom && targetRoom.tokens && targetRoom.tokens.length > 0) {
         // Initialize drawnRooms tracking if not exists
         if (!currentGameState.playerState.drawnRooms) {
             currentGameState.playerState.drawnRooms = [];
         }
-        
+
         // Check if this room's tokens haven't been drawn yet
         if (!currentGameState.playerState.drawnRooms.includes(targetRoomId)) {
             // Mark room as drawn
             currentGameState.playerState.drawnRooms.push(targetRoomId);
-            
+
+            // Sync state BEFORE token drawing (so other players see position update)
+            if (!isDebugMode) {
+                syncGameStateToServer();
+            }
+
             // Trigger token drawing
             initTokenDrawing(mountEl, targetRoom.tokens);
             updateGameUI(mountEl, currentGameState, mySocketId);
             return; // Don't end turn yet
         }
     }
-    
+
     // Check if turn ended
     if (currentGameState.playerMoves[playerId] <= 0) {
         if (isDebugMode) {
@@ -5286,10 +5783,15 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         if (!currentGameState.playerState.drawnRooms) {
             currentGameState.playerState.drawnRooms = [];
         }
-        
+
         // Mark room as drawn
         currentGameState.playerState.drawnRooms.push(newRoomId);
-        
+
+        // Sync state BEFORE token drawing (so other players see position update)
+        if (!isDebugMode) {
+            syncGameStateToServer();
+        }
+
         initTokenDrawing(mountEl, newRoom.tokens);
         // Don't end turn yet, wait for token drawing to complete
         updateGameUI(mountEl, currentGameState, mySocketId);
@@ -5592,6 +6094,10 @@ function confirmTokenDrawing(mountEl) {
     // If there's an event requiring immediate roll, open event dice modal
     if (immediateRollEvent) {
         console.log('[TokenDrawing] Event requires immediate roll:', immediateRollEvent);
+        // Sync state BEFORE opening event dice modal (so other players see cards update)
+        if (!isDebugMode) {
+            syncGameStateToServer();
+        }
         openEventDiceModal(mountEl, immediateRollEvent);
         return; // Don't proceed to next turn yet
     }
