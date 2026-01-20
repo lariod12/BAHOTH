@@ -983,6 +983,8 @@ function applyRoomEffectDiceResult(mountEl, result) {
                     continueMovementAfterRoomEffect(mountEl, pendingMovement, false, roomName);
                 } else {
                     updateGameUI(mountEl, currentGameState, mySocketId);
+                    // Sync stat loss to server for multiplayer
+                    syncGameStateToServer();
                 }
                 break;
 
@@ -1081,27 +1083,50 @@ function applyStatChange(playerId, stat, amount) {
     if (!currentGameState || !playerId || !stat) return;
 
     const player = currentGameState.players?.find(p => p.id === playerId);
-    if (!player) return;
+    if (!player) {
+        console.warn(`[StatChange] Player not found: ${playerId}`);
+        return;
+    }
+
+    // Initialize playerState if needed
+    if (!currentGameState.playerState) {
+        currentGameState.playerState = {};
+    }
 
     // Initialize characterData if needed
     if (!currentGameState.playerState.characterData) {
         currentGameState.playerState.characterData = {};
     }
+
     if (!currentGameState.playerState.characterData[playerId]) {
         const char = CHARACTER_BY_ID[player.characterId];
-        currentGameState.playerState.characterData[playerId] = {
-            characterId: player.characterId,
-            stats: {
-                speed: char?.traits.speed.startIndex || 3,
-                might: char?.traits.might.startIndex || 3,
-                sanity: char?.traits.sanity.startIndex || 3,
-                knowledge: char?.traits.knowledge.startIndex || 3,
-            }
-        };
+        if (!char || !char.traits) {
+            console.warn(`[StatChange] Character data not found for: ${player.characterId}`);
+            // Use default values if character not found
+            currentGameState.playerState.characterData[playerId] = {
+                characterId: player.characterId,
+                stats: { speed: 3, might: 3, sanity: 3, knowledge: 3 }
+            };
+        } else {
+            currentGameState.playerState.characterData[playerId] = {
+                characterId: player.characterId,
+                stats: {
+                    speed: char.traits.speed?.startIndex ?? 3,
+                    might: char.traits.might?.startIndex ?? 3,
+                    sanity: char.traits.sanity?.startIndex ?? 3,
+                    knowledge: char.traits.knowledge?.startIndex ?? 3,
+                }
+            };
+        }
     }
 
     const charData = currentGameState.playerState.characterData[playerId];
-    const currentIndex = charData.stats[stat] || 0;
+    if (!charData || !charData.stats) {
+        console.warn(`[StatChange] Character data invalid for player: ${playerId}`);
+        return;
+    }
+
+    const currentIndex = charData.stats[stat] ?? 0;
     const newIndex = Math.max(0, Math.min(7, currentIndex + amount));
     charData.stats[stat] = newIndex;
 
@@ -1246,6 +1271,9 @@ function applyEventDiceResult(mountEl, result, stat) {
 function closeEventDiceModal(mountEl) {
     eventDiceModal = null;
     updateGameUI(mountEl, currentGameState, mySocketId);
+
+    // Sync stat changes to server for multiplayer
+    syncGameStateToServer();
 }
 
 /**
@@ -1264,6 +1292,9 @@ function closeDamageDiceModal(mountEl) {
 
     damageDiceModal = null;
     updateGameUI(mountEl, currentGameState, mySocketId);
+
+    // Sync damage stats to server for multiplayer
+    syncGameStateToServer();
 }
 
 /**
@@ -1618,15 +1649,14 @@ function renderDiceEventModal() {
                         </div>
                     ` : `
                         <div class="dice-event-modal__input-group">
-                            <label class="dice-event-modal__label">Nhap so (0-16):</label>
+                            <label class="dice-event-modal__label">Nhap ket qua xuc xac:</label>
                             <input
                                 type="number"
                                 class="dice-event-modal__input"
                                 min="0"
-                                max="16"
                                 value="${inputValue}"
                                 data-input="dice-event-value"
-                                placeholder="0-16"
+                                placeholder="Nhap so"
                             />
                         </div>
                         <div class="dice-event-modal__actions">
@@ -1735,15 +1765,14 @@ function renderEventDiceModal() {
                             <p>Do ${eventCard?.fixedDice || diceCount} vien xuc xac ${currentStatLabel}</p>
                         </div>
                         <div class="event-dice-modal__input-group">
-                            <label class="event-dice-modal__label">Nhap so (0-16):</label>
+                            <label class="event-dice-modal__label">Nhap ket qua xuc xac:</label>
                             <input
                                 type="number"
                                 class="event-dice-modal__input"
                                 min="0"
-                                max="16"
                                 value="${inputValue}"
                                 data-input="event-dice-value"
-                                placeholder="0-16"
+                                placeholder="Nhap so"
                             />
                         </div>
                         <div class="event-dice-modal__actions">
@@ -1835,15 +1864,14 @@ function renderRoomEffectDiceModal() {
                             <p>Do ${diceCount} vien xuc xac ${statLabel}</p>
                         </div>
                         <div class="room-effect-dice-modal__input-group">
-                            <label class="room-effect-dice-modal__label">Nhap so (0-${maxDiceValue}):</label>
+                            <label class="room-effect-dice-modal__label">Nhap ket qua xuc xac:</label>
                             <input
                                 type="number"
                                 class="room-effect-dice-modal__input"
                                 min="0"
-                                max="${maxDiceValue}"
                                 value="${inputValue}"
                                 data-input="room-effect-dice-value"
-                                placeholder="0-${maxDiceValue}"
+                                placeholder="Nhap so"
                             />
                         </div>
                         <div class="room-effect-dice-modal__actions">
@@ -1946,15 +1974,14 @@ function renderDamageDiceModal() {
                 <p>${phaseLabel}</p>
             </div>
             <div class="damage-dice-modal__input-group">
-                <label class="damage-dice-modal__label">Nhap so (0-${currentDice * 2}):</label>
+                <label class="damage-dice-modal__label">Nhap ket qua xuc xac:</label>
                 <input
                     type="number"
                     class="damage-dice-modal__input"
                     min="0"
-                    max="${currentDice * 2}"
                     value="${inputValue}"
                     data-input="damage-dice-value"
-                    placeholder="0-${currentDice * 2}"
+                    placeholder="Nhap so"
                 />
             </div>
             <div class="damage-dice-modal__actions">
@@ -3287,7 +3314,8 @@ function attachDebugEventListeners(mountEl) {
         if (action === 'dice-event-confirm') {
             const input = mountEl.querySelector('[data-input="dice-event-value"]');
             const value = parseInt(input?.value, 10);
-            if (!isNaN(value) && value >= 0 && value <= 16) {
+            // Accept any non-negative number (no max limit for dice results)
+            if (!isNaN(value) && value >= 0) {
                 diceEventModal = {
                     ...diceEventModal,
                     result: value
@@ -3347,7 +3375,8 @@ function attachDebugEventListeners(mountEl) {
             if (!eventDiceModal) return;
             const input = mountEl.querySelector('[data-input="event-dice-value"]');
             const value = parseInt(input?.value, 10);
-            if (!isNaN(value) && value >= 0 && value <= 16) {
+            // Accept any non-negative number (no max limit for dice results)
+            if (!isNaN(value) && value >= 0) {
                 eventDiceModal.result = value;
                 eventDiceModal.inputValue = value.toString();
                 skipMapCentering = true;
@@ -3456,11 +3485,10 @@ function attachDebugEventListeners(mountEl) {
         if (action === 'damage-dice-confirm') {
             if (!damageDiceModal) return;
             const input = mountEl.querySelector('[data-input="damage-dice-value"]');
-            const currentDice = damageDiceModal.currentPhase === 'physical' ? damageDiceModal.physicalDice : damageDiceModal.mentalDice;
-            const maxValue = currentDice * 2;
             const value = parseInt(input?.value, 10);
 
-            if (!isNaN(value) && value >= 0 && value <= maxValue) {
+            // Accept any non-negative number (no max limit for dice results)
+            if (!isNaN(value) && value >= 0) {
                 if (damageDiceModal.currentPhase === 'physical') {
                     damageDiceModal.physicalResult = value;
                     // Check if mental damage also needed
@@ -3526,14 +3554,18 @@ function attachDebugEventListeners(mountEl) {
         if (action === 'room-effect-dice-confirm') {
             if (!roomEffectDiceModal) return;
 
-            const value = parseInt(roomEffectDiceModal.inputValue, 10);
-            const maxValue = roomEffectDiceModal.diceCount * 2;
-            if (isNaN(value) || value < 0 || value > maxValue) {
-                showToast('Nhap so tu 0 den ' + maxValue, 'error');
+            // Get value directly from input DOM element
+            const input = mountEl.querySelector('[data-input="room-effect-dice-value"]');
+            const value = parseInt(input?.value, 10);
+
+            // Accept any non-negative number (no max limit for dice results)
+            if (isNaN(value) || value < 0) {
+                showToast('Nhap so >= 0', 'error');
                 return;
             }
 
             roomEffectDiceModal.result = value;
+            roomEffectDiceModal.inputValue = value.toString();
             roomEffectDiceModal.resultsApplied = true;
             skipMapCentering = true;
             updateGameUI(mountEl, currentGameState, mySocketId);
@@ -3551,6 +3583,7 @@ function attachDebugEventListeners(mountEl) {
                 total += Math.floor(Math.random() * 3);
             }
             roomEffectDiceModal.result = total;
+            roomEffectDiceModal.inputValue = total.toString();
             roomEffectDiceModal.resultsApplied = true;
             skipMapCentering = true;
             updateGameUI(mountEl, currentGameState, mySocketId);
@@ -3721,7 +3754,8 @@ function attachEventListeners(mountEl, roomId) {
     // Roll dice manually
     mountEl.addEventListener('click', async (e) => {
         const target = /** @type {HTMLElement} */ (e.target);
-        const action = target.dataset.action || target.closest('[data-action]')?.dataset.action;
+        const actionEl = target.closest('[data-action]');
+        const action = target.dataset.action || actionEl?.dataset.action;
         console.log('[EventListeners] Click - action:', action, 'target:', target.tagName, target.className);
 
         // Click outside sidebar to close it
@@ -4090,7 +4124,8 @@ function attachEventListeners(mountEl, roomId) {
             if (!eventDiceModal) return;
             const input = mountEl.querySelector('[data-input="event-dice-value"]');
             const value = parseInt(input?.value, 10);
-            if (!isNaN(value) && value >= 0 && value <= 16) {
+            // Accept any non-negative number (no max limit for dice results)
+            if (!isNaN(value) && value >= 0) {
                 eventDiceModal.result = value;
                 eventDiceModal.inputValue = value.toString();
                 skipMapCentering = true;
@@ -4211,11 +4246,10 @@ function attachEventListeners(mountEl, roomId) {
         if (action === 'damage-dice-confirm') {
             if (!damageDiceModal) return;
             const input = mountEl.querySelector('[data-input="damage-dice-value"]');
-            const currentDice = damageDiceModal.currentPhase === 'physical' ? damageDiceModal.physicalDice : damageDiceModal.mentalDice;
-            const maxValue = currentDice * 2;
             const value = parseInt(input?.value, 10);
 
-            if (!isNaN(value) && value >= 0 && value <= maxValue) {
+            // Accept any non-negative number (no max limit for dice results)
+            if (!isNaN(value) && value >= 0) {
                 if (damageDiceModal.currentPhase === 'physical') {
                     damageDiceModal.physicalResult = value;
                     // Check if mental damage also needed
@@ -4284,7 +4318,8 @@ function attachEventListeners(mountEl, roomId) {
         if (action === 'dice-event-confirm') {
             const input = mountEl.querySelector('[data-input="dice-event-value"]');
             const value = parseInt(input?.value, 10);
-            if (!isNaN(value) && value >= 0 && value <= 16) {
+            // Accept any non-negative number (no max limit for dice results)
+            if (!isNaN(value) && value >= 0) {
                 diceEventModal = {
                     ...diceEventModal,
                     result: value
@@ -5359,13 +5394,16 @@ async function syncGameStateToServer() {
     if (isDebugMode) return;
 
     try {
-        // Send updated state to server
+        // Send updated state to server (including characterData for stat changes)
         const result = await socketClient.syncGameState({
             playerMoves: currentGameState.playerMoves,
             playerPositions: currentGameState.playerState?.playerPositions,
             map: currentGameState.map,
             drawnRooms: currentGameState.playerState?.drawnRooms,
-            playerCards: currentGameState.playerState?.playerCards
+            playerCards: currentGameState.playerState?.playerCards,
+            playerState: {
+                characterData: currentGameState.playerState?.characterData
+            }
         });
         console.log('[Sync] Game state synced to server:', result);
     } catch (error) {

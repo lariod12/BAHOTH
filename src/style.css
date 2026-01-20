@@ -6492,6 +6492,58 @@ select.field__input option {
     transform: translateY(-1px);
 }
 
+.damage-dice-modal__select-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.damage-dice-modal__instruction {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.9);
+    text-align: center;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.damage-dice-modal__stat-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.damage-dice-modal__btn--stat {
+    width: 100%;
+    padding: 16px;
+    font-size: 1rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(201, 76, 76, 0.4);
+    border-radius: 10px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.damage-dice-modal__btn--stat:hover {
+    background: rgba(201, 76, 76, 0.2);
+    border-color: #c94c4c;
+    transform: translateY(-2px);
+}
+
+.damage-dice-modal__btn--stat:active {
+    transform: translateY(0);
+}
+
+.damage-dice-modal__result-item {
+    margin: 4px 0;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.damage-dice-modal__result-item strong {
+    color: #c94c4c;
+}
+
 
 /* ============================================
    Room Effect Dice Modal
