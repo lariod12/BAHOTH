@@ -1718,6 +1718,12 @@ function renderEventDiceModal() {
                                 <option value="">-- Chon --</option>
                                 ${rollStat.map(s => `<option value="${s}">${statLabels[s]}</option>`).join('')}
                             </select>
+                            <button class="event-dice-modal__btn event-dice-modal__btn--confirm event-dice-modal__btn--stat-confirm"
+                                    type="button"
+                                    data-action="event-stat-confirm"
+                                    disabled>
+                                Xac nhan lua chon
+                            </button>
                         </div>
                     ` : hasResult ? `
                         <div class="event-dice-modal__result">
@@ -3320,13 +3326,16 @@ function attachDebugEventListeners(mountEl) {
 
         // ===== EVENT DICE MODAL HANDLERS =====
 
-        // Event dice - stat selection changed
-        if (target.matches('[data-input="event-stat-select"]')) {
+        // Event dice - stat selection confirmed
+        if (action === 'event-stat-confirm') {
+            console.log('[EventDice] event-stat-confirm clicked, eventDiceModal:', eventDiceModal);
             if (!eventDiceModal) return;
-            const selectedStat = target.value;
+            const selectedStat = eventDiceModal.tempSelectedStat;
+            console.log('[EventDice] selectedStat:', selectedStat);
             if (selectedStat) {
                 eventDiceModal.selectedStat = selectedStat;
                 eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, selectedStat);
+                console.log('[EventDice] Updated - selectedStat:', eventDiceModal.selectedStat, 'diceCount:', eventDiceModal.diceCount);
                 skipMapCentering = true;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
@@ -3644,13 +3653,56 @@ function attachDebugEventListeners(mountEl) {
         if (target.id === 'token-card-search-input') {
             const searchText = target.value.toLowerCase().trim();
             const items = mountEl.querySelectorAll('.token-card__item');
-            
+
             items.forEach(item => {
                 const itemEl = /** @type {HTMLElement} */ (item);
                 const searchData = itemEl.dataset.searchText || '';
                 const matches = searchText === '' || searchData.includes(searchText);
                 itemEl.style.display = matches ? '' : 'none';
             });
+        }
+    });
+
+    // Change event for select elements (dropdowns) - DEBUG MODE
+    mountEl.addEventListener('change', (e) => {
+        const target = /** @type {HTMLSelectElement} */ (e.target);
+
+        // Event dice - stat selection changed (enable/disable confirm button)
+        if (target.matches('[data-input="event-stat-select"]')) {
+            if (!eventDiceModal) return;
+            const selectedStat = target.value;
+            // Store temp selection but don't confirm yet
+            eventDiceModal.tempSelectedStat = selectedStat;
+            // Enable/disable confirm button based on selection
+            const confirmBtn = mountEl.querySelector('[data-action="event-stat-confirm"]');
+            if (confirmBtn) {
+                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
+            }
+            return;
+        }
+
+        // Damage dice - stat selection for physical damage
+        if (target.matches('[data-input="damage-physical-stat-select"]')) {
+            if (!damageDiceModal) return;
+            const selectedStat = target.value;
+            damageDiceModal.tempPhysicalStat = selectedStat;
+            const confirmBtn = mountEl.querySelector('[data-action="damage-physical-stat-confirm"]');
+            if (confirmBtn) {
+                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
+            }
+            return;
+        }
+
+        // Damage dice - stat selection for mental damage
+        if (target.matches('[data-input="damage-mental-stat-select"]')) {
+            if (!damageDiceModal) return;
+            const selectedStat = target.value;
+            damageDiceModal.tempMentalStat = selectedStat;
+            const confirmBtn = mountEl.querySelector('[data-action="damage-mental-stat-confirm"]');
+            if (confirmBtn) {
+                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
+            }
+            return;
         }
     });
 }
@@ -4017,6 +4069,22 @@ function attachEventListeners(mountEl, roomId) {
 
         // === Event Dice Modal Actions (immediate roll for event cards) ===
 
+        // Event dice - stat selection confirmed (for events with choice like "con_nhen")
+        if (action === 'event-stat-confirm') {
+            console.log('[EventDice] event-stat-confirm clicked, eventDiceModal:', eventDiceModal);
+            if (!eventDiceModal) return;
+            const selectedStat = eventDiceModal.tempSelectedStat;
+            console.log('[EventDice] selectedStat:', selectedStat);
+            if (selectedStat) {
+                eventDiceModal.selectedStat = selectedStat;
+                eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, selectedStat);
+                console.log('[EventDice] Updated - selectedStat:', eventDiceModal.selectedStat, 'diceCount:', eventDiceModal.diceCount);
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
         // Event dice confirm (manual input)
         if (action === 'event-dice-confirm') {
             if (!eventDiceModal) return;
@@ -4333,6 +4401,49 @@ function attachEventListeners(mountEl, roomId) {
             const cardId = header?.dataset.cardId;
             if (cardId) {
                 toggleCardExpansion(mountEl, cardId);
+            }
+            return;
+        }
+    });
+
+    // Change event for select elements (dropdowns)
+    mountEl.addEventListener('change', (e) => {
+        const target = /** @type {HTMLSelectElement} */ (e.target);
+
+        // Event dice - stat selection changed (enable/disable confirm button)
+        if (target.matches('[data-input="event-stat-select"]')) {
+            if (!eventDiceModal) return;
+            const selectedStat = target.value;
+            // Store temp selection but don't confirm yet
+            eventDiceModal.tempSelectedStat = selectedStat;
+            // Enable/disable confirm button based on selection
+            const confirmBtn = mountEl.querySelector('[data-action="event-stat-confirm"]');
+            if (confirmBtn) {
+                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
+            }
+            return;
+        }
+
+        // Damage dice - stat selection for physical damage
+        if (target.matches('[data-input="damage-physical-stat-select"]')) {
+            if (!damageDiceModal) return;
+            const selectedStat = target.value;
+            damageDiceModal.tempPhysicalStat = selectedStat;
+            const confirmBtn = mountEl.querySelector('[data-action="damage-physical-stat-confirm"]');
+            if (confirmBtn) {
+                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
+            }
+            return;
+        }
+
+        // Damage dice - stat selection for mental damage
+        if (target.matches('[data-input="damage-mental-stat-select"]')) {
+            if (!damageDiceModal) return;
+            const selectedStat = target.value;
+            damageDiceModal.tempMentalStat = selectedStat;
+            const confirmBtn = mountEl.querySelector('[data-action="damage-mental-stat-confirm"]');
+            if (confirmBtn) {
+                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
             }
             return;
         }

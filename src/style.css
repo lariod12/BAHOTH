@@ -6216,6 +6216,17 @@ select.field__input option {
     padding: 8px;
 }
 
+.event-dice-modal__btn--stat-confirm {
+    margin-top: 16px;
+    width: 100%;
+}
+
+.event-dice-modal__btn--stat-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(201, 165, 92, 0.4);
+}
+
 .event-dice-modal__roll-info {
     text-align: center;
     padding: 12px;
