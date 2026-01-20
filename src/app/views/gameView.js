@@ -19,10 +19,6 @@ let tokenDrawingModal = null;
 /** @type {{ isOpen: boolean; cardType: 'omen'|'event'|'item'; cardIds: string[]; expandedCards: Set<string> } | null} */
 let cardsViewModal = null;
 
-// Stat adjustment modal state
-/** @type {{ isOpen: boolean; stat: 'speed'|'might'|'sanity'|'knowledge'; playerId: string; tempIndex: number; originalIndex: number } | null} */
-let statAdjustModal = null;
-
 // Dice event modal state
 /** @type {{ isOpen: boolean; inputValue: string; result: number | null } | null} */
 let diceEventModal = null;
@@ -1490,98 +1486,21 @@ function renderCharacterStats(characterData) {
 
     return `
         <div class="sidebar-traits">
-            <div class="sidebar-trait sidebar-trait--speed" data-action="adjust-stat" data-stat="speed">
+            <div class="sidebar-trait sidebar-trait--speed">
                 <span class="sidebar-trait__label">Speed</span>
                 <span class="sidebar-trait__value">${statValues.speed}</span>
             </div>
-            <div class="sidebar-trait sidebar-trait--might" data-action="adjust-stat" data-stat="might">
+            <div class="sidebar-trait sidebar-trait--might">
                 <span class="sidebar-trait__label">Might</span>
                 <span class="sidebar-trait__value">${statValues.might}</span>
             </div>
-            <div class="sidebar-trait sidebar-trait--sanity" data-action="adjust-stat" data-stat="sanity">
+            <div class="sidebar-trait sidebar-trait--sanity">
                 <span class="sidebar-trait__label">Sanity</span>
                 <span class="sidebar-trait__value">${statValues.sanity}</span>
             </div>
-            <div class="sidebar-trait sidebar-trait--knowledge" data-action="adjust-stat" data-stat="knowledge">
+            <div class="sidebar-trait sidebar-trait--knowledge">
                 <span class="sidebar-trait__label">Knowledge</span>
                 <span class="sidebar-trait__value">${statValues.knowledge}</span>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Render stat adjustment modal
- * @returns {string} HTML string
- */
-function renderStatAdjustModal() {
-    if (!statAdjustModal?.isOpen || !currentGameState) return '';
-    
-    const { stat, playerId, tempIndex, originalIndex } = statAdjustModal;
-    const characterData = currentGameState.playerState?.characterData?.[playerId] || currentGameState.characterData?.[playerId];
-    if (!characterData) return '';
-    
-    const char = CHARACTER_BY_ID[characterData.characterId];
-    if (!char) return '';
-    
-    const traitData = char.traits[stat];
-    const currentIndex = tempIndex;
-    const currentValue = traitData.track[currentIndex];
-    const minIndex = 0;
-    const maxIndex = traitData.track.length - 1;
-    const hasChanged = tempIndex !== originalIndex;
-    
-    const statLabels = {
-        speed: 'Toc do (Speed)',
-        might: 'Suc manh (Might)',
-        sanity: 'Tam tri (Sanity)',
-        knowledge: 'Kien thuc (Knowledge)'
-    };
-    
-    // Render track with current position highlighted
-    const trackHtml = traitData.track.map((val, idx) => {
-        const isStart = idx === traitData.startIndex;
-        const isCurrent = idx === currentIndex;
-        const isOriginal = idx === originalIndex && hasChanged;
-        let classes = 'stat-adjust__track-value';
-        if (isStart) classes += ' stat-adjust__track-value--start';
-        if (isCurrent) classes += ' stat-adjust__track-value--current';
-        if (isOriginal) classes += ' stat-adjust__track-value--original';
-        return `<span class="${classes}">${val}</span>`;
-    }).join('');
-    
-    return `
-        <div class="stat-adjust-overlay" data-action="close-stat-adjust">
-            <div class="stat-adjust-modal stat-adjust-modal--${stat}" data-modal-content="true">
-                <header class="stat-adjust-modal__header">
-                    <h3 class="stat-adjust-modal__title">${statLabels[stat]}</h3>
-                    <button class="stat-adjust-modal__close" type="button" data-action="close-stat-adjust">x</button>
-                </header>
-                <div class="stat-adjust-modal__body">
-                    <div class="stat-adjust__track">${trackHtml}</div>
-                    <div class="stat-adjust__controls">
-                        <button class="stat-adjust__btn stat-adjust__btn--minus" 
-                                type="button" 
-                                data-action="stat-decrease"
-                                ${currentIndex <= minIndex ? 'disabled' : ''}>
-                            -
-                        </button>
-                        <span class="stat-adjust__current-value">${currentValue}</span>
-                        <button class="stat-adjust__btn stat-adjust__btn--plus" 
-                                type="button" 
-                                data-action="stat-increase"
-                                ${currentIndex >= maxIndex ? 'disabled' : ''}>
-                            +
-                        </button>
-                    </div>
-                    <p class="stat-adjust__hint">Index: ${currentIndex} / ${maxIndex}</p>
-                    <button class="stat-adjust__confirm action-button action-button--primary" 
-                            type="button" 
-                            data-action="stat-confirm"
-                            ${!hasChanged ? 'disabled' : ''}>
-                        Xac nhan
-                    </button>
-                </div>
             </div>
         </div>
     `;
@@ -2772,7 +2691,6 @@ function renderGameScreen(gameState, myId) {
             ${roomDiscoveryHtml}
             ${renderTokenDrawingModal()}
             ${renderCardsViewModal()}
-            ${renderStatAdjustModal()}
             ${renderDiceEventModal()}
             ${renderEventDiceModal()}
             ${renderDamageDiceModal()}
@@ -2906,13 +2824,11 @@ function attachDebugEventListeners(mountEl) {
             const sidebar = mountEl.querySelector('.game-sidebar');
             const toggleBtn = mountEl.querySelector('.sidebar-toggle');
             const cardsViewModal = mountEl.querySelector('.cards-view-overlay');
-            const statAdjustOverlay = mountEl.querySelector('.stat-adjust-overlay');
             const isClickInsideSidebar = sidebar?.contains(target);
             const isClickOnToggle = toggleBtn?.contains(target);
             const isClickInsideCardsView = cardsViewModal?.contains(target);
-            const isClickInsideStatAdjust = statAdjustOverlay?.contains(target);
-            
-            if (!isClickInsideSidebar && !isClickOnToggle && !isClickInsideCardsView && !isClickInsideStatAdjust) {
+
+            if (!isClickInsideSidebar && !isClickOnToggle && !isClickInsideCardsView) {
                 closeSidebar(mountEl);
             }
         }
@@ -3191,75 +3107,6 @@ function attachDebugEventListeners(mountEl) {
 
         if (action === 'token-draw-next') {
             handleTokenDrawNext(mountEl);
-            return;
-        }
-
-        // Stat adjustment actions
-        if (action === 'adjust-stat') {
-            const stat = actionEl?.dataset.stat;
-            if (stat && mySocketId && currentGameState) {
-                const characterData = currentGameState.playerState?.characterData?.[mySocketId] || currentGameState.characterData?.[mySocketId];
-                if (characterData) {
-                    const currentIndex = characterData.stats[stat];
-                    statAdjustModal = {
-                        isOpen: true,
-                        stat: stat,
-                        playerId: mySocketId,
-                        tempIndex: currentIndex,
-                        originalIndex: currentIndex
-                    };
-                    updateGameUI(mountEl, currentGameState, mySocketId);
-                }
-            }
-            return;
-        }
-
-        if (action === 'close-stat-adjust') {
-            // Don't close if clicking inside modal content
-            if (target.closest('[data-modal-content="true"]') && !target.closest('[data-action="close-stat-adjust"]')) {
-                return;
-            }
-            statAdjustModal = null;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        if (action === 'stat-increase') {
-            if (statAdjustModal && currentGameState) {
-                const { stat, playerId } = statAdjustModal;
-                const characterData = currentGameState.playerState?.characterData?.[playerId] || currentGameState.characterData?.[playerId];
-                if (characterData) {
-                    const char = CHARACTER_BY_ID[characterData.characterId];
-                    const maxIndex = char.traits[stat].track.length - 1;
-                    if (statAdjustModal.tempIndex < maxIndex) {
-                        statAdjustModal.tempIndex++;
-                        updateGameUI(mountEl, currentGameState, mySocketId);
-                    }
-                }
-            }
-            return;
-        }
-
-        if (action === 'stat-decrease') {
-            if (statAdjustModal) {
-                if (statAdjustModal.tempIndex > 0) {
-                    statAdjustModal.tempIndex--;
-                    updateGameUI(mountEl, currentGameState, mySocketId);
-                }
-            }
-            return;
-        }
-
-        if (action === 'stat-confirm') {
-            if (statAdjustModal && currentGameState) {
-                const { stat, playerId, tempIndex } = statAdjustModal;
-                const characterData = currentGameState.playerState?.characterData?.[playerId] || currentGameState.characterData?.[playerId];
-                if (characterData) {
-                    characterData.stats[stat] = tempIndex;
-                    statAdjustModal = null;
-                    updateGameUI(mountEl, currentGameState, mySocketId);
-                }
-            }
             return;
         }
 
@@ -3763,13 +3610,11 @@ function attachEventListeners(mountEl, roomId) {
             const sidebar = mountEl.querySelector('.game-sidebar');
             const toggleBtn = mountEl.querySelector('.sidebar-toggle');
             const cardsViewModal = mountEl.querySelector('.cards-view-overlay');
-            const statAdjustOverlay = mountEl.querySelector('.stat-adjust-overlay');
             const isClickInsideSidebar = sidebar?.contains(target);
             const isClickOnToggle = toggleBtn?.contains(target);
             const isClickInsideCardsView = cardsViewModal?.contains(target);
-            const isClickInsideStatAdjust = statAdjustOverlay?.contains(target);
-            
-            if (!isClickInsideSidebar && !isClickOnToggle && !isClickInsideCardsView && !isClickInsideStatAdjust) {
+
+            if (!isClickInsideSidebar && !isClickOnToggle && !isClickInsideCardsView) {
                 closeSidebar(mountEl);
             }
         }
