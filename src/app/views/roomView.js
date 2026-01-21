@@ -773,6 +773,47 @@ export async function renderRoomView({ mountEl, onNavigate, roomId }) {
             }
         });
     }
+
+    // Auto-select random character when first entering room (non-debug mode only)
+    await autoSelectRandomCharacter();
+}
+
+/**
+ * Auto-select a random character for the current player if they haven't selected one yet
+ * Only works in non-debug mode
+ */
+async function autoSelectRandomCharacter() {
+    // Skip in debug mode
+    if (isDebugRoom(currentRoom)) {
+        return;
+    }
+
+    // Check if my player already has a character selected
+    const myPlayer = getMyPlayer(currentRoom, mySocketId);
+    if (!myPlayer || myPlayer.characterId) {
+        return; // Already has a character or not in room
+    }
+
+    // Get available characters (not taken by other players)
+    const availableChars = CHARACTERS.filter(char => !isCharacterTaken(char.id, currentRoom, mySocketId));
+
+    if (availableChars.length === 0) {
+        console.log('No available characters for auto-select');
+        return;
+    }
+
+    // Pick a random character
+    const randomChar = availableChars[Math.floor(Math.random() * availableChars.length)];
+
+    // Select the random character
+    const result = await socketClient.selectCharacter(randomChar.id);
+    if (result.success) {
+        console.log('Auto-selected random character:', randomChar.id);
+        // Update session with selected character
+        socketClient.updateSessionCharacter(randomChar.id);
+    } else {
+        console.error('Failed to auto-select random character:', result.error);
+    }
 }
 
 /**

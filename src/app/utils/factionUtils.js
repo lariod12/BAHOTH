@@ -222,3 +222,32 @@ export function triggerHauntDebug(gameState, hauntData) {
         console.log(`[Haunt] Player ${p.id} faction set to: ${charData.faction}`);
     });
 }
+
+/**
+ * Check if a player is dead
+ * @param {Object} gameState - Current game state
+ * @param {string} playerId - Player ID to check
+ * @returns {boolean}
+ */
+export function isPlayerDead(gameState, playerId) {
+    const characterData = gameState?.playerState?.characterData?.[playerId]
+        || gameState?.characterData?.[playerId];
+    return characterData?.isDead === true;
+}
+
+/**
+ * Get all alive players of a specific faction
+ * @param {Object} gameState - Current game state
+ * @param {Faction} faction - Faction to filter by
+ * @returns {Array<string>} Array of alive player IDs
+ */
+export function getAlivePlayersInFaction(gameState, faction) {
+    const players = gameState?.players || [];
+    return players
+        .filter(p => {
+            const playerFaction = getFaction(gameState, p.id);
+            const dead = isPlayerDead(gameState, p.id);
+            return playerFaction === faction && !dead;
+        })
+        .map(p => p.id);
+}

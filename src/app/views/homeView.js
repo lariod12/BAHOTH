@@ -29,6 +29,41 @@ function generateRandomName() {
     return `${adjective}${noun}`;
 }
 
+/**
+ * Copy text to clipboard
+ * @param {string} text - Text to copy
+ * @returns {Promise<boolean>} - True if copied successfully
+ */
+async function copyToClipboard(text) {
+    // Method 1: Modern Clipboard API (requires HTTPS or localhost)
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (error) {
+            console.warn('Clipboard API failed:', error);
+        }
+    }
+
+    // Method 2: Fallback using execCommand
+    try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        return success;
+    } catch (error) {
+        console.warn('execCommand copy failed:', error);
+        return false;
+    }
+}
+
 function renderHomeMarkup() {
     return `
         <div class="welcome-container">
@@ -75,6 +110,7 @@ function renderHomeMarkup() {
                         <label class="form-label" for="player-name">Your Name</label>
                         <div class="form-input-group">
                             <input class="form-input" type="text" id="player-name" placeholder="Enter your name" maxlength="20" />
+                            <button class="clear-name-btn" type="button" data-action="clear-player-name" title="Clear name">&times;</button>
                             <button class="random-name-btn" type="button" data-action="random-player-name" title="Random name">🎲</button>
                         </div>
                     </div>
@@ -108,6 +144,7 @@ function renderHomeMarkup() {
                         <label class="form-label" for="host-name">Your Name</label>
                         <div class="form-input-group">
                             <input class="form-input" type="text" id="host-name" placeholder="Enter your name" maxlength="20" />
+                            <button class="clear-name-btn" type="button" data-action="clear-host-name" title="Clear name">&times;</button>
                             <button class="random-name-btn" type="button" data-action="random-host-name" title="Random name">🎲</button>
                         </div>
                     </div>
@@ -181,6 +218,10 @@ export function renderHomeView({ mountEl, onNavigate }) {
     const openJoinModal = () => {
         joinModal?.setAttribute('aria-hidden', 'false');
         joinModal?.classList.add('is-open');
+        // Auto-fill random name if empty
+        if (playerNameInput && !playerNameInput.value.trim()) {
+            playerNameInput.value = generateRandomName();
+        }
         playerNameInput?.focus();
     };
 
@@ -244,6 +285,10 @@ export function renderHomeView({ mountEl, onNavigate }) {
     const openCreateModal = () => {
         createModal?.setAttribute('aria-hidden', 'false');
         createModal?.classList.add('is-open');
+        // Auto-fill random name if empty
+        if (hostNameInput && !hostNameInput.value.trim()) {
+            hostNameInput.value = generateRandomName();
+        }
         hostNameInput?.focus();
     };
 
@@ -298,6 +343,24 @@ export function renderHomeView({ mountEl, onNavigate }) {
         }
     });
 
+    // Clear name buttons
+    const clearHostNameBtn = mountEl.querySelector('[data-action="clear-host-name"]');
+    const clearPlayerNameBtn = mountEl.querySelector('[data-action="clear-player-name"]');
+
+    clearHostNameBtn?.addEventListener('click', () => {
+        if (hostNameInput) {
+            hostNameInput.value = '';
+            hostNameInput.focus();
+        }
+    });
+
+    clearPlayerNameBtn?.addEventListener('click', () => {
+        if (playerNameInput) {
+            playerNameInput.value = '';
+            playerNameInput.focus();
+        }
+    });
+
     // Submit create room
     const submitCreateButton = mountEl.querySelector('[data-action="submit-create"]');
     const maxPlayersSelect = /** @type {HTMLSelectElement} */ (mountEl.querySelector('#max-players'));
@@ -314,6 +377,11 @@ export function renderHomeView({ mountEl, onNavigate }) {
         const result = await socketClient.createRoom(name, maxPlayers);
 
         if (result.success && result.room) {
+            // Auto-copy room ID to clipboard
+            const copied = await copyToClipboard(result.room.id);
+            if (copied) {
+                console.log('Room ID copied to clipboard:', result.room.id);
+            }
             closeCreateModal();
             onNavigate(`#/room/${result.room.id}`);
         } else {

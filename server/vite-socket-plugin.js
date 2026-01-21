@@ -486,6 +486,30 @@ export function socketIOPlugin() {
                         playerManager.updateCharacterData(room.id, stateUpdate.playerState.characterData);
                     }
 
+                    // Update combat state if provided (for multiplayer combat sync)
+                    if (stateUpdate.combatState !== undefined) {
+                        room.combatState = stateUpdate.combatState;
+                        console.log(`[Socket.IO] Combat state updated - isActive: ${stateUpdate.combatState?.isActive}, phase: ${stateUpdate.combatState?.phase}`);
+                    }
+
+                    // Update game over state if provided (for victory/defeat sync)
+                    if (stateUpdate.gameOver !== undefined) {
+                        room.gameOver = stateUpdate.gameOver;
+                        console.log(`[Socket.IO] Game over state updated - winner: ${stateUpdate.gameOver?.winner}`);
+                    }
+
+                    // Update combat result if provided (for combat result notification sync)
+                    if (stateUpdate.combatResult !== undefined) {
+                        room.combatResult = stateUpdate.combatResult;
+                        console.log(`[Socket.IO] Combat result updated - winner: ${stateUpdate.combatResult?.winner}`);
+                    }
+
+                    // Update current turn index if provided (for turn advancement after combat loss)
+                    if (stateUpdate.currentTurnIndex !== undefined) {
+                        room.currentTurnIndex = stateUpdate.currentTurnIndex;
+                        console.log(`[Socket.IO] Turn index updated to: ${stateUpdate.currentTurnIndex}`);
+                    }
+
                     if (callback) {
                         callback({ success: true });
                     }

@@ -74,6 +74,49 @@ let damageDiceModal = null;
  * } | null} */
 let roomEffectDiceModal = null;
 
+/** Combat modal state - for player vs player combat after haunt
+ * @type {{
+ *   isOpen: boolean;
+ *   phase: 'confirm' | 'attacker_roll' | 'waiting_defender' | 'defender_roll' | 'result';
+ *   attackerId: string;
+ *   defenderId: string;
+ *   attackerName: string;
+ *   defenderName: string;
+ *   attackStat: 'might';
+ *   attackerDiceCount: number;
+ *   defenderDiceCount: number;
+ *   attackerRoll: number | null;
+ *   defenderRoll: number | null;
+ *   inputValue: string;
+ *   winner: 'attacker' | 'defender' | 'tie' | null;
+ *   damage: number;
+ *   loserId: string | null;
+ * } | null} */
+let combatModal = null;
+
+/** Pending movement after combat resolution
+ * @type {{ direction: string; targetRoomId: string } | null} */
+let pendingCombatMovement = null;
+
+/** Track completed combats to prevent re-triggering in same room
+ * Key: "roomId:playerId1:playerId2" (sorted player IDs), Value: true
+ * Combat only triggers again when one player leaves and re-enters the room
+ * @type {Map<string, boolean>} */
+let completedCombats = new Map();
+
+/** Damage distribution modal state - for distributing combat/event damage across stats
+ * @type {{
+ *   isOpen: boolean;
+ *   totalDamage: number;
+ *   damageType: 'physical' | 'mental' | null;
+ *   stat1: string | null;
+ *   stat2: string | null;
+ *   stat1Damage: number;
+ *   stat2Damage: number;
+ *   source: 'combat' | 'event';
+ * } | null} */
+let damageDistributionModal = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -485,6 +528,38 @@ function createCharacterData(playerId, characterId) {
 }
 
 /**
+ * Ensure characterData is initialized for all players
+ * This is needed because the server doesn't initialize characterData
+ * @param {object} gameState - The game state to check/update
+ */
+function ensureCharacterDataInitialized(gameState) {
+    if (!gameState || !gameState.players) return;
+
+    // Ensure playerState exists
+    if (!gameState.playerState) {
+        gameState.playerState = {};
+    }
+
+    // Ensure characterData container exists
+    if (!gameState.playerState.characterData) {
+        gameState.playerState.characterData = {};
+    }
+
+    // Initialize characterData for each player if missing
+    for (const player of gameState.players) {
+        if (!player.characterId) continue;
+
+        if (!gameState.playerState.characterData[player.id]) {
+            const charData = createCharacterData(player.id, player.characterId);
+            if (charData) {
+                gameState.playerState.characterData[player.id] = charData;
+                console.log('[CharacterData] Initialized for player:', player.id, player.characterId);
+            }
+        }
+    }
+}
+
+/**
  * Create game state from passed player data (from debug room)
  * @param {Array} players - Players array from room
  * @returns {any}
@@ -623,6 +698,21 @@ function getCharacterSpeed(characterId, characterData = null) {
     // Use current speed index from characterData if available
     const speedIndex = characterData?.stats?.speed ?? speedTrait.startIndex;
     return speedTrait.track[speedIndex];
+}
+
+/**
+ * Get current Might stat value for a character
+ * @param {string} characterId
+ * @param {object|null} characterData - Optional character data with current stats
+ * @returns {number} Current might value
+ */
+function getCharacterMight(characterId, characterData = null) {
+    const char = CHARACTER_BY_ID[characterId];
+    if (!char) return 3; // default
+    const mightTrait = char.traits.might;
+    // Use current might index from characterData if available
+    const mightIndex = characterData?.stats?.might ?? mightTrait.startIndex;
+    return mightTrait.track[mightIndex];
 }
 
 /**
@@ -906,6 +996,651 @@ function openDamageDiceModal(mountEl, physicalDice, mentalDice) {
 
     console.log('[DamageDice] Opened modal - physical:', physicalDice, 'mental:', mentalDice);
     updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Open combat modal when player enters room with enemy
+ * @param {HTMLElement} mountEl
+ * @param {string} attackerId - Player initiating combat
+ * @param {string} defenderId - Player being attacked
+ * @param {{ direction: string; targetRoomId: string } | null} movement - Pending movement info (null if player already moved)
+ */
+function openCombatModal(mountEl, attackerId, defenderId, movement) {
+    const attacker = currentGameState.players?.find(p => p.id === attackerId);
+    const defender = currentGameState.players?.find(p => p.id === defenderId);
+
+    if (!attacker || !defender) {
+        console.error('[Combat] Player not found:', attackerId, defenderId);
+        return;
+    }
+
+    const attackerName = getCharacterName(attacker.characterId);
+    const defenderName = getCharacterName(defender.characterId);
+    const defenderFaction = getFaction(currentGameState, defenderId);
+    const defenderFactionLabel = getFactionLabel(defenderFaction);
+
+    // Get Might stat for dice count
+    const attackerMight = getCharacterMight(attacker.characterId,
+        currentGameState.playerState?.characterData?.[attackerId]);
+    const defenderMight = getCharacterMight(defender.characterId,
+        currentGameState.playerState?.characterData?.[defenderId]);
+
+    combatModal = {
+        isOpen: true,
+        phase: 'confirm',
+        attackerId: attackerId,
+        defenderId: defenderId,
+        attackerName: attackerName,
+        defenderName: defenderName,
+        defenderFactionLabel: defenderFactionLabel,
+        attackStat: 'might',
+        attackerDiceCount: attackerMight,
+        defenderDiceCount: defenderMight,
+        attackerRoll: null,
+        defenderRoll: null,
+        inputValue: '',
+        winner: null,
+        damage: 0,
+        loserId: null
+    };
+
+    // Store pending movement to resume after combat
+    pendingCombatMovement = movement;
+
+    console.log('[Combat] Opened modal - attacker:', attackerName, 'defender:', defenderName);
+    skipMapCentering = true;
+
+    // Sync combat state to server immediately so other players see it
+    // and to prevent the onGameState handler from closing this modal
+    if (!isDebugMode) {
+        currentGameState.combatState = {
+            isActive: true,
+            phase: 'confirm',
+            attackerId: attackerId,
+            defenderId: defenderId,
+            attackerRoll: null,
+            defenderRoll: null,
+            winner: null,
+            damage: 0,
+            loserId: null
+        };
+        syncGameStateToServer();
+    }
+
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close combat modal and handle results
+ * @param {HTMLElement} mountEl
+ * @param {boolean} attackerLost - If true, attacker lost and loses their turn
+ * @param {object} resultInfo - Combat result info for notification (optional)
+ */
+function closeCombatModal(mountEl, attackerLost = false, resultInfo = null) {
+    const wasAttacker = combatModal?.attackerId === mySocketId;
+    const attackerId = combatModal?.attackerId;
+    const defenderId = combatModal?.defenderId;
+    const movement = pendingCombatMovement;
+
+    // Store result info for notification before clearing modal
+    const combatResult = resultInfo || (combatModal ? {
+        attackerName: combatModal.attackerName,
+        defenderName: combatModal.defenderName,
+        attackerRoll: combatModal.attackerRoll,
+        defenderRoll: combatModal.defenderRoll,
+        winner: combatModal.winner,
+        damage: combatModal.damage
+    } : null);
+
+    // Mark combat as completed so it won't trigger again in the same room
+    // Combat will only trigger again when one player leaves and re-enters
+    if (attackerId && defenderId && currentGameState) {
+        const playerPositions = currentGameState.playerState?.playerPositions || {};
+        const combatRoomId = playerPositions[attackerId] || playerPositions[defenderId];
+        if (combatRoomId) {
+            markCombatCompleted(combatRoomId, attackerId, defenderId);
+        }
+    }
+
+    combatModal = null;
+    pendingCombatMovement = null;
+
+    // If attacker lost, they lose their turn
+    if (attackerLost && currentGameState && attackerId) {
+        // Set attacker's moves to 0
+        currentGameState.playerMoves[attackerId] = 0;
+
+        // Advance to next player's turn
+        const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+        if (currentTurnPlayer === attackerId) {
+            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+
+            // Set moves for next player
+            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+            if (nextPlayer) {
+                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId];
+                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+                currentGameState.playerMoves[nextPlayerId] = speed;
+            }
+
+            console.log('[Combat] Attacker lost - turn advanced to:', nextPlayerId);
+        }
+    }
+
+    // Set combat result for notification (sync to all players)
+    if (combatResult && currentGameState) {
+        currentGameState.combatResult = combatResult;
+    }
+
+    // Sync combat state clear to server
+    if (currentGameState) {
+        currentGameState.combatState = null;
+        syncGameStateToServer();
+    }
+
+    // Show combat result notification
+    if (combatResult) {
+        showCombatResultNotification(mountEl, combatResult);
+    }
+
+    // If attacker won or tie, resume movement
+    if (!attackerLost && wasAttacker && movement) {
+        // Resume the movement that was interrupted
+        handleMoveAfterCombat(mountEl, movement.direction, movement.targetRoomId);
+    } else {
+        updateGameUI(mountEl, currentGameState, mySocketId);
+    }
+}
+
+/**
+ * Show combat result notification to all players
+ * @param {HTMLElement} mountEl
+ * @param {object} result - Combat result info
+ */
+function showCombatResultNotification(mountEl, result) {
+    // Remove existing notification if any
+    const existing = document.querySelector('.combat-result-notification');
+    if (existing) existing.remove();
+
+    const { attackerName, defenderName, attackerRoll, defenderRoll, winner, damage } = result;
+
+    let resultText = '';
+    let resultClass = '';
+
+    if (winner === 'tie') {
+        resultText = 'HOA! Khong ai chiu sat thuong.';
+        resultClass = 'combat-result-notification--tie';
+    } else if (winner === 'attacker') {
+        resultText = `${attackerName} tan cong thanh cong! ${defenderName} chiu ${damage} sat thuong.`;
+        resultClass = 'combat-result-notification--attacker';
+    } else {
+        resultText = `${defenderName} phan don thanh cong! ${attackerName} chiu ${damage} sat thuong va mat luot.`;
+        resultClass = 'combat-result-notification--defender';
+    }
+
+    const notification = document.createElement('div');
+    notification.className = `combat-result-notification ${resultClass}`;
+    notification.innerHTML = `
+        <div class="combat-result-notification__content">
+            <div class="combat-result-notification__header">KET QUA CHIEN DAU</div>
+            <div class="combat-result-notification__scores">
+                <span class="combat-result-notification__score">${attackerName}: ${attackerRoll ?? '?'}</span>
+                <span class="combat-result-notification__vs">VS</span>
+                <span class="combat-result-notification__score">${defenderName}: ${defenderRoll ?? '?'}</span>
+            </div>
+            <div class="combat-result-notification__result">${resultText}</div>
+            <button class="combat-result-notification__btn" type="button" data-action="close-combat-result">OK</button>
+        </div>
+    `;
+
+    document.body.appendChild(notification);
+
+    // Handle close button
+    notification.querySelector('[data-action="close-combat-result"]')?.addEventListener('click', () => {
+        notification.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => {
+            notification.remove();
+            // Clear combat result from state
+            if (currentGameState) {
+                currentGameState.combatResult = null;
+            }
+        }, 300);
+    });
+
+    // Auto-close after 8 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.animation = 'fadeOut 0.3s ease';
+            setTimeout(() => {
+                notification.remove();
+                if (currentGameState) {
+                    currentGameState.combatResult = null;
+                }
+            }, 300);
+        }
+    }, 8000);
+}
+
+/**
+ * Resume movement after combat (for attacker who won or tied)
+ * @param {HTMLElement} mountEl
+ * @param {string} direction
+ * @param {string} targetRoomId
+ */
+function handleMoveAfterCombat(mountEl, direction, targetRoomId) {
+    if (!currentGameState || !mySocketId) return;
+
+    const playerId = mySocketId;
+
+    // Get current room before moving
+    const currentRoomId = currentGameState.playerState?.playerPositions?.[playerId];
+
+    // Clear completed combat flag when leaving current room
+    if (currentRoomId) {
+        clearCompletedCombatForPlayer(playerId, currentRoomId);
+    }
+
+    // Move player to target room
+    if (!currentGameState.playerState.playerPositions) {
+        currentGameState.playerState.playerPositions = {};
+    }
+    currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+
+    // Consume 1 move
+    if (currentGameState.playerMoves[playerId] > 0) {
+        currentGameState.playerMoves[playerId]--;
+    }
+
+    // Check for room tokens
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    const targetRoom = revealedRooms[targetRoomId];
+
+    if (targetRoom && targetRoom.tokens && targetRoom.tokens.length > 0) {
+        if (!currentGameState.playerState.drawnRooms) {
+            currentGameState.playerState.drawnRooms = [];
+        }
+        if (!currentGameState.playerState.drawnRooms.includes(targetRoomId)) {
+            currentGameState.playerState.drawnRooms.push(targetRoomId);
+            initTokenDrawing(mountEl, targetRoom.tokens);
+            syncGameStateToServer();
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+    }
+
+    syncGameStateToServer();
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Open damage distribution modal - for distributing combat/event damage across stats
+ * @param {HTMLElement} mountEl
+ * @param {number} totalDamage - Total damage to distribute
+ * @param {'combat' | 'event'} source - Source of damage
+ * @param {'physical' | 'mental' | null} preselectedType - If type is already known (skip selection)
+ */
+function openDamageDistributionModal(mountEl, totalDamage, source, preselectedType = null) {
+    damageDistributionModal = {
+        isOpen: true,
+        totalDamage: totalDamage,
+        damageType: preselectedType,
+        stat1: null,
+        stat2: null,
+        stat1Damage: 0,
+        stat2Damage: 0,
+        source: source
+    };
+
+    // If type preselected, set the stats
+    if (preselectedType === 'physical') {
+        damageDistributionModal.stat1 = 'speed';
+        damageDistributionModal.stat2 = 'might';
+    } else if (preselectedType === 'mental') {
+        damageDistributionModal.stat1 = 'sanity';
+        damageDistributionModal.stat2 = 'knowledge';
+    }
+
+    console.log('[DamageDistribution] Opened modal - damage:', totalDamage, 'type:', preselectedType);
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close damage distribution modal and apply damage
+ * @param {HTMLElement} mountEl
+ */
+function closeDamageDistributionModal(mountEl) {
+    if (!damageDistributionModal) return;
+
+    const { stat1, stat2, stat1Damage, stat2Damage } = damageDistributionModal;
+    const playerId = mySocketId;
+
+    // Apply damage to stats
+    if (stat1Damage > 0 && stat1) {
+        applyStatChange(playerId, stat1, -stat1Damage);
+        console.log(`[DamageDistribution] Applied ${stat1Damage} damage to ${stat1}`);
+    }
+    if (stat2Damage > 0 && stat2) {
+        applyStatChange(playerId, stat2, -stat2Damage);
+        console.log(`[DamageDistribution] Applied ${stat2Damage} damage to ${stat2}`);
+    }
+
+    damageDistributionModal = null;
+
+    // Check for death AFTER applying damage
+    const died = checkPlayerDeath(mountEl, playerId);
+
+    // Sync to server
+    syncGameStateToServer();
+
+    if (!died) {
+        updateGameUI(mountEl, currentGameState, mySocketId);
+    }
+}
+
+/**
+ * Check if a player is dead (any stat at 0 after receiving damage)
+ * Death only applies when haunt has been triggered
+ * @param {HTMLElement} mountEl
+ * @param {string} playerId
+ * @returns {boolean} - true if player died
+ */
+function checkPlayerDeath(mountEl, playerId) {
+    if (!currentGameState || !isHauntTriggered(currentGameState)) {
+        return false; // No death before haunt
+    }
+
+    const charData = currentGameState.playerState?.characterData?.[playerId];
+    if (!charData || !charData.stats) {
+        return false;
+    }
+
+    // Check if any stat is at 0
+    const stats = charData.stats;
+    const isDead = stats.speed === 0 || stats.might === 0 ||
+                   stats.sanity === 0 || stats.knowledge === 0;
+
+    if (isDead && !charData.isDead) {
+        // Mark player as dead
+        charData.isDead = true;
+
+        const player = currentGameState.players?.find(p => p.id === playerId);
+        const characterName = getCharacterName(player?.characterId);
+        const faction = getFaction(currentGameState, playerId);
+
+        console.log('[Death] Player died:', playerId, characterName, 'faction:', faction);
+
+        // Sync death to server
+        syncGameStateToServer();
+
+        // Check win condition
+        checkWinCondition(mountEl);
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Check win conditions and show victory modal if game is over
+ * Win conditions:
+ * - Traitor wins: All survivors are dead
+ * - Survivors win: Traitor is dead
+ * @param {HTMLElement} mountEl
+ */
+function checkWinCondition(mountEl) {
+    if (!currentGameState || !isHauntTriggered(currentGameState)) {
+        return;
+    }
+
+    const traitorId = currentGameState.hauntState?.traitorId;
+    if (!traitorId) return; // No traitor assigned yet
+
+    // Check if traitor is dead
+    const traitorData = currentGameState.playerState?.characterData?.[traitorId];
+    const traitorIsDead = traitorData?.isDead === true;
+
+    // Check if all survivors are dead
+    const survivors = currentGameState.players?.filter(p =>
+        getFaction(currentGameState, p.id) === 'survivor'
+    ) || [];
+
+    const aliveSurvivors = survivors.filter(p => {
+        const charData = currentGameState.playerState?.characterData?.[p.id];
+        return charData?.isDead !== true;
+    });
+
+    let winnerFaction = null;
+
+    if (traitorIsDead) {
+        winnerFaction = 'survivor';
+        console.log('[Victory] Survivors win! Traitor is dead.');
+    } else if (aliveSurvivors.length === 0) {
+        winnerFaction = 'traitor';
+        console.log('[Victory] Traitor wins! All survivors are dead.');
+    }
+
+    if (winnerFaction) {
+        // Collect dead players for display
+        const deadPlayers = currentGameState.players?.filter(p => {
+            const charData = currentGameState.playerState?.characterData?.[p.id];
+            return charData?.isDead === true;
+        }).map(p => ({
+            id: p.id,
+            name: getCharacterName(p.characterId),
+            faction: getFaction(currentGameState, p.id)
+        })) || [];
+
+        // Set game over state
+        currentGameState.gameOver = {
+            winner: winnerFaction,
+            deadPlayers: deadPlayers
+        };
+
+        // Sync to server for multiplayer
+        syncGameStateToServer();
+
+        // Show victory modal
+        showVictoryModal(mountEl, winnerFaction, deadPlayers);
+    }
+}
+
+/**
+ * Show victory modal when game ends
+ * @param {HTMLElement} mountEl
+ * @param {'traitor' | 'survivor'} winnerFaction
+ * @param {Array<{id: string, name: string, faction: string}>} deadPlayers
+ */
+function showVictoryModal(mountEl, winnerFaction, deadPlayers) {
+    // Remove existing modal if any
+    const existing = document.querySelector('.victory-overlay');
+    if (existing) existing.remove();
+
+    const isTraitorWin = winnerFaction === 'traitor';
+    const myFaction = getFaction(currentGameState, mySocketId);
+    const didIWin = myFaction === winnerFaction;
+
+    const headerText = isTraitorWin ? 'KE PHAN BOI THANG!' : 'NGUOI SONG SOT THANG!';
+    const subText = didIWin ? 'Chuc mung! Ban da CHIEN THANG!' : 'Ban da THAT BAI...';
+
+    const deadListHtml = deadPlayers.length > 0
+        ? `
+            <div class="victory-modal__dead-list">
+                <h4>Nhung nguoi da nga:</h4>
+                <ul>
+                    ${deadPlayers.map(p => `
+                        <li class="victory-modal__dead-player victory-modal__dead-player--${p.faction}">
+                            ${p.name} <span class="victory-modal__faction">(${getFactionLabel(p.faction)})</span>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        `
+        : '';
+
+    const modal = document.createElement('div');
+    modal.className = `victory-overlay victory-overlay--${winnerFaction}`;
+    modal.innerHTML = `
+        <div class="victory-modal victory-modal--${winnerFaction}">
+            <div class="victory-modal__icon">${isTraitorWin ? '💀' : '🏆'}</div>
+            <h2 class="victory-modal__title victory-modal__title--${winnerFaction}">${headerText}</h2>
+            <p class="victory-modal__subtitle victory-modal__subtitle--${didIWin ? 'win' : 'lose'}">${subText}</p>
+            ${deadListHtml}
+            <button class="victory-modal__btn action-button" type="button" data-action="victory-close">
+                Ve Trang Chu
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Handle close button
+    modal.querySelector('[data-action="victory-close"]')?.addEventListener('click', () => {
+        modal.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => {
+            modal.remove();
+            // Navigate to home
+            window.location.hash = '#/';
+        }, 300);
+    });
+}
+
+/**
+ * Calculate combat result
+ * @param {number} attackerRoll
+ * @param {number} defenderRoll
+ * @returns {{ winner: 'attacker' | 'defender' | 'tie'; damage: number; loserId: string | null }}
+ */
+function calculateCombatResult(attackerRoll, defenderRoll) {
+    if (!combatModal) return { winner: 'tie', damage: 0, loserId: null };
+
+    if (attackerRoll > defenderRoll) {
+        return {
+            winner: 'attacker',
+            damage: attackerRoll - defenderRoll,
+            loserId: combatModal.defenderId
+        };
+    } else if (defenderRoll > attackerRoll) {
+        return {
+            winner: 'defender',
+            damage: defenderRoll - attackerRoll,
+            loserId: combatModal.attackerId
+        };
+    } else {
+        return { winner: 'tie', damage: 0, loserId: null };
+    }
+}
+
+/**
+ * Generate a unique key for tracking completed combats
+ * @param {string} roomId - Room where combat occurred
+ * @param {string} playerId1 - First player ID
+ * @param {string} playerId2 - Second player ID
+ * @returns {string} Unique combat key
+ */
+function getCombatKey(roomId, playerId1, playerId2) {
+    // Sort player IDs to ensure consistent key regardless of who is attacker/defender
+    const sortedIds = [playerId1, playerId2].sort();
+    return `${roomId}:${sortedIds[0]}:${sortedIds[1]}`;
+}
+
+/**
+ * Check if combat was already completed between two players in a room
+ * @param {string} roomId - Room ID
+ * @param {string} playerId1 - First player ID
+ * @param {string} playerId2 - Second player ID
+ * @returns {boolean} True if combat was already completed
+ */
+function isCombatCompleted(roomId, playerId1, playerId2) {
+    const key = getCombatKey(roomId, playerId1, playerId2);
+    return completedCombats.has(key);
+}
+
+/**
+ * Mark combat as completed between two players in a room
+ * @param {string} roomId - Room ID
+ * @param {string} playerId1 - First player ID
+ * @param {string} playerId2 - Second player ID
+ */
+function markCombatCompleted(roomId, playerId1, playerId2) {
+    const key = getCombatKey(roomId, playerId1, playerId2);
+    completedCombats.set(key, true);
+    console.log('[Combat] Marked combat as completed:', key);
+}
+
+/**
+ * Clear completed combat flags for a player leaving a room
+ * This allows combat to trigger again when they re-enter
+ * @param {string} playerId - Player who is leaving
+ * @param {string} roomId - Room they are leaving
+ */
+function clearCompletedCombatForPlayer(playerId, roomId) {
+    // Remove all combat keys involving this player and room
+    for (const key of completedCombats.keys()) {
+        if (key.startsWith(`${roomId}:`) && key.includes(playerId)) {
+            completedCombats.delete(key);
+            console.log('[Combat] Cleared completed combat flag:', key);
+        }
+    }
+}
+
+/**
+ * Get enemy player in a specific room (if any)
+ * @param {string} roomId - Target room ID
+ * @param {string} currentPlayerId - The player moving (excluded from check)
+ * @returns {object|null} Enemy player object or null
+ */
+function getEnemyInRoom(roomId, currentPlayerId) {
+    if (!currentGameState || !isHauntTriggered(currentGameState)) {
+        console.log('[Combat] getEnemyInRoom - haunt not triggered or no state');
+        return null;
+    }
+
+    const playerPositions = currentGameState.playerState?.playerPositions || {};
+    console.log('[Combat] getEnemyInRoom - checking roomId:', roomId, 'positions:', playerPositions);
+
+    // Find players in the target room (excluding current player)
+    for (const player of currentGameState.players || []) {
+        if (player.id === currentPlayerId) continue;
+
+        const playerRoomId = playerPositions[player.id];
+        console.log('[Combat] Player', player.id, 'is at', playerRoomId, 'target:', roomId, 'match:', playerRoomId === roomId);
+        if (playerRoomId === roomId) {
+            // Check if this player is an enemy
+            const isEnemyPlayer = isEnemy(currentGameState, currentPlayerId, player.id);
+            console.log('[Combat] Found player in room, isEnemy:', isEnemyPlayer);
+            if (isEnemyPlayer) {
+                // Check if combat was already completed between these players in this room
+                if (isCombatCompleted(roomId, currentPlayerId, player.id)) {
+                    console.log('[Combat] Combat already completed in this room, skipping');
+                    continue; // Skip this enemy, combat already done
+                }
+                return player;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Map server combat phase to local modal phase
+ * @param {string} serverPhase - Server phase ('waiting_attacker', 'waiting_defender', 'result')
+ * @param {boolean} isDefender - Whether current player is the defender
+ * @returns {string} Local phase for combat modal
+ */
+function mapServerPhaseToLocal(serverPhase, isDefender) {
+    switch (serverPhase) {
+        case 'waiting_attacker':
+            return isDefender ? 'waiting_defender' : 'attacker_roll';
+        case 'waiting_defender':
+            return isDefender ? 'defender_roll' : 'waiting_defender';
+        case 'result':
+            return 'result';
+        default:
+            return 'confirm';
+    }
 }
 
 /**
@@ -1943,6 +2678,309 @@ function renderDamageDiceModal() {
 }
 
 /**
+ * Render damage distribution modal - for distributing combat/event damage across stats
+ * @returns {string} HTML string
+ */
+function renderDamageDistributionModal() {
+    if (!damageDistributionModal?.isOpen) return '';
+
+    const { totalDamage, damageType, stat1, stat2, stat1Damage, stat2Damage } = damageDistributionModal;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        knowledge: 'Kien thuc (Knowledge)',
+        sanity: 'Tam tri (Sanity)'
+    };
+
+    // Phase 1: Type selection (if damageType is null)
+    if (!damageType) {
+        return `
+            <div class="damage-dist-overlay">
+                <div class="damage-dist-modal" data-modal-content="true">
+                    <header class="damage-dist-modal__header">
+                        <h3 class="damage-dist-modal__title">CHIU SAT THUONG</h3>
+                    </header>
+                    <div class="damage-dist-modal__body">
+                        <p class="damage-dist-modal__damage-total">
+                            Ban chiu <strong>${totalDamage}</strong> sat thuong
+                        </p>
+                        <p class="damage-dist-modal__instruction">Chon loai sat thuong:</p>
+                        <div class="damage-dist-modal__type-buttons">
+                            <button class="damage-dist-modal__btn damage-dist-modal__btn--physical"
+                                    type="button" data-action="damage-type-select" data-type="physical">
+                                Vat ly<br/><small>(Speed / Might)</small>
+                            </button>
+                            <button class="damage-dist-modal__btn damage-dist-modal__btn--mental"
+                                    type="button" data-action="damage-type-select" data-type="mental">
+                                Tinh than<br/><small>(Sanity / Knowledge)</small>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Phase 2: Distribution
+    const remainingDamage = totalDamage - stat1Damage - stat2Damage;
+    const canConfirm = remainingDamage === 0;
+
+    // Get current stat values to show player
+    const playerId = mySocketId;
+    const charData = currentGameState?.playerState?.characterData?.[playerId];
+    const stat1Current = charData?.stats?.[stat1] ?? 0;
+    const stat2Current = charData?.stats?.[stat2] ?? 0;
+
+    return `
+        <div class="damage-dist-overlay">
+            <div class="damage-dist-modal" data-modal-content="true">
+                <header class="damage-dist-modal__header">
+                    <h3 class="damage-dist-modal__title">PHAN BO SAT THUONG</h3>
+                </header>
+                <div class="damage-dist-modal__body">
+                    <div class="damage-dist-modal__remaining ${remainingDamage === 0 ? 'damage-dist-modal__remaining--done' : ''}">
+                        Sat thuong con lai: <strong>${remainingDamage}</strong>
+                    </div>
+
+                    <div class="damage-dist-modal__stat-row">
+                        <label class="damage-dist-modal__stat-label">
+                            ${statLabels[stat1]} <span class="damage-dist-modal__current">(index: ${stat1Current})</span>
+                        </label>
+                        <div class="damage-dist-modal__stat-input">
+                            <button class="damage-dist-modal__btn damage-dist-modal__btn--minus"
+                                    type="button" data-action="damage-adjust" data-stat="1" data-delta="-1"
+                                    ${stat1Damage <= 0 ? 'disabled' : ''}>-</button>
+                            <span class="damage-dist-modal__stat-value">${stat1Damage}</span>
+                            <button class="damage-dist-modal__btn damage-dist-modal__btn--plus"
+                                    type="button" data-action="damage-adjust" data-stat="1" data-delta="1"
+                                    ${remainingDamage <= 0 ? 'disabled' : ''}>+</button>
+                        </div>
+                    </div>
+
+                    <div class="damage-dist-modal__stat-row">
+                        <label class="damage-dist-modal__stat-label">
+                            ${statLabels[stat2]} <span class="damage-dist-modal__current">(index: ${stat2Current})</span>
+                        </label>
+                        <div class="damage-dist-modal__stat-input">
+                            <button class="damage-dist-modal__btn damage-dist-modal__btn--minus"
+                                    type="button" data-action="damage-adjust" data-stat="2" data-delta="-1"
+                                    ${stat2Damage <= 0 ? 'disabled' : ''}>-</button>
+                            <span class="damage-dist-modal__stat-value">${stat2Damage}</span>
+                            <button class="damage-dist-modal__btn damage-dist-modal__btn--plus"
+                                    type="button" data-action="damage-adjust" data-stat="2" data-delta="1"
+                                    ${remainingDamage <= 0 ? 'disabled' : ''}>+</button>
+                        </div>
+                    </div>
+
+                    <button class="damage-dist-modal__btn damage-dist-modal__btn--confirm"
+                            type="button" data-action="damage-dist-confirm"
+                            ${!canConfirm ? 'disabled' : ''}>
+                        ${canConfirm ? 'Xac nhan' : `Phan bo het ${remainingDamage} sat thuong`}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render combat modal - for player vs player combat
+ * @returns {string} HTML string
+ */
+function renderCombatModal() {
+    if (!combatModal?.isOpen) return '';
+
+    const {
+        phase, attackerId, defenderId, attackerName, defenderName,
+        defenderFactionLabel, attackStat, attackerDiceCount, defenderDiceCount,
+        attackerRoll, defenderRoll, inputValue, winner, damage, loserId
+    } = combatModal;
+
+    const isAttacker = mySocketId === attackerId;
+    const isDefender = mySocketId === defenderId;
+
+    let bodyContent = '';
+    let headerTitle = 'CHIEN DAU';
+    let headerClass = 'combat-modal__header';
+
+    // Phase 1: Confirm (only attacker sees this)
+    if (phase === 'confirm' && isAttacker) {
+        headerTitle = 'GAP KE DICH';
+        bodyContent = `
+            <div class="combat-modal__encounter">
+                <p class="combat-modal__text">Ban gap <strong>${defenderName}</strong></p>
+                <p class="combat-modal__faction">(${defenderFactionLabel})</p>
+                <p class="combat-modal__question">Ban muon tan cong?</p>
+            </div>
+            <div class="combat-modal__actions">
+                <button class="combat-modal__btn combat-modal__btn--attack"
+                        type="button" data-action="combat-attack">
+                    TAN CONG
+                </button>
+                <button class="combat-modal__btn combat-modal__btn--skip"
+                        type="button" data-action="combat-skip">
+                    BO QUA
+                </button>
+            </div>
+        `;
+    }
+    // Phase 2: Attacker rolling
+    else if (phase === 'attacker_roll' && isAttacker) {
+        headerTitle = 'TAN CONG';
+        bodyContent = `
+            <div class="combat-modal__roll-info">
+                <p>Do <strong>${attackerDiceCount}</strong> xuc xac Suc manh (Might)</p>
+                <p class="combat-modal__target">Tan cong ${defenderName}</p>
+            </div>
+            <div class="combat-modal__input-group">
+                <label class="combat-modal__label">Nhap ket qua xuc xac:</label>
+                <input
+                    type="number"
+                    class="combat-modal__input"
+                    id="combat-roll-input"
+                    min="0"
+                    value="${inputValue}"
+                    placeholder="Nhap so"
+                />
+            </div>
+            <div class="combat-modal__actions">
+                <button class="combat-modal__btn combat-modal__btn--confirm"
+                        type="button" data-action="combat-attacker-confirm">
+                    Xac nhan
+                </button>
+                <button class="combat-modal__btn combat-modal__btn--random"
+                        type="button" data-action="combat-attacker-random">
+                    Ngau nhien
+                </button>
+            </div>
+        `;
+    }
+    // Attacker waiting for defender
+    else if (phase === 'waiting_defender' && isAttacker) {
+        headerTitle = 'CHO DOI';
+        bodyContent = `
+            <div class="combat-modal__waiting">
+                <p>Ket qua tan cong cua ban: <strong>${attackerRoll}</strong></p>
+                <p class="combat-modal__waiting-text">Dang cho ${defenderName} phan don...</p>
+                <div class="combat-modal__spinner"></div>
+            </div>
+        `;
+    }
+    // Defender being attacked - waiting for attacker to roll or ready to defend
+    else if ((phase === 'waiting_defender' || phase === 'defender_roll') && isDefender) {
+        headerTitle = 'BI TAN CONG!';
+        headerClass = 'combat-modal__header combat-modal__header--danger';
+
+        if (phase === 'waiting_defender') {
+            // Waiting for attacker to finish rolling
+            bodyContent = `
+                <div class="combat-modal__attacked">
+                    <p class="combat-modal__warning">${attackerName} dang tan cong ban!</p>
+                    <p class="combat-modal__waiting-text">Dang cho ket qua tan cong...</p>
+                    <div class="combat-modal__spinner"></div>
+                </div>
+            `;
+        } else {
+            // Defender's turn to roll (phase === 'defender_roll')
+            bodyContent = `
+                <div class="combat-modal__attacked">
+                    <p class="combat-modal__warning">${attackerName} tan cong ban!</p>
+                    <p>Ket qua tan cong: <strong>${attackerRoll}</strong></p>
+                </div>
+                <div class="combat-modal__roll-info">
+                    <p>Tung xuc xac phan don!</p>
+                    <p>Do <strong>${defenderDiceCount}</strong> xuc xac Suc manh (Might)</p>
+                </div>
+                <div class="combat-modal__input-group">
+                    <label class="combat-modal__label">Nhap ket qua xuc xac:</label>
+                    <input
+                        type="number"
+                        class="combat-modal__input"
+                        id="combat-roll-input"
+                        min="0"
+                        value="${inputValue}"
+                        placeholder="Nhap so"
+                    />
+                </div>
+                <div class="combat-modal__actions">
+                    <button class="combat-modal__btn combat-modal__btn--confirm"
+                            type="button" data-action="combat-defender-confirm">
+                        Xac nhan
+                    </button>
+                    <button class="combat-modal__btn combat-modal__btn--random"
+                            type="button" data-action="combat-defender-random">
+                        Ngau nhien
+                    </button>
+                </div>
+            `;
+        }
+    }
+    // Phase 4: Result (both see this)
+    else if (phase === 'result') {
+        headerTitle = 'KET QUA';
+        const loserName = loserId === attackerId ? attackerName : defenderName;
+        const winnerName = winner === 'attacker' ? attackerName : defenderName;
+        const isLoser = loserId === mySocketId;
+
+        let resultText = '';
+        if (winner === 'tie') {
+            resultText = `<p class="combat-modal__result-tie">HOA! Khong ai chiu sat thuong.</p>`;
+        } else if (winner === 'defender') {
+            resultText = `
+                <p class="combat-modal__result-winner">${winnerName} PHAN DON THANH CONG!</p>
+                <p class="combat-modal__result-damage">${loserName} chiu <strong>${damage}</strong> sat thuong</p>
+            `;
+        } else {
+            resultText = `
+                <p class="combat-modal__result-winner">${winnerName} TAN CONG THANH CONG!</p>
+                <p class="combat-modal__result-damage">${loserName} chiu <strong>${damage}</strong> sat thuong</p>
+            `;
+        }
+
+        bodyContent = `
+            <div class="combat-modal__result">
+                <div class="combat-modal__scores">
+                    <div class="combat-modal__score">
+                        <span class="combat-modal__score-label">Tan cong</span>
+                        <span class="combat-modal__score-value">${attackerRoll}</span>
+                    </div>
+                    <span class="combat-modal__vs">VS</span>
+                    <div class="combat-modal__score">
+                        <span class="combat-modal__score-label">Phan don</span>
+                        <span class="combat-modal__score-value">${defenderRoll}</span>
+                    </div>
+                </div>
+                ${resultText}
+            </div>
+            <div class="combat-modal__actions">
+                <button class="combat-modal__btn combat-modal__btn--continue"
+                        type="button" data-action="combat-continue">
+                    ${isLoser && damage > 0 ? 'Chiu sat thuong' : 'Tiep tuc'}
+                </button>
+            </div>
+        `;
+    }
+    // Fallback - shouldn't happen
+    else {
+        return '';
+    }
+
+    return `
+        <div class="combat-overlay">
+            <div class="combat-modal" data-modal-content="true">
+                <header class="${headerClass}">
+                    <h3 class="combat-modal__title">${headerTitle}</h3>
+                </header>
+                <div class="combat-modal__body">
+                    ${bodyContent}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render character modal (reused from roomView)
  */
 function renderCharacterModal() {
@@ -2695,6 +3733,8 @@ function renderGameScreen(gameState, myId) {
             ${renderEventDiceModal()}
             ${renderDamageDiceModal()}
             ${renderRoomEffectDiceModal()}
+            ${renderCombatModal()}
+            ${renderDamageDistributionModal()}
             ${renderEndTurnModal()}
             ${renderTutorialModal()}
         `;
@@ -2817,10 +3857,18 @@ function attachDebugEventListeners(mountEl) {
     mountEl.addEventListener('click', (e) => {
         const target = /** @type {HTMLElement} */ (e.target);
         const actionEl = target.closest('[data-action]');
-        const action = actionEl?.dataset.action;
+        const action = target.dataset.action || actionEl?.dataset.action;
 
-        // Click outside sidebar to close it
-        if (sidebarOpen) {
+        console.log('[ClickListener1] action:', action, 'target:', target.tagName);
+
+        // Check if click is inside any modal overlay
+        const isInsideModal = target.closest('.combat-overlay') ||
+                              target.closest('.damage-dice-overlay') ||
+                              target.closest('.room-effect-dice-overlay') ||
+                              target.closest('.event-dice-overlay');
+
+        // Click outside sidebar to close it (but not if inside modal)
+        if (sidebarOpen && !isInsideModal) {
             const sidebar = mountEl.querySelector('.game-sidebar');
             const toggleBtn = mountEl.querySelector('.sidebar-toggle');
             const cardsViewModal = mountEl.querySelector('.cards-view-overlay');
@@ -2833,8 +3881,8 @@ function attachDebugEventListeners(mountEl) {
             }
         }
 
-        // Click outside turn order to collapse it
-        if (turnOrderExpanded) {
+        // Click outside turn order to collapse it (but not if inside modal)
+        if (turnOrderExpanded && !isInsideModal) {
             const turnOrder = mountEl.querySelector('.turn-order');
             const isClickInsideTurnOrder = turnOrder?.contains(target);
 
@@ -3388,6 +4436,77 @@ function attachDebugEventListeners(mountEl) {
             return;
         }
 
+        // ===== DAMAGE DISTRIBUTION MODAL HANDLERS =====
+
+        // Damage distribution: Type selection
+        if (action === 'damage-type-select') {
+            console.log('[DamageDistribution] Type click - modal:', damageDistributionModal, 'actionEl:', actionEl);
+            if (!damageDistributionModal) {
+                console.log('[DamageDistribution] Modal is null, returning');
+                return;
+            }
+
+            const type = actionEl?.dataset?.type; // 'physical' or 'mental'
+            console.log('[DamageDistribution] Got type from actionEl:', type);
+            damageDistributionModal.damageType = type;
+
+            if (type === 'physical') {
+                damageDistributionModal.stat1 = 'speed';
+                damageDistributionModal.stat2 = 'might';
+            } else {
+                damageDistributionModal.stat1 = 'sanity';
+                damageDistributionModal.stat2 = 'knowledge';
+            }
+
+            console.log('[DamageDistribution] Type selected:', type);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Damage distribution: Adjust damage allocation (+/- buttons)
+        if (action === 'damage-adjust') {
+            if (!damageDistributionModal) return;
+
+            const statNum = actionEl?.dataset?.stat; // '1' or '2'
+            const delta = parseInt(actionEl?.dataset?.delta || '0', 10); // +1 or -1
+
+            const remaining = damageDistributionModal.totalDamage -
+                damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
+
+            if (statNum === '1') {
+                const newValue = damageDistributionModal.stat1Damage + delta;
+                if (newValue >= 0 && (delta < 0 || remaining > 0)) {
+                    damageDistributionModal.stat1Damage = newValue;
+                }
+            } else if (statNum === '2') {
+                const newValue = damageDistributionModal.stat2Damage + delta;
+                if (newValue >= 0 && (delta < 0 || remaining > 0)) {
+                    damageDistributionModal.stat2Damage = newValue;
+                }
+            }
+
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Damage distribution: Confirm and apply
+        if (action === 'damage-dist-confirm') {
+            if (!damageDistributionModal) return;
+
+            const remaining = damageDistributionModal.totalDamage -
+                damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
+
+            if (remaining !== 0) {
+                console.log('[DamageDistribution] Cannot confirm - remaining damage:', remaining);
+                return;
+            }
+
+            closeDamageDistributionModal(mountEl);
+            return;
+        }
+
         // ===== ROOM EFFECT DICE MODAL HANDLERS =====
 
         // Room effect dice input change (handled via onchange in render)
@@ -3445,6 +4564,208 @@ function attachDebugEventListeners(mountEl) {
             return;
         }
 
+        // === COMBAT MODAL HANDLERS ===
+
+        // Combat: Attack button clicked
+        if (action === 'combat-attack') {
+            console.log('[Combat] Attack clicked - combatModal:', combatModal?.phase, 'isOpen:', combatModal?.isOpen);
+            if (!combatModal || combatModal.phase !== 'confirm') {
+                console.log('[Combat] Attack blocked - combatModal null or phase not confirm');
+                return;
+            }
+
+            // Start attack - move to attacker roll phase
+            combatModal.phase = 'attacker_roll';
+            combatModal.inputValue = '';
+
+            // Sync combat state to server for multiplayer
+            if (currentGameState) {
+                currentGameState.combatState = {
+                    isActive: true,
+                    attackerId: combatModal.attackerId,
+                    defenderId: combatModal.defenderId,
+                    phase: 'waiting_attacker',
+                    attackerRoll: null,
+                    defenderRoll: null,
+                    attackStat: 'might',
+                    winner: null,
+                    damage: 0,
+                    loserId: null
+                };
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Attack initiated');
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Skip button clicked
+        if (action === 'combat-skip') {
+            console.log('[Combat] Skip clicked - combatModal:', combatModal?.phase, 'isOpen:', combatModal?.isOpen);
+            if (!combatModal || combatModal.phase !== 'confirm') {
+                console.log('[Combat] Skip blocked - combatModal null or phase not confirm');
+                return;
+            }
+
+            console.log('[Combat] Skipped combat');
+            closeCombatModal(mountEl, false); // false = don't skip move, continue
+            return;
+        }
+
+        // Combat: Confirm attacker roll
+        if (action === 'combat-attacker-confirm') {
+            if (!combatModal || combatModal.phase !== 'attacker_roll') return;
+
+            const inputEl = /** @type {HTMLInputElement} */ (
+                mountEl.querySelector('#combat-roll-input')
+            );
+            const value = parseInt(inputEl?.value || '0', 10);
+
+            if (isNaN(value) || value < 0) return;
+
+            combatModal.attackerRoll = value;
+            combatModal.phase = 'waiting_defender';
+            combatModal.inputValue = '';
+
+            // Sync to server - defender will see the attacker's roll
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.attackerRoll = value;
+                currentGameState.combatState.phase = 'waiting_defender';
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Attacker rolled:', value);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Random attacker roll
+        if (action === 'combat-attacker-random') {
+            if (!combatModal || combatModal.phase !== 'attacker_roll') return;
+
+            const diceCount = combatModal.attackerDiceCount || 1;
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+
+            combatModal.attackerRoll = total;
+            combatModal.phase = 'waiting_defender';
+            combatModal.inputValue = '';
+
+            // Sync to server
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.attackerRoll = total;
+                currentGameState.combatState.phase = 'waiting_defender';
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Attacker random roll:', total);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Confirm defender roll
+        if (action === 'combat-defender-confirm') {
+            if (!combatModal || combatModal.phase !== 'defender_roll') return;
+
+            const inputEl = /** @type {HTMLInputElement} */ (
+                mountEl.querySelector('#combat-roll-input')
+            );
+            const value = parseInt(inputEl?.value || '0', 10);
+
+            if (isNaN(value) || value < 0) return;
+
+            combatModal.defenderRoll = value;
+
+            // Calculate result
+            const result = calculateCombatResult(combatModal.attackerRoll, value);
+            combatModal.winner = result.winner;
+            combatModal.damage = result.damage;
+            combatModal.loserId = result.loserId;
+            combatModal.phase = 'result';
+            combatModal.inputValue = '';
+
+            // Sync to server
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.defenderRoll = value;
+                currentGameState.combatState.phase = 'result';
+                currentGameState.combatState.winner = result.winner;
+                currentGameState.combatState.damage = result.damage;
+                currentGameState.combatState.loserId = result.loserId;
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Defender rolled:', value, 'Result:', result);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Random defender roll
+        if (action === 'combat-defender-random') {
+            if (!combatModal || combatModal.phase !== 'defender_roll') return;
+
+            const diceCount = combatModal.defenderDiceCount || 1;
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+
+            combatModal.defenderRoll = total;
+
+            // Calculate result
+            const result = calculateCombatResult(combatModal.attackerRoll, total);
+            combatModal.winner = result.winner;
+            combatModal.damage = result.damage;
+            combatModal.loserId = result.loserId;
+            combatModal.phase = 'result';
+            combatModal.inputValue = '';
+
+            // Sync to server
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.defenderRoll = total;
+                currentGameState.combatState.phase = 'result';
+                currentGameState.combatState.winner = result.winner;
+                currentGameState.combatState.damage = result.damage;
+                currentGameState.combatState.loserId = result.loserId;
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Defender random roll:', total, 'Result:', result);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Continue after result (loser takes damage)
+        if (action === 'combat-continue') {
+            if (!combatModal || combatModal.phase !== 'result') return;
+
+            const isLoser = combatModal.loserId === mySocketId;
+            const attackerLost = combatModal.winner === 'defender';
+
+            // If there's damage and this player is the loser, open damage distribution modal
+            if (combatModal.damage > 0 && isLoser) {
+                const damage = combatModal.damage;
+                console.log('[Combat] Opening damage distribution modal for loser:', mySocketId, 'damage:', damage);
+
+                // Close combat modal first
+                closeCombatModal(mountEl, attackerLost);
+
+                // Open damage distribution modal - player chooses physical or mental damage type
+                openDamageDistributionModal(mountEl, damage, 'combat', null);
+            } else {
+                // Not the loser or no damage (tie), just close
+                closeCombatModal(mountEl, attackerLost);
+            }
+            return;
+        }
+
         // Open end turn modal
         if (action === 'open-end-turn') {
             const myTurn = isMyTurn(currentGameState, mySocketId);
@@ -3491,8 +4812,13 @@ function attachDebugEventListeners(mountEl) {
         if (action === 'view-character-detail') {
             const charId = actionEl?.dataset.characterId;
             if (charId && currentGameState) {
-                // Get current stats for this character
-                const characterData = currentGameState.playerState?.characterData?.[mySocketId] || currentGameState.characterData?.[mySocketId];
+                // Find the player who owns this character
+                const player = currentGameState.players?.find(p => p.characterId === charId);
+                const playerId = player?.id;
+                // Get current stats for this character's owner
+                const characterData = playerId
+                    ? (currentGameState.playerState?.characterData?.[playerId] || currentGameState.characterData?.[playerId])
+                    : null;
                 const currentStats = characterData?.stats || null;
                 openCharacterModal(mountEl, charId, currentStats);
             }
@@ -3605,8 +4931,14 @@ function attachEventListeners(mountEl, roomId) {
         const action = target.dataset.action || actionEl?.dataset.action;
         console.log('[EventListeners] Click - action:', action, 'target:', target.tagName, target.className);
 
-        // Click outside sidebar to close it
-        if (sidebarOpen) {
+        // Check if click is inside any modal overlay
+        const isInsideModal = target.closest('.combat-overlay') ||
+                              target.closest('.damage-dice-overlay') ||
+                              target.closest('.room-effect-dice-overlay') ||
+                              target.closest('.event-dice-overlay');
+
+        // Click outside sidebar to close it (but not if inside modal)
+        if (sidebarOpen && !isInsideModal) {
             const sidebar = mountEl.querySelector('.game-sidebar');
             const toggleBtn = mountEl.querySelector('.sidebar-toggle');
             const cardsViewModal = mountEl.querySelector('.cards-view-overlay');
@@ -3619,8 +4951,8 @@ function attachEventListeners(mountEl, roomId) {
             }
         }
 
-        // Click outside turn order to collapse it
-        if (turnOrderExpanded) {
+        // Click outside turn order to collapse it (but not if inside modal)
+        if (turnOrderExpanded && !isInsideModal) {
             const turnOrder = mountEl.querySelector('.turn-order');
             const isClickInsideTurnOrder = turnOrder?.contains(target);
 
@@ -3656,6 +4988,208 @@ function attachEventListeners(mountEl, roomId) {
         if (action === 'close-tutorial') {
             tutorialOpen = false;
             updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // === COMBAT MODAL HANDLERS (in async block) ===
+
+        // Combat: Attack button clicked
+        if (action === 'combat-attack') {
+            console.log('[Combat] Attack clicked - combatModal:', combatModal?.phase, 'isOpen:', combatModal?.isOpen);
+            if (!combatModal || combatModal.phase !== 'confirm') {
+                console.log('[Combat] Attack blocked - combatModal null or phase not confirm');
+                return;
+            }
+
+            // Start attack - move to attacker roll phase
+            combatModal.phase = 'attacker_roll';
+            combatModal.inputValue = '';
+
+            // Sync combat state to server for multiplayer
+            if (currentGameState) {
+                currentGameState.combatState = {
+                    isActive: true,
+                    attackerId: combatModal.attackerId,
+                    defenderId: combatModal.defenderId,
+                    phase: 'waiting_attacker',
+                    attackerRoll: null,
+                    defenderRoll: null,
+                    attackStat: 'might',
+                    winner: null,
+                    damage: 0,
+                    loserId: null
+                };
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Attack initiated');
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Skip button clicked
+        if (action === 'combat-skip') {
+            console.log('[Combat] Skip clicked - combatModal:', combatModal?.phase, 'isOpen:', combatModal?.isOpen);
+            if (!combatModal || combatModal.phase !== 'confirm') {
+                console.log('[Combat] Skip blocked - combatModal null or phase not confirm');
+                return;
+            }
+
+            console.log('[Combat] Skipped combat');
+            closeCombatModal(mountEl, false); // false = don't skip move, continue
+            return;
+        }
+
+        // Combat: Confirm attacker roll
+        if (action === 'combat-attacker-confirm') {
+            if (!combatModal || combatModal.phase !== 'attacker_roll') return;
+
+            const inputEl = /** @type {HTMLInputElement} */ (
+                mountEl.querySelector('#combat-roll-input')
+            );
+            const value = parseInt(inputEl?.value || '0', 10);
+
+            if (isNaN(value) || value < 0) return;
+
+            combatModal.attackerRoll = value;
+            combatModal.phase = 'waiting_defender';
+            combatModal.inputValue = '';
+
+            // Sync to server - defender will see the attacker's roll
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.attackerRoll = value;
+                currentGameState.combatState.phase = 'waiting_defender';
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Attacker rolled:', value);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Random attacker roll
+        if (action === 'combat-attacker-random') {
+            if (!combatModal || combatModal.phase !== 'attacker_roll') return;
+
+            const diceCount = combatModal.attackerDiceCount || 1;
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+
+            combatModal.attackerRoll = total;
+            combatModal.phase = 'waiting_defender';
+            combatModal.inputValue = '';
+
+            // Sync to server
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.attackerRoll = total;
+                currentGameState.combatState.phase = 'waiting_defender';
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Attacker random roll:', total);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Confirm defender roll
+        if (action === 'combat-defender-confirm') {
+            if (!combatModal || combatModal.phase !== 'defender_roll') return;
+
+            const inputEl = /** @type {HTMLInputElement} */ (
+                mountEl.querySelector('#combat-roll-input')
+            );
+            const value = parseInt(inputEl?.value || '0', 10);
+
+            if (isNaN(value) || value < 0) return;
+
+            combatModal.defenderRoll = value;
+
+            // Calculate result
+            const result = calculateCombatResult(combatModal.attackerRoll, value);
+            combatModal.winner = result.winner;
+            combatModal.damage = result.damage;
+            combatModal.loserId = result.loserId;
+            combatModal.phase = 'result';
+            combatModal.inputValue = '';
+
+            // Sync to server
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.defenderRoll = value;
+                currentGameState.combatState.phase = 'result';
+                currentGameState.combatState.winner = result.winner;
+                currentGameState.combatState.damage = result.damage;
+                currentGameState.combatState.loserId = result.loserId;
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Defender rolled:', value, 'Result:', result);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Random defender roll
+        if (action === 'combat-defender-random') {
+            if (!combatModal || combatModal.phase !== 'defender_roll') return;
+
+            const diceCount = combatModal.defenderDiceCount || 1;
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+
+            combatModal.defenderRoll = total;
+
+            // Calculate result
+            const result = calculateCombatResult(combatModal.attackerRoll, total);
+            combatModal.winner = result.winner;
+            combatModal.damage = result.damage;
+            combatModal.loserId = result.loserId;
+            combatModal.phase = 'result';
+            combatModal.inputValue = '';
+
+            // Sync to server
+            if (currentGameState && currentGameState.combatState) {
+                currentGameState.combatState.defenderRoll = total;
+                currentGameState.combatState.phase = 'result';
+                currentGameState.combatState.winner = result.winner;
+                currentGameState.combatState.damage = result.damage;
+                currentGameState.combatState.loserId = result.loserId;
+                syncGameStateToServer();
+            }
+
+            console.log('[Combat] Defender random roll:', total, 'Result:', result);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Combat: Continue after result (loser takes damage)
+        if (action === 'combat-continue') {
+            if (!combatModal || combatModal.phase !== 'result') return;
+
+            const isLoser = combatModal.loserId === mySocketId;
+            const attackerLost = combatModal.winner === 'defender';
+
+            // If there's damage and this player is the loser, open damage distribution modal
+            if (combatModal.damage > 0 && isLoser) {
+                const damage = combatModal.damage;
+                console.log('[Combat] Opening damage distribution modal for loser:', mySocketId, 'damage:', damage);
+
+                // Close combat modal first
+                closeCombatModal(mountEl, attackerLost);
+
+                // Open damage distribution modal - player chooses physical or mental damage type
+                openDamageDistributionModal(mountEl, damage, 'combat', null);
+            } else {
+                // Not the loser or no damage (tie), just close
+                closeCombatModal(mountEl, attackerLost);
+            }
             return;
         }
 
@@ -4248,8 +5782,13 @@ function attachEventListeners(mountEl, roomId) {
             const actionEl = target.closest('[data-action]');
             const charId = actionEl?.dataset.characterId;
             if (charId && currentGameState) {
-                // Get current stats for this character
-                const characterData = currentGameState.playerState?.characterData?.[mySocketId] || currentGameState.characterData?.[mySocketId];
+                // Find the player who owns this character
+                const player = currentGameState.players?.find(p => p.characterId === charId);
+                const playerId = player?.id;
+                // Get current stats for this character's owner
+                const characterData = playerId
+                    ? (currentGameState.playerState?.characterData?.[playerId] || currentGameState.characterData?.[playerId])
+                    : null;
                 const currentStats = characterData?.stats || null;
                 openCharacterModal(mountEl, charId, currentStats);
             }
@@ -4282,6 +5821,79 @@ function attachEventListeners(mountEl, roomId) {
             if (cardId) {
                 toggleCardExpansion(mountEl, cardId);
             }
+            return;
+        }
+
+        // ===== DAMAGE DISTRIBUTION MODAL HANDLERS (multiplayer mode) =====
+
+        // Damage distribution: Type selection
+        if (action === 'damage-type-select') {
+            console.log('[DamageDistribution-MP] Type click - modal:', damageDistributionModal, 'actionEl:', actionEl);
+            if (!damageDistributionModal) {
+                console.log('[DamageDistribution-MP] Modal is null, returning');
+                return;
+            }
+
+            const type = actionEl?.dataset?.type; // 'physical' or 'mental'
+            console.log('[DamageDistribution-MP] Got type from actionEl:', type);
+            damageDistributionModal.damageType = type;
+
+            if (type === 'physical') {
+                damageDistributionModal.stat1 = 'speed';
+                damageDistributionModal.stat2 = 'might';
+            } else {
+                damageDistributionModal.stat1 = 'sanity';
+                damageDistributionModal.stat2 = 'knowledge';
+            }
+
+            console.log('[DamageDistribution-MP] Type selected:', type);
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Damage distribution: Adjust damage allocation (+/- buttons)
+        if (action === 'damage-adjust') {
+            console.log('[DamageDistribution-MP] Adjust click - modal:', damageDistributionModal);
+            if (!damageDistributionModal) return;
+
+            const statNum = actionEl?.dataset?.stat; // '1' or '2'
+            const delta = parseInt(actionEl?.dataset?.delta || '0', 10); // +1 or -1
+
+            const remaining = damageDistributionModal.totalDamage -
+                damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
+
+            if (statNum === '1') {
+                const newValue = damageDistributionModal.stat1Damage + delta;
+                if (newValue >= 0 && (delta < 0 || remaining > 0)) {
+                    damageDistributionModal.stat1Damage = newValue;
+                }
+            } else if (statNum === '2') {
+                const newValue = damageDistributionModal.stat2Damage + delta;
+                if (newValue >= 0 && (delta < 0 || remaining > 0)) {
+                    damageDistributionModal.stat2Damage = newValue;
+                }
+            }
+
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Damage distribution: Confirm and apply
+        if (action === 'damage-dist-confirm') {
+            console.log('[DamageDistribution-MP] Confirm click - modal:', damageDistributionModal);
+            if (!damageDistributionModal) return;
+
+            const remaining = damageDistributionModal.totalDamage -
+                damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
+
+            if (remaining !== 0) {
+                console.log('[DamageDistribution-MP] Cannot confirm - remaining damage:', remaining);
+                return;
+            }
+
+            closeDamageDistributionModal(mountEl);
             return;
         }
     });
@@ -5053,13 +6665,16 @@ function handleMove(mountEl, direction) {
                         return; // Wait for dice roll
                     }
 
-                    // Create connection
+                    // Create connection FIRST
                     if (!mapConnections[currentRoomId]) mapConnections[currentRoomId] = {};
                     if (!mapConnections[existingRoomId]) mapConnections[existingRoomId] = {};
                     mapConnections[currentRoomId][doorDirection] = existingRoomId;
                     mapConnections[existingRoomId][oppositeDir] = currentRoomId;
 
-                    // Move player
+                    // Clear completed combat flag when leaving current room
+                    clearCompletedCombatForPlayer(playerId, currentRoomId);
+
+                    // Move player FIRST (before combat check)
                     currentGameState.playerState.playerPositions[playerId] = existingRoomId;
                     currentGameState.playerMoves[playerId] = moves - 1;
 
@@ -5068,6 +6683,20 @@ function handleMove(mountEl, direction) {
                         currentGameState.playerState.playerEntryDirections = {};
                     }
                     currentGameState.playerState.playerEntryDirections[playerId] = oppositeDir;
+
+                    // === CHECK COMBAT TRIGGER (after player has moved into room) ===
+                    // If haunt is triggered and enemy is in target room, open combat modal
+                    const enemyInExistingRoom = getEnemyInRoom(existingRoomId, playerId);
+                    if (enemyInExistingRoom) {
+                        console.log('[Combat] Enemy detected in room:', existingRoomId, 'enemy:', enemyInExistingRoom.id);
+                        // Sync position first so all players see both characters in the same room
+                        if (!isDebugMode) {
+                            syncGameStateToServer();
+                        }
+                        // Then open combat modal (player is already in the room)
+                        openCombatModal(mountEl, playerId, enemyInExistingRoom.id, null);
+                        return; // Wait for combat resolution
+                    }
 
                     // Apply Vault spawn position if entering Vault room
                     applyVaultSpawnPosition(playerId, existingRoom, currentGameState);
@@ -5159,18 +6788,38 @@ function handleMove(mountEl, direction) {
         }
     }
 
-    // Move to target room
+    // Clear completed combat flag when leaving current room
+    // This allows combat to trigger again if player re-enters
+    clearCompletedCombatForPlayer(playerId, currentRoomId);
+
+    // Move to target room FIRST (before combat check)
     currentGameState.playerState.playerPositions[playerId] = targetRoomId;
-    
+
     // Track entry direction (opposite of door direction = which side player entered from)
     if (!currentGameState.playerState.playerEntryDirections) {
         currentGameState.playerState.playerEntryDirections = {};
     }
     const oppositeDir = getOppositeDoor(doorDirection);
     currentGameState.playerState.playerEntryDirections[playerId] = oppositeDir;
-    
+
     // Decrease moves
     currentGameState.playerMoves[playerId] = moves - 1;
+
+    // === CHECK COMBAT TRIGGER (after player has moved into room) ===
+    // If haunt is triggered and enemy is in the same room, open combat modal
+    const enemyInTargetRoom = getEnemyInRoom(targetRoomId, playerId);
+    if (enemyInTargetRoom) {
+        console.log('[Combat] Enemy detected in room:', targetRoomId, 'enemy:', enemyInTargetRoom.id);
+
+        // Sync position first so all players see both characters in the same room
+        if (!isDebugMode) {
+            syncGameStateToServer();
+        }
+
+        // Then open combat modal (player is already in the room)
+        openCombatModal(mountEl, playerId, enemyInTargetRoom.id, null);
+        return; // Wait for combat resolution
+    }
 
     // Apply Vault spawn position if entering Vault room
     applyVaultSpawnPosition(playerId, targetRoom, currentGameState);
@@ -5239,7 +6888,7 @@ async function syncGameStateToServer() {
     if (isDebugMode) return;
 
     try {
-        // Send updated state to server (including characterData for stat changes)
+        // Send updated state to server (including characterData for stat changes, combatState, gameOver, combatResult)
         const result = await socketClient.syncGameState({
             playerMoves: currentGameState.playerMoves,
             playerPositions: currentGameState.playerState?.playerPositions,
@@ -5248,7 +6897,11 @@ async function syncGameStateToServer() {
             playerCards: currentGameState.playerState?.playerCards,
             playerState: {
                 characterData: currentGameState.playerState?.characterData
-            }
+            },
+            currentTurnIndex: currentGameState.currentTurnIndex,
+            combatState: currentGameState.combatState || null,
+            combatResult: currentGameState.combatResult || null,
+            gameOver: currentGameState.gameOver || null
         });
         console.log('[Sync] Game state synced to server:', result);
     } catch (error) {
@@ -5285,7 +6938,15 @@ function handleDebugUseStairs(mountEl, targetRoomId) {
         console.log(`Target room ${targetRoomId} not found`);
         return;
     }
-    
+
+    // Get current room before moving
+    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
+
+    // Clear completed combat flag when leaving current room
+    if (currentRoomId) {
+        clearCompletedCombatForPlayer(playerId, currentRoomId);
+    }
+
     // Move to target room (stairs)
     currentGameState.playerState.playerPositions[playerId] = targetRoomId;
     
@@ -5751,7 +7412,10 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         currentGameState.map.connections[newRoomId] = {};
     }
     currentGameState.map.connections[newRoomId][oppositeDir] = currentRoomId;
-    
+
+    // Clear completed combat flag when leaving current room
+    clearCompletedCombatForPlayer(playerId, currentRoomId);
+
     // Move player to new room
     currentGameState.playerState.playerPositions[playerId] = newRoomId;
     
@@ -6406,8 +8070,19 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
         const wasHauntTriggered = currentGameState?.hauntState?.hauntTriggered;
         const isHauntTriggeredNow = state?.hauntState?.hauntTriggered;
 
+        // Check if combat result is new (save old value before updating currentGameState)
+        const hadCombatResult = currentGameState?.combatResult;
+        const newCombatResult = state?.combatResult;
+
+        // Check if game over is new (save old value before updating currentGameState)
+        const hadGameOver = currentGameState?.gameOver;
+        const newGameOver = state?.gameOver;
+
         currentGameState = state;
         mySocketId = socketClient.getSocketId();
+
+        // Initialize characterData for all players if missing
+        ensureCharacterDataInitialized(currentGameState);
 
         // Debug: Log turn info on state update
         const currentTurnPlayer = state.turnOrder?.[state.currentTurnIndex];
@@ -6432,6 +8107,98 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
 
             console.log('[GameState] Haunt detected! Showing announcement modal. MyFaction:', myFaction);
             showHauntAnnouncementModal(mountEl, hauntNumber, traitorName, amITraitor);
+        }
+
+        // Handle combat state from server (for multiplayer sync)
+        if (state.combatState?.isActive) {
+            const serverCombat = state.combatState;
+            const isDefender = serverCombat.defenderId === mySocketId;
+            const isAttacker = serverCombat.attackerId === mySocketId;
+            const expectedLocalPhase = mapServerPhaseToLocal(serverCombat.phase, isDefender);
+
+            // Only sync from server if:
+            // 1. We don't have a combat modal yet (defender receiving attack)
+            // 2. OR we're the defender and need to update our view
+            // 3. OR the server phase moved forward (result phase)
+            // Don't overwrite attacker's local phase when they just updated it
+            if (isDefender || isAttacker) {
+                const shouldSync = !combatModal ||
+                    (isDefender && combatModal.phase !== expectedLocalPhase) ||
+                    serverCombat.phase === 'result';
+
+                if (shouldSync) {
+                    const attacker = state.players?.find(p => p.id === serverCombat.attackerId);
+                    const defender = state.players?.find(p => p.id === serverCombat.defenderId);
+
+                    if (attacker && defender) {
+                        const attackerName = getCharacterName(attacker.characterId);
+                        const defenderName = getCharacterName(defender.characterId);
+                        const defenderFaction = getFaction(state, serverCombat.defenderId);
+                        const attackerMight = getCharacterMight(attacker.characterId,
+                            state.playerState?.characterData?.[serverCombat.attackerId]);
+                        const defenderMight = getCharacterMight(defender.characterId,
+                            state.playerState?.characterData?.[serverCombat.defenderId]);
+
+                        combatModal = {
+                            isOpen: true,
+                            phase: expectedLocalPhase,
+                            attackerId: serverCombat.attackerId,
+                            defenderId: serverCombat.defenderId,
+                            attackerName: attackerName,
+                            defenderName: defenderName,
+                            defenderFactionLabel: getFactionLabel(defenderFaction),
+                            attackStat: 'might',
+                            attackerDiceCount: attackerMight,
+                            defenderDiceCount: defenderMight,
+                            attackerRoll: serverCombat.attackerRoll,
+                            defenderRoll: serverCombat.defenderRoll,
+                            inputValue: '',
+                            winner: serverCombat.winner,
+                            damage: serverCombat.damage || 0,
+                            loserId: serverCombat.loserId
+                        };
+
+                        console.log('[Combat] Synced from server - phase:', combatModal.phase,
+                            'isDefender:', isDefender, 'serverPhase:', serverCombat.phase);
+                    }
+                } else {
+                    // Just update roll values without changing phase
+                    if (combatModal && serverCombat.attackerRoll !== null) {
+                        combatModal.attackerRoll = serverCombat.attackerRoll;
+                    }
+                    if (combatModal && serverCombat.defenderRoll !== null) {
+                        combatModal.defenderRoll = serverCombat.defenderRoll;
+                    }
+                }
+            }
+        } else if (!state.combatState?.isActive && combatModal) {
+            // Combat ended on server, close local modal
+            // BUT: Don't close if we're the attacker who just opened the modal (race condition protection)
+            const isAttackerWhoJustOpened = combatModal.attackerId === mySocketId && combatModal.phase === 'confirm';
+            if (!isAttackerWhoJustOpened) {
+                console.log('[Combat] Closing modal - server says combat is not active');
+                combatModal = null;
+                pendingCombatMovement = null;
+            } else {
+                console.log('[Combat] Keeping modal open - attacker just opened it (race condition protection)');
+            }
+        }
+
+        // Handle combat result notification from server (for all players to see)
+        // Use saved old value (hadCombatResult) to detect new combat result
+        if (newCombatResult && !hadCombatResult) {
+            // Combat just ended - show result notification to both attacker and defender
+            console.log('[GameState] Combat result received from server:', newCombatResult);
+            showCombatResultNotification(mountEl, newCombatResult);
+        }
+
+        // Handle game over state from server (for multiplayer victory sync)
+        // Use saved old value (hadGameOver) to detect new game over
+        if (newGameOver && !hadGameOver) {
+            // Game just ended - show victory modal for all players
+            const { winner, deadPlayers } = newGameOver;
+            console.log('[GameState] Game over received from server - winner:', winner);
+            showVictoryModal(mountEl, winner, deadPlayers || []);
         }
 
         updateGameUI(mountEl, currentGameState, mySocketId);
