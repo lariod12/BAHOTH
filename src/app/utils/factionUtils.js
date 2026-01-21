@@ -172,7 +172,7 @@ export function getFactionLabel(faction) {
 
 /**
  * Trigger haunt and assign factions to all players
- * This mutates the gameState object directly (for debug mode)
+ * This mutates the gameState object directly
  * @param {Object} gameState - Current game state
  * @param {Object} hauntData - Haunt trigger data
  * @param {number} hauntData.hauntNumber - Haunt scenario number
@@ -181,7 +181,7 @@ export function getFactionLabel(faction) {
  * @param {string} [hauntData.triggerOmen] - Omen that triggered
  * @param {string} [hauntData.triggerRoom] - Room where triggered
  */
-export function triggerHauntDebug(gameState, hauntData) {
+export function applyHauntState(gameState, hauntData) {
     if (!gameState) return;
 
     const { hauntNumber, traitorId, triggeredByPlayerId, triggerOmen, triggerRoom } = hauntData;

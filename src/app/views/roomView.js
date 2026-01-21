@@ -8,7 +8,6 @@ const MAX_PLAYERS = 6;
 let currentRoom = null;
 let mySocketId = null;
 let unsubscribeRoomState = null;
-let unsubscribeDebugRoomState = null;
 
 /**
  * Get character name by ID (Vietnamese)
@@ -52,27 +51,17 @@ function getMyPlayer(room, myId) {
 }
 
 /**
+ * Render selection turn indicator (returns empty in normal mode)
+ */
+function renderSelectionTurnIndicator(room) {
+    return '';
+}
+
+/**
  * Check if I am host
  */
 function isHost(room, myId) {
     return room?.hostId === myId;
-}
-
-/**
- * Check if room is in debug mode
- */
-function isDebugRoom(room) {
-    return room?.isDebug === true;
-}
-
-/**
- * Get current selection player in debug mode
- */
-function getCurrentSelectionPlayer(room) {
-    if (!room?.isDebug || !room.selectionTurnOrder) return null;
-    const turnIndex = room.currentSelectionTurn || 0;
-    if (turnIndex >= room.selectionTurnOrder.length) return null;
-    return room.selectionTurnOrder[turnIndex];
 }
 
 /**
@@ -84,84 +73,33 @@ function getPlayerById(room, playerId) {
 }
 
 /**
- * Render debug mode badge
- */
-function renderDebugBadge(room) {
-    if (!isDebugRoom(room)) return '';
-    return '<span class="badge badge--debug">DEBUG MODE</span>';
-}
-
-/**
- * Render selection turn indicator for debug mode
- */
-function renderSelectionTurnIndicator(room) {
-    if (!isDebugRoom(room)) return '';
-    
-    const currentPlayerId = getCurrentSelectionPlayer(room);
-    const currentPlayer = getPlayerById(room, currentPlayerId);
-    
-    if (!currentPlayer) {
-        return '<div class="turn-indicator turn-indicator--complete">All players selected!</div>';
-    }
-    
-    return `
-        <div class="turn-indicator">
-            <span class="turn-indicator__label">Selecting:</span>
-            <span class="turn-indicator__player">${currentPlayer.name}</span>
-        </div>
-    `;
-}
-
-/**
  * Render player slot
  */
 function renderPlayerSlot(player, room, myId) {
     const isMe = player.id === myId;
     const isPlayerHost = player.id === room.hostId;
     const charName = player.characterId ? getCharacterName(player.characterId) : null;
-    const isDebug = isDebugRoom(room);
     
-    // In debug mode, check if this player is currently selecting
-    const currentSelectionPlayerId = getCurrentSelectionPlayer(room);
-    const isCurrentlySelecting = isDebug && player.id === currentSelectionPlayerId;
 
     let statusBadge = '';
     let statusNote = '';
     let slotClass = isPlayerHost ? 'is-host' : '';
 
-    if (isDebug) {
-        // Debug mode status logic
-        if (player.characterId) {
-            // Player has selected a character
+    // Normal mode status logic
+    switch (player.status) {
+        case 'ready':
             statusBadge = '<span class="badge badge--success">Ready</span>';
-            statusNote = charName || 'Character selected';
-        } else if (isCurrentlySelecting) {
-            // This player's turn to select
-            statusBadge = '<span class="badge badge--selecting">Selecting...</span>';
-            statusNote = 'Choosing a character...';
-            slotClass += ' is-selecting';
-        } else {
-            // Waiting for turn
-            statusBadge = '<span class="badge badge--muted">Waiting</span>';
-            statusNote = 'Waiting for turn...';
-        }
-    } else {
-        // Normal mode status logic
-        switch (player.status) {
-            case 'ready':
-                statusBadge = '<span class="badge badge--success">Ready</span>';
-                statusNote = charName || 'Character locked in';
-                break;
-            case 'selecting':
-                statusBadge = '<span class="badge badge--muted">Selecting</span>';
-                statusNote = charName || 'Choosing a character...';
-                break;
-            case 'joined':
-            default:
-                statusBadge = '<span class="badge badge--muted">Not Ready</span>';
-                statusNote = 'Joined the room';
-                break;
-        }
+            statusNote = charName || 'Character locked in';
+            break;
+        case 'selecting':
+            statusBadge = '<span class="badge badge--muted">Selecting</span>';
+            statusNote = charName || 'Choosing a character...';
+            break;
+        case 'joined':
+        default:
+            statusBadge = '<span class="badge badge--muted">Not Ready</span>';
+            statusNote = 'Joined the room';
+            break;
     }
 
     const hostBadge = isPlayerHost ? '<span class="badge badge--accent">HOST</span>' : statusBadge;
@@ -228,15 +166,8 @@ function renderCharacterCard(char, room, myId) {
     const myPlayer = getMyPlayer(room, myId);
     const isTaken = isCharacterTaken(char.id, room, myId);
     const isSelected = myPlayer?.characterId === char.id;
-    const isDebug = isDebugRoom(room);
 
-    // In debug mode, check if this character is selected by current turn player
     let isCurrentTurnSelected = false;
-    if (isDebug) {
-        const currentPlayerId = getCurrentSelectionPlayer(room);
-        const currentPlayer = getPlayerById(room, currentPlayerId);
-        isCurrentTurnSelected = currentPlayer?.characterId === char.id;
-    }
 
     let stateClass = '';
     let badgeClass = 'badge--muted';
@@ -249,11 +180,6 @@ function renderCharacterCard(char, room, myId) {
         stateClass = 'is-selected';
         badgeClass = 'badge--accent';
         badgeText = 'Dang chon';
-    }
-
-    // In debug mode, add selectable class for available characters
-    if (isDebug && !isTaken && !isSelected) {
-        stateClass += ' is-debug-selectable';
     }
 
     return `
@@ -353,10 +279,6 @@ function canStartGame(room) {
     const allHaveCharacter = room.players.every(p => p.characterId);
     if (!allHaveCharacter) return false;
 
-    // In debug mode, just need all characters selected
-    if (isDebugRoom(room)) {
-        return true;
-    }
 
     // In normal mode, all non-host players must be ready
     const nonHostPlayers = room.players.filter(p => p.id !== room.hostId);
@@ -373,12 +295,11 @@ function renderRoomMarkup(room, myId) {
     const myPlayer = getMyPlayer(room, myId);
     const amHost = isHost(room, myId);
     const canStart = canStartGame(room);
-    const isDebug = isDebugRoom(room);
 
-    // Ready button for non-host players (only in normal mode)
-    const readyButton = !isDebug && !amHost && myPlayer?.characterId
-        ? `<button class="action-button ${myPlayer.status === 'ready' ? 'action-button--secondary' : 'action-button--primary'}" type="button" data-action="toggle-ready">
-            ${myPlayer.status === 'ready' ? 'Cancel Ready' : 'Ready'}
+    // Ready button for non-host players
+    const readyButton = !amHost
+        ? `<button class="action-button ${myPlayer?.status === 'ready' ? 'action-button--secondary' : 'action-button--primary'}" type="button" data-action="toggle-ready">
+            ${myPlayer?.status === 'ready' ? 'Cancel Ready' : 'Ready'}
            </button>`
         : '';
 
@@ -389,23 +310,11 @@ function renderRoomMarkup(room, myId) {
 
     // Generate appropriate hint based on mode
     let startHint;
-    if (isDebug) {
-        // Debug mode hints
-        const selectedCount = room.players.filter(p => p.characterId).length;
-        if (canStart) {
-            startHint = `All ${playerCount} players selected. Ready to start!`;
-        } else {
-            startHint = `Select characters for all players (${selectedCount}/${playerCount})`;
-        }
-    } else {
-        // Normal mode hints
-        startHint = amHost
-            ? (canStart ? `All players ready (${playerCount}/${maxPlayers}). Ready to start!` : `Waiting for players... (${playerCount}/${maxPlayers})`)
-            : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
-    }
+    // Normal mode hints
+    startHint = amHost
+        ? (canStart ? `All players ready (${playerCount}/${maxPlayers}). Ready to start!` : `Waiting for players... (${playerCount}/${maxPlayers})`)
+        : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
 
-    // Debug mode elements
-    const debugBadge = renderDebugBadge(room);
     const turnIndicator = renderSelectionTurnIndicator(room);
 
     return `
@@ -413,7 +322,6 @@ function renderRoomMarkup(room, myId) {
             <div class="room-surface">
                 <header class="room-header">
                     <div>
-                        <p class="welcome-kicker">Room ${debugBadge}</p>
                         <h1 class="page-title">Private Lobby</h1>
                         <p class="room-subtitle">Room ID: <span class="room-id">${roomId}</span></p>
                         ${turnIndicator}
@@ -493,7 +401,6 @@ function updateRoomUI(mountEl, room, myId, onNavigate) {
         meta.textContent = `${room.players.length} / ${room.maxPlayers || MAX_PLAYERS}`;
     }
 
-    // Update turn indicator for debug mode
     const headerDiv = mountEl.querySelector('.room-header > div');
     if (headerDiv) {
         const existingIndicator = headerDiv.querySelector('.turn-indicator');
@@ -516,16 +423,13 @@ function updateRoomUI(mountEl, room, myId, onNavigate) {
         const myPlayer = getMyPlayer(room, myId);
         const amHost = isHost(room, myId);
         const canStart = canStartGame(room);
-        const isDebug = isDebugRoom(room);
-
+    
         let footerHtml = '';
 
-        // Ready button only in normal mode
-        if (!isDebug && !amHost && myPlayer?.characterId) {
-            footerHtml += `<button class="action-button ${myPlayer.status === 'ready' ? 'action-button--secondary' : 'action-button--primary'}" type="button" data-action="toggle-ready">
-                ${myPlayer.status === 'ready' ? 'Cancel Ready' : 'Ready'}
-            </button>`;
-        }
+        // Ready button
+        footerHtml += `<button class="action-button ${myPlayer.status === 'ready' ? 'action-button--secondary' : 'action-button--primary'}" type="button" data-action="toggle-ready">
+            ${myPlayer.status === 'ready' ? 'Cancel Ready' : 'Ready'}
+        </button>`;
 
         if (amHost) {
             footerHtml += `<button class="action-button action-button--primary room-start__button" type="button" data-action="start-room" ${!canStart ? 'disabled' : ''}>Start</button>`;
@@ -536,18 +440,9 @@ function updateRoomUI(mountEl, room, myId, onNavigate) {
         
         // Generate appropriate hint based on mode
         let hint;
-        if (isDebug) {
-            const selectedCount = room.players.filter(p => p.characterId).length;
-            if (canStart) {
-                hint = `All ${playerCount} players selected. Ready to start!`;
-            } else {
-                hint = `Select characters for all players (${selectedCount}/${playerCount})`;
-            }
-        } else {
-            hint = amHost
-                ? (canStart ? `All players ready (${playerCount}/${maxPlayers}). Ready to start!` : `Waiting for players... (${playerCount}/${maxPlayers})`)
-                : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
-        }
+        hint = amHost
+            ? (canStart ? `All players ready (${playerCount}/${maxPlayers}). Ready to start!` : `Waiting for players... (${playerCount}/${maxPlayers})`)
+            : (myPlayer?.status === 'ready' ? 'Waiting for host to start...' : 'Select a character and click Ready');
 
         footerHtml += `<p class="room-start__hint">${hint}</p>`;
 
@@ -561,7 +456,6 @@ function updateRoomUI(mountEl, room, myId, onNavigate) {
  */
 function attachCharacterCardListeners(mountEl, room, myId) {
     const characterCards = mountEl.querySelectorAll('[data-character]');
-    const isDebug = isDebugRoom(room);
 
     for (const card of characterCards) {
         if (card.classList.contains('is-taken')) continue;
@@ -573,27 +467,13 @@ function attachCharacterCardListeners(mountEl, room, myId) {
             const charId = card.getAttribute('data-character');
             if (!charId) return;
 
-            if (isDebug) {
-                // Debug mode: select character for current turn player
-                const currentPlayerId = getCurrentSelectionPlayer(room);
-                if (!currentPlayerId) {
-                    console.log('All players have selected characters');
-                    return;
-                }
-
-                const result = await socketClient.debugSelectCharacter(currentPlayerId, charId);
-                if (!result.success) {
-                    console.error('Failed to select character:', result.error);
-                }
+            // Normal mode: select character for self
+            const result = await socketClient.selectCharacter(charId);
+            if (!result.success) {
+                console.error('Failed to select character:', result.error);
             } else {
-                // Normal mode: select character for self
-                const result = await socketClient.selectCharacter(charId);
-                if (!result.success) {
-                    console.error('Failed to select character:', result.error);
-                } else {
-                    // Update session with selected character
-                    socketClient.updateSessionCharacter(charId);
-                }
+                // Update session with selected character
+                socketClient.updateSessionCharacter(charId);
             }
         });
     }
@@ -610,26 +490,9 @@ function attachCharacterCardListeners(mountEl, room, myId) {
 }
 
 /**
- * Save debug game data to sessionStorage for transfer to game view
- * @param {Object} room - Current room state
- */
-function saveDebugGameData(room) {
-    const debugGameData = {
-        players: room.players.map(p => ({
-            id: p.id,
-            name: p.name,
-            characterId: p.characterId,
-            isAutoPlayer: p.isAutoPlayer
-        })),
-        playerCount: room.players.length
-    };
-    sessionStorage.setItem('debugGameData', JSON.stringify(debugGameData));
-}
-
-/**
  * Attach footer button listeners
  * @param {HTMLElement} mountEl
- * @param {Function} onNavigate - Navigation callback for debug mode
+ * @param {Function} onNavigate - Navigation callback
  */
 function attachFooterListeners(mountEl, onNavigate) {
     const readyButton = mountEl.querySelector('[data-action="toggle-ready"]');
@@ -642,12 +505,6 @@ function attachFooterListeners(mountEl, onNavigate) {
 
     const startButton = mountEl.querySelector('[data-action="start-room"]');
     startButton?.addEventListener('click', async () => {
-        // Debug mode: navigate directly to /game/debug with player data
-        if (isDebugRoom(currentRoom)) {
-            saveDebugGameData(currentRoom);
-            onNavigate('#/game/debug');
-            return;
-        }
 
         // Normal mode: call server to start game
         const result = await socketClient.startGame();
@@ -750,13 +607,6 @@ export async function renderRoomView({ mountEl, onNavigate, roomId }) {
         updateRoomUI(mountEl, room, mySocketId, onNavigate);
     });
 
-    // Subscribe to debug room state updates
-    unsubscribeDebugRoomState = socketClient.onDebugRoomState((room) => {
-        currentRoom = room;
-        mySocketId = socketClient.getSocketId();
-        updateRoomUI(mountEl, room, mySocketId, onNavigate);
-    });
-
     // Set up event listeners
     setupEventListeners(mountEl, onNavigate);
 
@@ -774,19 +624,13 @@ export async function renderRoomView({ mountEl, onNavigate, roomId }) {
         });
     }
 
-    // Auto-select random character when first entering room (non-debug mode only)
     await autoSelectRandomCharacter();
 }
 
 /**
  * Auto-select a random character for the current player if they haven't selected one yet
- * Only works in non-debug mode
  */
 async function autoSelectRandomCharacter() {
-    // Skip in debug mode
-    if (isDebugRoom(currentRoom)) {
-        return;
-    }
 
     // Check if my player already has a character selected
     const myPlayer = getMyPlayer(currentRoom, mySocketId);
@@ -913,10 +757,6 @@ function setupEventListeners(mountEl, onNavigate) {
             unsubscribeRoomState();
             unsubscribeRoomState = null;
         }
-        if (unsubscribeDebugRoomState) {
-            unsubscribeDebugRoomState();
-            unsubscribeDebugRoomState = null;
-        }
         currentRoom = null;
         onNavigate('#/');
     });
@@ -928,10 +768,6 @@ function setupEventListeners(mountEl, onNavigate) {
         if (unsubscribeRoomState) {
             unsubscribeRoomState();
             unsubscribeRoomState = null;
-        }
-        if (unsubscribeDebugRoomState) {
-            unsubscribeDebugRoomState();
-            unsubscribeDebugRoomState = null;
         }
         onNavigate(`#/game/${roomId}`);
     });
@@ -950,24 +786,6 @@ function setupEventListeners(mountEl, onNavigate) {
         // Pick a random character
         const randomChar = availableChars[Math.floor(Math.random() * availableChars.length)];
 
-        if (isDebugRoom(currentRoom)) {
-            // Debug mode: select character for current turn player
-            const currentPlayerId = getCurrentSelectionPlayer(currentRoom);
-            if (!currentPlayerId) {
-                console.log('All players have selected characters');
-                return;
-            }
-            const result = await socketClient.debugSelectCharacter(currentPlayerId, randomChar.id);
-            if (!result.success) {
-                console.error('Failed to select random character:', result.error);
-            }
-        } else {
-            // Normal mode: select character for self
-            const result = await socketClient.selectCharacter(randomChar.id);
-            if (!result.success) {
-                console.error('Failed to select random character:', result.error);
-            }
-        }
     });
 
     // Initial character card listeners

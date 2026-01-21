@@ -5,7 +5,7 @@ import { renderGameMap, buildPlayerNamesMap, buildPlayerColorsMap } from '../com
 import { ROOMS } from '../data/mapsData.js';
 import { ITEMS, EVENTS, OMENS } from '../data/cardsData.js';
 import { calculateVaultLayout, calculatePlayerSpawnPosition } from '../utils/vaultLayout.js';
-import { createDefaultHauntState, isHauntTriggered, getFaction, isAlly, isEnemy, getFactionLabel, triggerHauntDebug, getTraitorId } from '../utils/factionUtils.js';
+import { createDefaultHauntState, isHauntTriggered, getFaction, isAlly, isEnemy, getFactionLabel, getTraitorId, applyHauntState } from '../utils/factionUtils.js';
 
 // Room discovery modal state
 /** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number; selectedFloor: string | null; needsFloorSelection: boolean } | null} */
@@ -143,9 +143,9 @@ let activePlayers = new Set();
 /** @type {(() => void) | null} Unsubscribe from players active updates */
 let unsubscribePlayersActive = null;
 
-// Debug mode state
-let isDebugMode = false;
-let debugCurrentPlayerIndex = 0; // Which of the 3 local players is "active"
+
+
+
 
 // Track if event listeners are already attached (prevent duplicate)
 let eventListenersAttached = false;
@@ -383,6 +383,38 @@ function showToast(message, type = 'info', duration = 3000) {
 }
 
 /**
+ * Show debug waiting popup (waiting for second player)
+ */
+function showDebugWaitingPopup() {
+    // Remove existing popup if any
+    const existing = document.querySelector('.debug-waiting-overlay');
+    if (existing) return; // Already showing
+
+    const popup = document.createElement('div');
+    popup.className = 'debug-waiting-overlay';
+    popup.innerHTML = `
+        <div class="debug-waiting-modal">
+            <h3>DEBUG MODE</h3>
+            <p>Waiting for other player...</p>
+            <div class="debug-waiting-spinner"></div>
+        </div>
+    `;
+
+    document.body.appendChild(popup);
+}
+
+/**
+ * Hide debug waiting popup
+ */
+function hideDebugWaitingPopup() {
+    const popup = document.querySelector('.debug-waiting-overlay');
+    if (popup) {
+        popup.style.animation = 'fadeOut 0.3s ease';
+        setTimeout(() => popup.remove(), 300);
+    }
+}
+
+/**
  * Check if current room requires dice roll
  * @param {Object} gameState - Game state
  * @param {string} myId - Player ID
@@ -432,78 +464,6 @@ function extractDoors(roomDef) {
         .map(d => convertDoorSide(d.side));
 }
 
-/**
- * Create mock map for debug mode
- * Loads door positions from ROOMS data
- * @returns {Object}
- */
-function createMockMap() {
-    // Get room definitions from mapsData
-    const entranceHallDef = getRoomByName('Entrance Hall');
-    const foyerDef = getRoomByName('Foyer');
-    const grandStaircaseDef = getRoomByName('Grand Staircase');
-    const upperLandingDef = getRoomByName('Upper Landing');
-    const basementLandingDef = getRoomByName('Basement Landing');
-
-    return {
-        revealedRooms: {
-            'entrance-hall': {
-                id: 'entrance-hall',
-                name: 'Entrance Hall',
-                x: 0,
-                y: 0,
-                doors: entranceHallDef ? extractDoors(entranceHallDef) : ['north', 'west', 'east'],
-                floor: 'ground'
-            },
-            'foyer': {
-                id: 'foyer',
-                name: 'Foyer',
-                x: 0,
-                y: 1,
-                doors: foyerDef ? extractDoors(foyerDef) : ['north', 'south', 'west', 'east'],
-                floor: 'ground'
-            },
-            'grand-staircase': {
-                id: 'grand-staircase',
-                name: 'Grand Staircase',
-                x: 0,
-                y: 2,
-                doors: grandStaircaseDef ? extractDoors(grandStaircaseDef) : ['south'],
-                floor: 'ground',
-                stairsTo: 'upper-landing'
-            },
-            'upper-landing': {
-                id: 'upper-landing',
-                name: 'Upper Landing',
-                x: 0,
-                y: 0, // separate coordinate for upper floor
-                doors: upperLandingDef ? extractDoors(upperLandingDef) : ['north', 'south', 'west', 'east'],
-                floor: 'upper',
-                stairsTo: 'grand-staircase'
-            },
-            'basement-landing': {
-                id: 'basement-landing',
-                name: 'Basement Landing',
-                x: 0,
-                y: 0, // separate coordinate for basement floor
-                doors: basementLandingDef ? extractDoors(basementLandingDef) : ['north', 'south', 'west', 'east'],
-                floor: 'basement'
-            }
-        },
-        connections: {
-            'entrance-hall': { north: 'foyer' },
-            'foyer': { south: 'entrance-hall', north: 'grand-staircase' },
-            'grand-staircase': { south: 'foyer' },
-            'upper-landing': {},
-            'basement-landing': {}
-        },
-        // Special staircase connections (not regular doors)
-        staircaseConnections: {
-            'grand-staircase': 'upper-landing',
-            'upper-landing': 'grand-staircase'
-        }
-    };
-}
 
 /**
  * Create character data with initial stats from character definition
@@ -559,130 +519,8 @@ function ensureCharacterDataInitialized(gameState) {
     }
 }
 
-/**
- * Create game state from passed player data (from debug room)
- * @param {Array} players - Players array from room
- * @returns {any}
- */
-function createGameStateFromPlayers(players) {
-    // Create player positions and character data - all start at entrance hall
-    const playerPositions = {};
-    const characterData = {};
-    players.forEach(p => {
-        playerPositions[p.id] = 'entrance-hall';
-        const charData = createCharacterData(p.id, p.characterId);
-        if (charData) {
-            characterData[p.id] = charData;
-        }
-    });
 
-    return {
-        roomId: 'DEBUG-MODE',
-        gamePhase: 'rolling',
-        players: players.map(p => ({
-            id: p.id,
-            name: p.name,
-            characterId: p.characterId,
-            status: 'ready'
-        })),
-        diceRolls: {},
-        needsRoll: players.map(p => p.id),
-        turnOrder: [],
-        currentTurnIndex: 0,
-        playerMoves: {},
-        playerState: {
-            playerPositions,
-            characterData
-        },
-        characterData,
-        map: createMockMap(),
-        hauntState: createDefaultHauntState(), // Faction system: pre-haunt state
-    };
-}
 
-/**
- * Create mock game state for debug mode
- * Checks sessionStorage for passed data from debug room first
- * Falls back to random characters if no data passed
- * @returns {any}
- */
-function createDebugGameState() {
-    // Check for backup state from tutorial return
-    const backupState = sessionStorage.getItem('debugGameStateBackup');
-    if (backupState) {
-        try {
-            const restored = JSON.parse(backupState);
-            sessionStorage.removeItem('debugGameStateBackup');
-            console.log('[Debug] Restored game state from tutorial backup');
-            return restored;
-        } catch (e) {
-            console.error('Failed to restore debug game state:', e);
-            sessionStorage.removeItem('debugGameStateBackup');
-        }
-    }
-
-    // Check for passed data from debug room
-    const savedData = sessionStorage.getItem('debugGameData');
-    if (savedData) {
-        try {
-            const { players } = JSON.parse(savedData);
-            sessionStorage.removeItem('debugGameData'); // Clear after use
-            if (players && players.length >= 3) {
-                return createGameStateFromPlayers(players);
-            }
-        } catch (e) {
-            console.error('Failed to parse debug game data:', e);
-        }
-    }
-
-    // Fallback: generate random players (legacy behavior)
-    const shuffled = [...CHARACTERS].sort(() => Math.random() - 0.5);
-    const selectedChars = shuffled.slice(0, 3);
-    
-    const players = selectedChars.map((char, idx) => ({
-        id: `debug-player-${idx}`,
-        name: `Player ${idx + 1}`,
-        characterId: char.id,
-        status: 'ready'
-    }));
-
-    // Create player positions and character data
-    const playerPositions = {};
-    const characterData = {};
-    players.forEach(p => {
-        playerPositions[p.id] = 'entrance-hall';
-        const charData = createCharacterData(p.id, p.characterId);
-        if (charData) {
-            characterData[p.id] = charData;
-        }
-    });
-
-    return {
-        roomId: 'DEBUG-MODE',
-        gamePhase: 'rolling',
-        players,
-        diceRolls: {},
-        needsRoll: players.map(p => p.id),
-        turnOrder: [],
-        currentTurnIndex: 0,
-        playerMoves: {},
-        playerState: {
-            playerPositions,
-            characterData
-        },
-        characterData,
-        map: createMockMap(),
-        hauntState: createDefaultHauntState(), // Faction system: pre-haunt state
-    };
-}
-
-/**
- * Get current debug player ID
- * @returns {string}
- */
-function getDebugPlayerId() {
-    return `debug-player-${debugCurrentPlayerIndex}`;
-}
 
 /**
  * Get character's current Speed value
@@ -1052,20 +890,18 @@ function openCombatModal(mountEl, attackerId, defenderId, movement) {
 
     // Sync combat state to server immediately so other players see it
     // and to prevent the onGameState handler from closing this modal
-    if (!isDebugMode) {
         currentGameState.combatState = {
-            isActive: true,
-            phase: 'confirm',
-            attackerId: attackerId,
-            defenderId: defenderId,
-            attackerRoll: null,
-            defenderRoll: null,
-            winner: null,
-            damage: 0,
-            loserId: null
+        isActive: true,
+        phase: 'confirm',
+        attackerId: attackerId,
+        defenderId: defenderId,
+        attackerRoll: null,
+        defenderRoll: null,
+        winner: null,
+        damage: 0,
+        loserId: null
         };
         syncGameStateToServer();
-    }
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
@@ -2090,9 +1926,7 @@ function renderDiceRollOverlay(gameState, myId) {
     
     // In debug mode, check if current debug player needs to roll
     // Otherwise check if myId needs to roll
-    const iNeedToRoll = isDebugMode 
-        ? needsRoll.length > 0  // In debug mode, show controls if anyone needs to roll
-        : needsRoll.includes(myId);
+    const iNeedToRoll = mySocketId && needsRoll.includes(mySocketId);
 
     // Get current player who needs to roll (for debug mode display)
     const currentRollingPlayer = needsRoll.length > 0 
@@ -2103,7 +1937,7 @@ function renderDiceRollOverlay(gameState, myId) {
         const charName = getCharacterName(p.characterId);
         const roll = diceRolls[p.id];
         const isMe = p.id === myId;
-        const isCurrentRoller = isDebugMode && p.id === needsRoll[0];
+        const isCurrentRoller = false;
         const waiting = needsRoll.includes(p.id);
 
         let rollDisplay = '';
@@ -2130,7 +1964,7 @@ function renderDiceRollOverlay(gameState, myId) {
 
     const rollControls = iNeedToRoll ? `
         <div class="dice-controls">
-            <p class="dice-instruction">${isDebugMode && rollingPlayerName ? `${rollingPlayerName} dang tung xi ngau` : 'Tung xi ngau de quyet dinh thu tu di'}</p>
+            <p class="dice-instruction">Tung xi ngau de quyet dinh thu tu di</p>
             <div class="dice-input-group">
                 <input type="number" class="dice-input" id="dice-manual-input" min="1" max="16" placeholder="1-16" />
                 <button class="action-button action-button--secondary" type="button" data-action="roll-manual">Nhap</button>
@@ -3288,8 +3122,8 @@ function renderTurnOrder(gameState, myId) {
         const position = playerPositions[socketId] || 'Unknown';
 
         // In debug mode, make turn indicators clickable to switch player
-        const clickableAttr = isDebugMode ? `data-action="debug-switch-player" data-player-id="${socketId}"` : '';
-        const clickableClass = isDebugMode ? 'is-clickable' : '';
+        const clickableAttr = '';
+        const clickableClass = '';
 
         // Faction classes (only after haunt)
         const playerFaction = getFaction(gameState, socketId);
@@ -3505,9 +3339,9 @@ function renderHauntButton(gameState) {
     if (isHauntTriggered(gameState)) return '';
     if (gameState?.gamePhase !== 'playing') return '';
 
-    const buttonClass = isDebugMode ? 'debug-haunt-btn' : 'haunt-btn';
-    const action = isDebugMode ? 'debug-trigger-haunt' : 'trigger-haunt';
-    const title = isDebugMode ? '[DEBUG] Trigger Haunt' : 'Kich hoat Haunt - Chon ngau nhien Traitor';
+    const buttonClass = 'haunt-btn';
+    const action = 'trigger-haunt';
+    const title = 'Kich hoat Haunt - Chon ngau nhien Traitor';
 
     return `
         <button class="${buttonClass}" type="button" data-action="${action}" title="${title}">
@@ -3869,1069 +3703,6 @@ function checkAllPlayersActive(activePlayerIds, allPlayers, mountEl) {
     }
 }
 
-/**
- * Attach debug mode event listeners
- * @param {HTMLElement} mountEl
- */
-function attachDebugEventListeners(mountEl) {
-    // Prevent attaching listeners multiple times
-    if (eventListenersAttached) {
-        console.log('[DebugEventListeners] Already attached, skipping');
-        return;
-    }
-    eventListenersAttached = true;
-
-    mountEl.addEventListener('click', (e) => {
-        const target = /** @type {HTMLElement} */ (e.target);
-        const actionEl = target.closest('[data-action]');
-        const action = target.dataset.action || actionEl?.dataset.action;
-
-        // Check if click is inside any modal overlay
-        const isInsideModal = target.closest('.combat-overlay') ||
-                              target.closest('.damage-dice-overlay') ||
-                              target.closest('.room-effect-dice-overlay') ||
-                              target.closest('.event-dice-overlay');
-
-        // Click outside sidebar to close it (but not if inside modal)
-        if (sidebarOpen && !isInsideModal) {
-            const sidebar = mountEl.querySelector('.game-sidebar');
-            const toggleBtn = mountEl.querySelector('.sidebar-toggle');
-            const cardsViewModal = mountEl.querySelector('.cards-view-overlay');
-            const isClickInsideSidebar = sidebar?.contains(target);
-            const isClickOnToggle = toggleBtn?.contains(target);
-            const isClickInsideCardsView = cardsViewModal?.contains(target);
-
-            if (!isClickInsideSidebar && !isClickOnToggle && !isClickInsideCardsView) {
-                closeSidebar(mountEl);
-            }
-        }
-
-        // Click outside turn order to collapse it (but not if inside modal)
-        if (turnOrderExpanded && !isInsideModal) {
-            const turnOrder = mountEl.querySelector('.turn-order');
-            const isClickInsideTurnOrder = turnOrder?.contains(target);
-
-            if (!isClickInsideTurnOrder) {
-                turnOrderExpanded = false;
-                skipMapCentering = true; // Don't jump to player when closing turn order
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-        }
-
-        // Toggle turn order expand/collapse
-        if (action === 'toggle-turn-order') {
-            turnOrderExpanded = !turnOrderExpanded;
-            skipMapCentering = true; // Don't jump to player when toggling turn order
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Debug switch player (click on turn order)
-        if (action === 'debug-switch-player') {
-            const playerId = actionEl?.dataset.playerId;
-            if (playerId && currentGameState) {
-                const playerIdx = currentGameState.players.findIndex(p => p.id === playerId);
-                if (playerIdx !== -1) {
-                    debugCurrentPlayerIndex = playerIdx;
-                    // Set mySocketId to the actual player ID from game state
-                    mySocketId = currentGameState.players[playerIdx].id;
-                    skipMapCentering = true; // Don't jump to player when switching in turn order
-                    updateGameUI(mountEl, currentGameState, mySocketId);
-                }
-            }
-            return;
-        }
-
-        // Skip intro
-        if (action === 'skip-intro') {
-            hideIntro(mountEl);
-            return;
-        }
-
-        // Open tutorial - show modal overlay
-        if (action === 'open-tutorial') {
-            tutorialOpen = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Close tutorial modal
-        if (action === 'close-tutorial') {
-            tutorialOpen = false;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Tutorial book selection - open in new tab
-        if (target.closest('[data-tutorial-book]')) {
-            const bookBtn = target.closest('[data-tutorial-book]');
-            const book = bookBtn?.dataset.tutorialBook;
-            if (book) {
-                let url = '';
-                if (book === 'rules') {
-                    url = window.location.origin + '/#/tutorial/rulesbook';
-                } else if (book === 'traitors') {
-                    url = window.location.origin + '/#/tutorial/traitors-tome';
-                } else if (book === 'survival') {
-                    url = window.location.origin + '/#/tutorial/survival';
-                }
-                if (url) {
-                    window.open(url, '_blank');
-                }
-            }
-            return;
-        }
-
-        // Toggle sidebar
-        if (action === 'toggle-sidebar') {
-            const toggleBtn = target.closest('.sidebar-toggle');
-            if (toggleBtn?.hasAttribute('disabled')) return;
-            toggleSidebar(mountEl);
-            // Also center map on player with smooth scroll
-            centerMapOnPlayer(mountEl, true);
-            return;
-        }
-
-        // Close sidebar
-        if (action === 'close-sidebar') {
-            closeSidebar(mountEl);
-            return;
-        }
-
-        // Expand player in sidebar
-        if (action === 'expand-player') {
-            const playerEl = target.closest('[data-player-id]');
-            const playerId = playerEl?.dataset.playerId;
-            if (playerId) {
-                togglePlayerExpand(playerId);
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Roll manual (debug)
-        if (action === 'roll-manual') {
-            const input = /** @type {HTMLInputElement} */ (mountEl.querySelector('#dice-manual-input'));
-            const value = parseInt(input?.value || '0', 10);
-            if (value >= 1 && value <= 16) {
-                handleDebugDiceRoll(mountEl, value);
-            } else {
-                alert('Vui long nhap so tu 1 den 16');
-            }
-            return;
-        }
-
-        // Roll random (debug)
-        if (action === 'roll-random') {
-            // Get already used dice values to avoid duplicates
-            const usedValues = new Set(Object.values(currentGameState?.diceRolls || {}));
-
-            // Build array of available values (1-16 excluding used ones)
-            const availableValues = [];
-            for (let i = 1; i <= 16; i++) {
-                if (!usedValues.has(i)) {
-                    availableValues.push(i);
-                }
-            }
-
-            // Pick random from available values (fallback to 1-16 if all used somehow)
-            const randomValue = availableValues.length > 0
-                ? availableValues[Math.floor(Math.random() * availableValues.length)]
-                : Math.floor(Math.random() * 16) + 1;
-
-            handleDebugDiceRoll(mountEl, randomValue);
-            return;
-        }
-
-        // Debug trigger haunt
-        if (action === 'debug-trigger-haunt') {
-            if (isDebugMode && currentGameState && !isHauntTriggered(currentGameState)) {
-                // Pick first player as traitor (for testing)
-                const traitorId = currentGameState.players[0]?.id;
-                if (traitorId) {
-                    triggerHauntDebug(currentGameState, {
-                        hauntNumber: 1,
-                        traitorId: traitorId,
-                        triggeredByPlayerId: traitorId,
-                        triggerOmen: 'girl',
-                        triggerRoom: 'Foyer',
-                    });
-                    console.log('[Debug] Haunt triggered! Traitor:', traitorId);
-                    updateGameUI(mountEl, currentGameState, mySocketId);
-                }
-            }
-            return;
-        }
-
-        // Move (debug mode only - multiplayer uses socketClient.move below)
-        if (action === 'move' && isDebugMode) {
-            const moveTarget = target.closest('[data-direction]');
-            const uiDirection = moveTarget?.dataset.direction;
-            // Convert UI direction to cardinal direction
-            const directionMap = { up: 'north', down: 'south', left: 'west', right: 'east' };
-            const direction = directionMap[uiDirection];
-            if (direction) {
-                handleMove(mountEl, direction);
-            }
-            return;
-        }
-
-        // Use stairs (debug)
-        if (action === 'use-stairs' && isDebugMode) {
-            const targetRoom = actionEl?.dataset.target;
-            if (targetRoom) {
-                handleDebugUseStairs(mountEl, targetRoom);
-            }
-            return;
-        }
-
-        // Use Mystic Elevator (debug)
-        if (action === 'use-elevator' && isDebugMode) {
-            const targetFloor = actionEl?.dataset.floor;
-            if (targetFloor) {
-                handleDebugUseElevator(mountEl, targetFloor);
-            }
-            return;
-        }
-
-        // Room discovery actions
-        // Step 1: Select room and go to rotation step (auto-place on current floor)
-        if (action === 'select-room-next') {
-            const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
-            const selectedRoom = hiddenInput?.value;
-            if (selectedRoom && roomDiscoveryModal) {
-                const roomDef = ROOMS.find(r => r.name.en === selectedRoom);
-                
-                // Find first valid rotation
-                const initialRotation = roomDef 
-                    ? findFirstValidRotation(roomDef, roomDiscoveryModal.doorSide)
-                    : 0;
-                
-                roomDiscoveryModal.selectedRoom = selectedRoom;
-                roomDiscoveryModal.currentRotation = initialRotation;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            } else {
-                alert('Vui long chon mot phong');
-            }
-            return;
-        }
-
-        // Rotate room preview (click on room)
-        if (action === 'rotate-room') {
-            if (roomDiscoveryModal && roomDiscoveryModal.selectedRoom) {
-                // Rotate 90 degrees each click
-                roomDiscoveryModal.currentRotation = (roomDiscoveryModal.currentRotation + 90) % 360;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Step 2: Confirm room placement with rotation
-        if (action === 'confirm-room-placement') {
-            if (roomDiscoveryModal?.selectedRoom) {
-                const rotation = roomDiscoveryModal.currentRotation || 0;
-                handleRoomDiscovery(mountEl, roomDiscoveryModal.selectedRoom, rotation);
-            }
-            return;
-        }
-
-        // Back to room selection
-        if (action === 'back-to-room-select') {
-            if (roomDiscoveryModal) {
-                roomDiscoveryModal.selectedRoom = null;
-                roomDiscoveryModal.currentRotation = 0;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Select room from list (Step 1)
-        if (target.closest('.room-discovery__item') && target.closest('#room-list')) {
-            const item = /** @type {HTMLElement} */ (target.closest('.room-discovery__item'));
-            const roomName = item.dataset.roomName;
-            const searchInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-search-input'));
-            const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
-            
-            // Update UI
-            if (searchInput) searchInput.value = item.textContent || '';
-            if (hiddenInput) hiddenInput.value = roomName || '';
-            
-            // Mark as selected
-            mountEl.querySelectorAll('#room-list .room-discovery__item').forEach(el => el.classList.remove('is-selected'));
-            item.classList.add('is-selected');
-            return;
-        }
-
-        if (action === 'random-room') {
-            handleRandomRoomDiscovery(mountEl);
-            return;
-        }
-
-        if (action === 'cancel-room-discovery') {
-            cancelRoomDiscovery(mountEl);
-            return;
-        }
-
-        // Token drawing actions
-        if (action === 'token-draw-random') {
-            handleRandomCardDraw(mountEl);
-            return;
-        }
-
-        if (action === 'token-draw-next') {
-            handleTokenDrawNext(mountEl);
-            return;
-        }
-
-        // Cards view actions
-        if (action === 'view-cards') {
-            const cardType = actionEl?.dataset.cardType;
-            if (cardType) {
-                openCardsViewModal(mountEl, cardType);
-            }
-            return;
-        }
-
-        if (action === 'close-cards-view') {
-            closeCardsViewModal(mountEl);
-            return;
-        }
-
-        if (action === 'toggle-card') {
-            // Get the exact header element that was clicked
-            const header = target.closest('.card-detail__header');
-            const cardId = header?.dataset.cardId;
-            if (cardId) {
-                toggleCardExpansion(mountEl, cardId);
-            }
-            return;
-        }
-
-        // Select card from list
-        if (target.closest('.token-card__item') && target.closest('#token-card-list')) {
-            const item = /** @type {HTMLElement} */ (target.closest('.token-card__item'));
-            const cardId = item.dataset.cardId;
-            
-            if (cardId) {
-                handleCardSelect(mountEl, cardId);
-            }
-            return;
-        }
-
-        // Dice event - open modal
-        if (action === 'dice-event') {
-            diceEventModal = {
-                isOpen: true,
-                inputValue: '',
-                result: null
-            };
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Dice event confirm (manual input)
-        if (action === 'dice-event-confirm') {
-            const input = mountEl.querySelector('[data-input="dice-event-value"]');
-            const value = parseInt(input?.value, 10);
-            // Accept any non-negative number (no max limit for dice results)
-            if (!isNaN(value) && value >= 0) {
-                diceEventModal = {
-                    ...diceEventModal,
-                    result: value
-                };
-                skipMapCentering = true;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Dice event random roll
-        if (action === 'dice-event-random') {
-            const randomValue = Math.floor(Math.random() * 17); // 0-16
-            diceEventModal = {
-                ...diceEventModal,
-                result: randomValue
-            };
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Close dice event modal
-        if (action === 'close-dice-event') {
-            // Don't close if clicking inside modal content (except close button)
-            const isInsideModalContent = target.closest('[data-modal-content="true"]');
-            const isCloseButton = target.closest('.dice-event-modal__close') || target.closest('.dice-event-modal__btn--close');
-            if (isInsideModalContent && !isCloseButton) {
-                return;
-            }
-            diceEventModal = null;
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // ===== EVENT DICE MODAL HANDLERS =====
-
-        // Event dice - stat selection confirmed
-        if (action === 'event-stat-confirm') {
-            console.log('[EventDice] event-stat-confirm clicked, eventDiceModal:', eventDiceModal);
-            if (!eventDiceModal) return;
-            const selectedStat = eventDiceModal.tempSelectedStat;
-            console.log('[EventDice] selectedStat:', selectedStat);
-            if (selectedStat) {
-                eventDiceModal.selectedStat = selectedStat;
-                eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, selectedStat);
-                console.log('[EventDice] Updated - selectedStat:', eventDiceModal.selectedStat, 'diceCount:', eventDiceModal.diceCount);
-                skipMapCentering = true;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Event dice confirm (manual input)
-        if (action === 'event-dice-confirm') {
-            if (!eventDiceModal) return;
-            const input = mountEl.querySelector('[data-input="event-dice-value"]');
-            const value = parseInt(input?.value, 10);
-            // Accept any non-negative number (no max limit for dice results)
-            if (!isNaN(value) && value >= 0) {
-                eventDiceModal.result = value;
-                eventDiceModal.inputValue = value.toString();
-                skipMapCentering = true;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Event dice random roll
-        if (action === 'event-dice-random') {
-            if (!eventDiceModal) return;
-            const diceCount = eventDiceModal.eventCard?.fixedDice || eventDiceModal.diceCount || 1;
-            // Roll diceCount dice (each 0-2) and sum
-            let total = 0;
-            for (let i = 0; i < diceCount; i++) {
-                total += Math.floor(Math.random() * 3); // 0, 1, or 2
-            }
-            eventDiceModal.result = total;
-            eventDiceModal.inputValue = total.toString();
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Event dice continue/apply result
-        if (action === 'event-dice-continue') {
-            if (!eventDiceModal) return;
-
-            const { eventCard, result, currentRollIndex, allResults, selectedStat } = eventDiceModal;
-            const isMultiRoll = eventCard?.rollStats && Array.isArray(eventCard.rollStats);
-            const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || eventCard.rollStat);
-
-            if (isMultiRoll) {
-                // Save current result
-                eventDiceModal.allResults.push({ stat: currentStat, result: result });
-
-                // Check if more rolls needed
-                if (currentRollIndex < eventCard.rollStats.length - 1) {
-                    // Move to next roll
-                    const nextStat = eventCard.rollStats[currentRollIndex + 1];
-                    eventDiceModal.currentRollIndex++;
-                    eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, nextStat);
-                    eventDiceModal.inputValue = '';
-                    eventDiceModal.result = null;
-                    skipMapCentering = true;
-                    updateGameUI(mountEl, currentGameState, mySocketId);
-                    return;
-                }
-
-                // All rolls done - apply multi-roll results
-                console.log('[EventDice] Multi-roll complete:', eventDiceModal.allResults);
-                const allRollResults = [...eventDiceModal.allResults, { stat: currentStat, result: result }];
-
-                // Apply results for each stat
-                allRollResults.forEach(r => {
-                    const outcome = findMatchingOutcome(eventCard.rollResults, r.result);
-                    if (outcome && outcome.effect === 'loseStat') {
-                        applyStatChange(mySocketId, r.stat, -(outcome.amount || 1));
-                    }
-                });
-
-                // Check bonus condition (nguoi_treo_co)
-                if (eventCard.bonusCondition) {
-                    const threshold = eventCard.bonusCondition.threshold || 2;
-                    const allPassed = allRollResults.every(r => r.result >= threshold);
-                    if (allPassed && eventCard.bonusCondition.reward) {
-                        console.log('[EventDice] Bonus condition met! Player can gain +2 to any stat');
-                        // TODO: Let player choose which stat to boost
-                    }
-                }
-
-                closeEventDiceModal(mountEl);
-                return;
-            }
-
-            // Single roll - apply result
-            applyEventDiceResult(mountEl, result, currentStat);
-            return;
-        }
-
-        // ===== DAMAGE DICE MODAL HANDLERS =====
-
-        // Damage dice stat selection
-        if (action === 'damage-select-stat') {
-            if (!damageDiceModal) return;
-            const stat = actionEl?.dataset.stat;
-            if (!stat) return;
-
-            if (damageDiceModal.currentPhase === 'selectPhysicalStat') {
-                // Selected physical stat (speed or might)
-                damageDiceModal.selectedPhysicalStat = stat;
-                damageDiceModal.currentPhase = 'physical';
-                damageDiceModal.inputValue = '';
-            } else if (damageDiceModal.currentPhase === 'selectMentalStat') {
-                // Selected mental stat (knowledge or sanity)
-                damageDiceModal.selectedMentalStat = stat;
-                damageDiceModal.currentPhase = 'mental';
-                damageDiceModal.inputValue = '';
-            }
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Damage dice confirm (manual input)
-        if (action === 'damage-dice-confirm') {
-            if (!damageDiceModal) return;
-            const input = mountEl.querySelector('[data-input="damage-dice-value"]');
-            const value = parseInt(input?.value, 10);
-
-            // Accept any non-negative number (no max limit for dice results)
-            if (!isNaN(value) && value >= 0) {
-                if (damageDiceModal.currentPhase === 'physical') {
-                    damageDiceModal.physicalResult = value;
-                    // Check if mental damage also needed
-                    if (damageDiceModal.mentalDice > 0) {
-                        damageDiceModal.currentPhase = 'selectMentalStat';
-                        damageDiceModal.inputValue = '';
-                    } else {
-                        damageDiceModal.currentPhase = 'done';
-                    }
-                } else if (damageDiceModal.currentPhase === 'mental') {
-                    damageDiceModal.mentalResult = value;
-                    damageDiceModal.currentPhase = 'done';
-                }
-                skipMapCentering = true;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Damage dice random roll
-        if (action === 'damage-dice-random') {
-            if (!damageDiceModal) return;
-            const currentDice = damageDiceModal.currentPhase === 'physical' ? damageDiceModal.physicalDice : damageDiceModal.mentalDice;
-            // Roll dice (each 0-2) and sum
-            let total = 0;
-            for (let i = 0; i < currentDice; i++) {
-                total += Math.floor(Math.random() * 3);
-            }
-
-            if (damageDiceModal.currentPhase === 'physical') {
-                damageDiceModal.physicalResult = total;
-                if (damageDiceModal.mentalDice > 0) {
-                    damageDiceModal.currentPhase = 'selectMentalStat';
-                    damageDiceModal.inputValue = '';
-                } else {
-                    damageDiceModal.currentPhase = 'done';
-                }
-            } else if (damageDiceModal.currentPhase === 'mental') {
-                damageDiceModal.mentalResult = total;
-                damageDiceModal.currentPhase = 'done';
-            }
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Damage dice apply
-        if (action === 'damage-dice-apply') {
-            closeDamageDiceModal(mountEl);
-            return;
-        }
-
-        // ===== DAMAGE DISTRIBUTION MODAL HANDLERS =====
-
-        // Damage distribution: Type selection
-        if (action === 'damage-type-select') {
-            if (!damageDistributionModal) return;
-
-            const type = actionEl?.dataset?.type; // 'physical' or 'mental'
-            damageDistributionModal.damageType = type;
-
-            if (type === 'physical') {
-                damageDistributionModal.stat1 = 'speed';
-                damageDistributionModal.stat2 = 'might';
-            } else {
-                damageDistributionModal.stat1 = 'sanity';
-                damageDistributionModal.stat2 = 'knowledge';
-            }
-
-            console.log('[DamageDistribution] Type selected:', type);
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Damage distribution: Adjust damage allocation (+/- buttons)
-        if (action === 'damage-adjust') {
-            if (!damageDistributionModal) return;
-
-            const statNum = actionEl?.dataset?.stat; // '1' or '2'
-            const delta = parseInt(actionEl?.dataset?.delta || '0', 10); // +1 or -1
-
-            const remaining = damageDistributionModal.totalDamage -
-                damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
-
-            if (statNum === '1') {
-                const newValue = damageDistributionModal.stat1Damage + delta;
-                if (newValue >= 0 && (delta < 0 || remaining > 0)) {
-                    damageDistributionModal.stat1Damage = newValue;
-                }
-            } else if (statNum === '2') {
-                const newValue = damageDistributionModal.stat2Damage + delta;
-                if (newValue >= 0 && (delta < 0 || remaining > 0)) {
-                    damageDistributionModal.stat2Damage = newValue;
-                }
-            }
-
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Damage distribution: Confirm and apply
-        if (action === 'damage-dist-confirm') {
-            if (!damageDistributionModal) return;
-
-            const remaining = damageDistributionModal.totalDamage -
-                damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
-
-            if (remaining !== 0) {
-                console.log('[DamageDistribution] Cannot confirm - remaining damage:', remaining);
-                return;
-            }
-
-            closeDamageDistributionModal(mountEl);
-            return;
-        }
-
-        // ===== ROOM EFFECT DICE MODAL HANDLERS =====
-
-        // Room effect dice input change (handled via onchange in render)
-        if (target.matches && target.matches('[data-input="room-effect-dice-value"]')) {
-            if (!roomEffectDiceModal) return;
-            roomEffectDiceModal.inputValue = target.value;
-            return;
-        }
-
-        // Room effect dice confirm
-        if (action === 'room-effect-dice-confirm') {
-            if (!roomEffectDiceModal) return;
-
-            // Get value directly from input DOM element
-            const input = mountEl.querySelector('[data-input="room-effect-dice-value"]');
-            const value = parseInt(input?.value, 10);
-
-            // Accept any non-negative number (no max limit for dice results)
-            if (isNaN(value) || value < 0) {
-                showToast('Nhap so >= 0', 'error');
-                return;
-            }
-
-            roomEffectDiceModal.result = value;
-            roomEffectDiceModal.inputValue = value.toString();
-            roomEffectDiceModal.resultsApplied = true;
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Room effect dice random
-        if (action === 'room-effect-dice-random') {
-            if (!roomEffectDiceModal) return;
-
-            const diceCount = roomEffectDiceModal.diceCount;
-            // Roll dice (each 0-2) and sum
-            let total = 0;
-            for (let i = 0; i < diceCount; i++) {
-                total += Math.floor(Math.random() * 3);
-            }
-            roomEffectDiceModal.result = total;
-            roomEffectDiceModal.inputValue = total.toString();
-            roomEffectDiceModal.resultsApplied = true;
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Room effect dice continue (after seeing result)
-        if (action === 'room-effect-dice-continue') {
-            if (!roomEffectDiceModal || roomEffectDiceModal.result === null) return;
-
-            applyRoomEffectDiceResult(mountEl, roomEffectDiceModal.result);
-            return;
-        }
-
-        // === COMBAT MODAL HANDLERS ===
-
-        // Combat: Attack button clicked
-        if (action === 'combat-attack') {
-            console.log('[Combat] Attack clicked - combatModal:', combatModal?.phase, 'isOpen:', combatModal?.isOpen);
-            if (!combatModal || combatModal.phase !== 'confirm') {
-                console.log('[Combat] Attack blocked - combatModal null or phase not confirm');
-                return;
-            }
-
-            // Start attack - move to attacker roll phase
-            combatModal.phase = 'attacker_roll';
-            combatModal.inputValue = '';
-
-            // Sync combat state to server for multiplayer
-            if (currentGameState) {
-                currentGameState.combatState = {
-                    isActive: true,
-                    attackerId: combatModal.attackerId,
-                    defenderId: combatModal.defenderId,
-                    phase: 'waiting_attacker',
-                    attackerRoll: null,
-                    defenderRoll: null,
-                    attackStat: 'might',
-                    winner: null,
-                    damage: 0,
-                    loserId: null
-                };
-                syncGameStateToServer();
-            }
-
-            console.log('[Combat] Attack initiated');
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Combat: Skip button clicked
-        if (action === 'combat-skip') {
-            console.log('[Combat] Skip clicked - combatModal:', combatModal?.phase, 'isOpen:', combatModal?.isOpen);
-            if (!combatModal || combatModal.phase !== 'confirm') {
-                console.log('[Combat] Skip blocked - combatModal null or phase not confirm');
-                return;
-            }
-
-            console.log('[Combat] Skipped combat');
-            closeCombatModal(mountEl, false); // false = don't skip move, continue
-            return;
-        }
-
-        // Combat: Confirm attacker roll
-        if (action === 'combat-attacker-confirm') {
-            if (!combatModal || combatModal.phase !== 'attacker_roll') return;
-
-            const inputEl = /** @type {HTMLInputElement} */ (
-                mountEl.querySelector('#combat-roll-input')
-            );
-            const value = parseInt(inputEl?.value || '0', 10);
-
-            if (isNaN(value) || value < 0) return;
-
-            combatModal.attackerRoll = value;
-            combatModal.phase = 'waiting_defender';
-            combatModal.inputValue = '';
-
-            // Sync to server - defender will see the attacker's roll
-            if (currentGameState && currentGameState.combatState) {
-                currentGameState.combatState.attackerRoll = value;
-                currentGameState.combatState.phase = 'waiting_defender';
-                syncGameStateToServer();
-            }
-
-            console.log('[Combat] Attacker rolled:', value);
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Combat: Random attacker roll
-        if (action === 'combat-attacker-random') {
-            if (!combatModal || combatModal.phase !== 'attacker_roll') return;
-
-            const diceCount = combatModal.attackerDiceCount || 1;
-            let total = 0;
-            for (let i = 0; i < diceCount; i++) {
-                total += Math.floor(Math.random() * 3); // 0, 1, or 2
-            }
-
-            combatModal.attackerRoll = total;
-            combatModal.phase = 'waiting_defender';
-            combatModal.inputValue = '';
-
-            // Sync to server
-            if (currentGameState && currentGameState.combatState) {
-                currentGameState.combatState.attackerRoll = total;
-                currentGameState.combatState.phase = 'waiting_defender';
-                syncGameStateToServer();
-            }
-
-            console.log('[Combat] Attacker random roll:', total);
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Combat: Confirm defender roll
-        if (action === 'combat-defender-confirm') {
-            if (!combatModal || combatModal.phase !== 'defender_roll') return;
-
-            const inputEl = /** @type {HTMLInputElement} */ (
-                mountEl.querySelector('#combat-roll-input')
-            );
-            const value = parseInt(inputEl?.value || '0', 10);
-
-            if (isNaN(value) || value < 0) return;
-
-            combatModal.defenderRoll = value;
-
-            // Calculate result
-            const result = calculateCombatResult(combatModal.attackerRoll, value);
-            combatModal.winner = result.winner;
-            combatModal.damage = result.damage;
-            combatModal.loserId = result.loserId;
-            combatModal.phase = 'result';
-            combatModal.inputValue = '';
-
-            // Sync to server
-            if (currentGameState && currentGameState.combatState) {
-                currentGameState.combatState.defenderRoll = value;
-                currentGameState.combatState.phase = 'result';
-                currentGameState.combatState.winner = result.winner;
-                currentGameState.combatState.damage = result.damage;
-                currentGameState.combatState.loserId = result.loserId;
-                syncGameStateToServer();
-            }
-
-            console.log('[Combat] Defender rolled:', value, 'Result:', result);
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Combat: Random defender roll
-        if (action === 'combat-defender-random') {
-            if (!combatModal || combatModal.phase !== 'defender_roll') return;
-
-            const diceCount = combatModal.defenderDiceCount || 1;
-            let total = 0;
-            for (let i = 0; i < diceCount; i++) {
-                total += Math.floor(Math.random() * 3); // 0, 1, or 2
-            }
-
-            combatModal.defenderRoll = total;
-
-            // Calculate result
-            const result = calculateCombatResult(combatModal.attackerRoll, total);
-            combatModal.winner = result.winner;
-            combatModal.damage = result.damage;
-            combatModal.loserId = result.loserId;
-            combatModal.phase = 'result';
-            combatModal.inputValue = '';
-
-            // Sync to server
-            if (currentGameState && currentGameState.combatState) {
-                currentGameState.combatState.defenderRoll = total;
-                currentGameState.combatState.phase = 'result';
-                currentGameState.combatState.winner = result.winner;
-                currentGameState.combatState.damage = result.damage;
-                currentGameState.combatState.loserId = result.loserId;
-                syncGameStateToServer();
-            }
-
-            console.log('[Combat] Defender random roll:', total, 'Result:', result);
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Combat: Continue after result (loser takes damage)
-        if (action === 'combat-continue') {
-            if (!combatModal || combatModal.phase !== 'result') return;
-
-            const isLoser = combatModal.loserId === mySocketId;
-            const attackerLost = combatModal.winner === 'defender';
-
-            // If there's damage and this player is the loser, open damage distribution modal
-            if (combatModal.damage > 0 && isLoser) {
-                const damage = combatModal.damage;
-                console.log('[Combat] Opening damage distribution modal for loser:', mySocketId, 'damage:', damage);
-
-                // Close combat modal first
-                closeCombatModal(mountEl, attackerLost);
-
-                // Open damage distribution modal - player chooses physical or mental damage type
-                openDamageDistributionModal(mountEl, damage, 'combat', null);
-            } else {
-                // Not the loser or no damage (tie), just close
-                closeCombatModal(mountEl, attackerLost);
-            }
-            return;
-        }
-
-        // Open end turn modal
-        if (action === 'open-end-turn') {
-            const myTurn = isMyTurn(currentGameState, mySocketId);
-            const movesLeft = currentGameState?.playerMoves?.[mySocketId] ?? 0;
-            // Only show modal if it's my turn and I have moves left
-            if (myTurn && movesLeft > 0) {
-                endTurnModal = { isOpen: true };
-                skipMapCentering = true;
-                updateGameUI(mountEl, currentGameState, mySocketId);
-            }
-            return;
-        }
-
-        // Close end turn modal
-        if (action === 'close-end-turn') {
-            // Don't close if clicking inside modal content (except close button)
-            const isInsideModalContent = target.closest('[data-modal-content="true"]');
-            const isCloseButton = target.closest('.end-turn-modal__close');
-            if (isInsideModalContent && !isCloseButton) {
-                return;
-            }
-            endTurnModal = null;
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Continue turn (close modal and continue playing)
-        if (action === 'continue-turn') {
-            endTurnModal = null;
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Confirm end turn (skip remaining moves)
-        if (action === 'confirm-end-turn') {
-            endTurnModal = null;
-            handleEndTurn(mountEl);
-            return;
-        }
-
-        // View character detail
-        if (action === 'view-character-detail') {
-            const charId = actionEl?.dataset.characterId;
-            if (charId && currentGameState) {
-                // Find the player who owns this character
-                const player = currentGameState.players?.find(p => p.characterId === charId);
-                const playerId = player?.id;
-                // Get current stats for this character's owner
-                const characterData = playerId
-                    ? (currentGameState.playerState?.characterData?.[playerId] || currentGameState.characterData?.[playerId])
-                    : null;
-                const currentStats = characterData?.stats || null;
-                openCharacterModal(mountEl, charId, currentStats);
-            }
-            return;
-        }
-
-        // Close modal
-        if (action === 'close-modal') {
-            closeCharacterModal(mountEl);
-            return;
-        }
-    });
-
-    // Enter key for dice input
-    mountEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.target.id === 'dice-manual-input') {
-            const btn = mountEl.querySelector('[data-action="roll-manual"]');
-            btn?.click();
-        }
-    });
-
-    // Room search input handler
-    mountEl.addEventListener('input', (e) => {
-        const target = /** @type {HTMLInputElement} */ (e.target);
-        if (target.id === 'room-search-input') {
-            const searchText = target.value.toLowerCase().trim();
-            const items = mountEl.querySelectorAll('.room-discovery__item');
-            
-            items.forEach(item => {
-                const itemEl = /** @type {HTMLElement} */ (item);
-                const searchData = itemEl.dataset.searchText || '';
-                const matches = searchText === '' || searchData.includes(searchText);
-                itemEl.style.display = matches ? '' : 'none';
-            });
-        }
-        
-        // Token card search
-        if (target.id === 'token-card-search-input') {
-            const searchText = target.value.toLowerCase().trim();
-            const items = mountEl.querySelectorAll('.token-card__item');
-
-            items.forEach(item => {
-                const itemEl = /** @type {HTMLElement} */ (item);
-                const searchData = itemEl.dataset.searchText || '';
-                const matches = searchText === '' || searchData.includes(searchText);
-                itemEl.style.display = matches ? '' : 'none';
-            });
-        }
-    });
-
-    // Change event for select elements (dropdowns) - DEBUG MODE
-    mountEl.addEventListener('change', (e) => {
-        const target = /** @type {HTMLSelectElement} */ (e.target);
-
-        // Event dice - stat selection changed (enable/disable confirm button)
-        if (target.matches('[data-input="event-stat-select"]')) {
-            if (!eventDiceModal) return;
-            const selectedStat = target.value;
-            // Store temp selection but don't confirm yet
-            eventDiceModal.tempSelectedStat = selectedStat;
-            // Enable/disable confirm button based on selection
-            const confirmBtn = mountEl.querySelector('[data-action="event-stat-confirm"]');
-            if (confirmBtn) {
-                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
-            }
-            return;
-        }
-
-        // Damage dice - stat selection for physical damage
-        if (target.matches('[data-input="damage-physical-stat-select"]')) {
-            if (!damageDiceModal) return;
-            const selectedStat = target.value;
-            damageDiceModal.tempPhysicalStat = selectedStat;
-            const confirmBtn = mountEl.querySelector('[data-action="damage-physical-stat-confirm"]');
-            if (confirmBtn) {
-                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
-            }
-            return;
-        }
-
-        // Damage dice - stat selection for mental damage
-        if (target.matches('[data-input="damage-mental-stat-select"]')) {
-            if (!damageDiceModal) return;
-            const selectedStat = target.value;
-            damageDiceModal.tempMentalStat = selectedStat;
-            const confirmBtn = mountEl.querySelector('[data-action="damage-mental-stat-confirm"]');
-            if (confirmBtn) {
-                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
-            }
-            return;
-        }
-    });
-}
 
 /**
  * Attach event listeners
@@ -5311,8 +4082,8 @@ function attachEventListeners(mountEl, roomId) {
                     // Random haunt number (1-50)
                     const hauntNumber = Math.floor(Math.random() * 50) + 1;
 
-                    // Trigger haunt locally
-                    triggerHauntDebug(currentGameState, {
+                    // Apply haunt state locally
+                    applyHauntState(currentGameState, {
                         hauntNumber: hauntNumber,
                         traitorId: traitorId,
                         triggeredByPlayerId: mySocketId,
@@ -5591,9 +4362,7 @@ function attachEventListeners(mountEl, roomId) {
                 skipMapCentering = true;
 
                 // Sync state with server in multiplayer mode
-                if (!isDebugMode) {
-                    syncGameStateToServer();
-                }
+                syncGameStateToServer();
 
                 updateGameUI(mountEl, currentGameState, mySocketId);
                 return;
@@ -6147,69 +4916,6 @@ async function updateGameUI(mountEl, gameState, myId) {
     }
 }
 
-/**
- * Handle debug mode dice roll
- * @param {HTMLElement} mountEl
- * @param {number} value
- */
-function handleDebugDiceRoll(mountEl, value) {
-    if (!currentGameState || currentGameState.gamePhase !== 'rolling') return;
-    if (currentGameState.needsRoll.length === 0) return;
-
-    // Roll for the first player who needs to roll
-    const playerId = currentGameState.needsRoll[0];
-    
-    // Record the roll
-    currentGameState.diceRolls[playerId] = value;
-    
-    // Remove from needsRoll
-    currentGameState.needsRoll = currentGameState.needsRoll.filter(id => id !== playerId);
-    
-    // Check if all rolled
-    if (currentGameState.needsRoll.length === 0) {
-        // Determine turn order by dice rolls (highest first)
-        const rolls = currentGameState.diceRolls;
-        const sorted = Object.entries(rolls).sort((a, b) => b[1] - a[1]);
-        currentGameState.turnOrder = sorted.map(([id]) => id);
-        currentGameState.currentTurnIndex = 0;
-        
-        // Show dice results for 5 seconds before starting game
-        showingDiceResults = true;
-        updateGameUI(mountEl, currentGameState, mySocketId);
-        
-        // Clear any existing timeout
-        if (diceResultsTimeout) {
-            clearTimeout(diceResultsTimeout);
-        }
-        
-        // After 5 seconds, transition to playing phase
-        diceResultsTimeout = setTimeout(() => {
-            showingDiceResults = false;
-            currentGameState.gamePhase = 'playing';
-            
-            // Set initial moves for first player
-            const firstPlayer = currentGameState.players.find(p => p.id === currentGameState.turnOrder[0]);
-            if (firstPlayer) {
-                const charData = currentGameState.playerState?.characterData?.[firstPlayer.id] || currentGameState.characterData?.[firstPlayer.id];
-                const speed = getCharacterSpeed(firstPlayer.characterId, charData);
-                currentGameState.playerMoves[firstPlayer.id] = speed;
-            }
-            
-            // Auto switch to first player in turn order
-            const firstIdx = currentGameState.players.findIndex(p => p.id === currentGameState.turnOrder[0]);
-            if (firstIdx !== -1) {
-                debugCurrentPlayerIndex = firstIdx;
-                mySocketId = currentGameState.players[firstIdx].id;
-            }
-            
-            updateGameUI(mountEl, currentGameState, mySocketId);
-        }, 5000);
-        
-        return;
-    }
-    
-    updateGameUI(mountEl, currentGameState, mySocketId);
-}
 
 /**
  * Map direction to door direction for movement
@@ -6699,9 +5405,7 @@ function handleMove(mountEl, direction) {
                     if (enemyInExistingRoom) {
                         console.log('[Combat] Enemy detected in room:', existingRoomId, 'enemy:', enemyInExistingRoom.id);
                         // Sync position first so all players see both characters in the same room
-                        if (!isDebugMode) {
-                            syncGameStateToServer();
-                        }
+                        syncGameStateToServer();
                         // Then open combat modal (player is already in the room)
                         openCombatModal(mountEl, playerId, enemyInExistingRoom.id, null);
                         return; // Wait for combat resolution
@@ -6718,9 +5422,7 @@ function handleMove(mountEl, direction) {
                         if (!currentGameState.playerState.drawnRooms.includes(existingRoomId)) {
                             currentGameState.playerState.drawnRooms.push(existingRoomId);
                             // Sync state BEFORE token drawing (so other players see position update)
-                            if (!isDebugMode) {
-                                syncGameStateToServer();
-                            }
+                            syncGameStateToServer();
                             initTokenDrawing(mountEl, existingRoom.tokens);
                             updateGameUI(mountEl, currentGameState, mySocketId);
                             return; // Don't end turn yet
@@ -6729,29 +5431,11 @@ function handleMove(mountEl, direction) {
 
                     // Check if turn ended
                     if (currentGameState.playerMoves[playerId] <= 0) {
-                        if (isDebugMode) {
-                            // Debug mode: auto-switch to next player locally
-                            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-                            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-                            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-                            if (nextPlayer) {
-                                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-                                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-                                currentGameState.playerMoves[nextPlayerId] = speed;
-                            }
-                            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-                            if (nextIdx !== -1) {
-                                debugCurrentPlayerIndex = nextIdx;
-                                mySocketId = nextPlayerId;
-                            }
-                        }
                         // Multiplayer mode: server will handle turn progression via game:state broadcast
                     }
 
                     // Sync state with server in multiplayer mode
-                    if (!isDebugMode) {
-                        syncGameStateToServer();
-                    }
+                    syncGameStateToServer();
 
                     updateGameUI(mountEl, currentGameState, mySocketId);
                     return;
@@ -6821,9 +5505,7 @@ function handleMove(mountEl, direction) {
         console.log('[Combat] Enemy detected in room:', targetRoomId, 'enemy:', enemyInTargetRoom.id);
 
         // Sync position first so all players see both characters in the same room
-        if (!isDebugMode) {
-            syncGameStateToServer();
-        }
+        syncGameStateToServer();
 
         // Then open combat modal (player is already in the room)
         openCombatModal(mountEl, playerId, enemyInTargetRoom.id, null);
@@ -6846,9 +5528,7 @@ function handleMove(mountEl, direction) {
             currentGameState.playerState.drawnRooms.push(targetRoomId);
 
             // Sync state BEFORE token drawing (so other players see position update)
-            if (!isDebugMode) {
-                syncGameStateToServer();
-            }
+            syncGameStateToServer();
 
             // Trigger token drawing
             initTokenDrawing(mountEl, targetRoom.tokens);
@@ -6859,33 +5539,11 @@ function handleMove(mountEl, direction) {
 
     // Check if turn ended
     if (currentGameState.playerMoves[playerId] <= 0) {
-        if (isDebugMode) {
-            // Debug mode: auto-switch to next player locally
-            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-
-            // Set moves for next player
-            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-            if (nextPlayer) {
-                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-                currentGameState.playerMoves[nextPlayerId] = speed;
-            }
-
-            // Auto switch UI to next player
-            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-            if (nextIdx !== -1) {
-                debugCurrentPlayerIndex = nextIdx;
-                mySocketId = nextPlayerId;
-            }
-        }
         // Multiplayer mode: server will handle turn progression via game:state broadcast
     }
 
     // Sync state with server in multiplayer mode
-    if (!isDebugMode) {
         syncGameStateToServer();
-    }
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
@@ -6894,7 +5552,6 @@ function handleMove(mountEl, direction) {
  * Sync local game state changes to server (multiplayer mode)
  */
 async function syncGameStateToServer() {
-    if (isDebugMode) return;
 
     try {
         // Send updated state to server (including characterData for stat changes, combatState, gameOver, combatResult)
@@ -6918,275 +5575,7 @@ async function syncGameStateToServer() {
     }
 }
 
-/**
- * Handle debug mode use stairs - move between floors
- * @param {HTMLElement} mountEl
- * @param {string} targetRoomId
- */
-function handleDebugUseStairs(mountEl, targetRoomId) {
-    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
 
-    const playerId = mySocketId;
-    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-    
-    // Only allow if it's this player's turn
-    if (playerId !== currentTurnPlayer) {
-        console.log(`Not ${playerId}'s turn`);
-        return;
-    }
-    
-    const moves = currentGameState.playerMoves[playerId] || 0;
-    if (moves <= 0) {
-        console.log(`No moves left for ${playerId}`);
-        return;
-    }
-    
-    // Verify target room exists
-    const revealedRooms = currentGameState.map?.revealedRooms || {};
-    if (!revealedRooms[targetRoomId]) {
-        console.log(`Target room ${targetRoomId} not found`);
-        return;
-    }
-
-    // Get current room before moving
-    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
-
-    // Clear completed combat flag when leaving current room
-    if (currentRoomId) {
-        clearCompletedCombatForPlayer(playerId, currentRoomId);
-    }
-
-    // Move to target room (stairs)
-    currentGameState.playerState.playerPositions[playerId] = targetRoomId;
-    
-    // Clear entry direction when using stairs (no specific door entry)
-    if (!currentGameState.playerState.playerEntryDirections) {
-        currentGameState.playerState.playerEntryDirections = {};
-    }
-    currentGameState.playerState.playerEntryDirections[playerId] = null;
-    
-    // Decrease moves (using stairs costs 1 move)
-    currentGameState.playerMoves[playerId] = moves - 1;
-    
-    // Apply Vault spawn position if entering Vault room
-    const targetRoom = revealedRooms[targetRoomId];
-    applyVaultSpawnPosition(playerId, targetRoom, currentGameState);
-    
-    // Check if target room has tokens and hasn't been drawn yet
-    if (targetRoom && targetRoom.tokens && targetRoom.tokens.length > 0) {
-        // Initialize drawnRooms tracking if not exists
-        if (!currentGameState.playerState.drawnRooms) {
-            currentGameState.playerState.drawnRooms = [];
-        }
-        
-        // Check if this room's tokens haven't been drawn yet
-        if (!currentGameState.playerState.drawnRooms.includes(targetRoomId)) {
-            // Mark room as drawn
-            currentGameState.playerState.drawnRooms.push(targetRoomId);
-            
-            // Trigger token drawing
-            initTokenDrawing(mountEl, targetRoom.tokens);
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return; // Don't end turn yet
-        }
-    }
-    
-    // Check if turn ended
-    if (currentGameState.playerMoves[playerId] <= 0) {
-        if (isDebugMode) {
-            // Debug mode: auto-switch to next player locally
-            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-
-            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-            if (nextPlayer) {
-                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-                currentGameState.playerMoves[nextPlayerId] = speed;
-            }
-
-            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-            if (nextIdx !== -1) {
-                debugCurrentPlayerIndex = nextIdx;
-                mySocketId = nextPlayerId;
-            }
-        }
-        // Multiplayer mode: server will handle turn progression via game:state broadcast
-    }
-
-    // Sync state with server in multiplayer mode
-    if (!isDebugMode) {
-        syncGameStateToServer();
-    }
-
-    updateGameUI(mountEl, currentGameState, mySocketId);
-}
-
-/**
- * Handle debug mode use Mystic Elevator - move to selected floor
- * Elevator snaps to landing room (door-to-door connection)
- * Remembers position for each floor visited
- * Creates elevator shaft on floors where elevator is not present
- * @param {HTMLElement} mountEl
- * @param {string} targetFloor - 'upper', 'ground', or 'basement'
- */
-function handleDebugUseElevator(mountEl, targetFloor) {
-    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
-
-    const playerId = mySocketId;
-    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-    
-    if (playerId !== currentTurnPlayer) {
-        console.log(`Not ${playerId}'s turn`);
-        return;
-    }
-    
-    const moves = currentGameState.playerMoves[playerId] || 0;
-    if (moves <= 0) {
-        console.log(`No moves left for ${playerId}`);
-        return;
-    }
-    
-    const revealedRooms = currentGameState.map?.revealedRooms || {};
-    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
-    const currentRoom = revealedRooms[currentRoomId];
-    
-    if (!currentRoom || currentRoom.name !== 'Mystic Elevator') {
-        console.log('Not in Mystic Elevator');
-        return;
-    }
-    
-    const previousFloor = currentRoom.floor;
-    const previousX = currentRoom.x;
-    const previousY = currentRoom.y;
-    const previousDoors = [...(currentRoom.doors || ['north'])];
-    const previousConnections = { ...currentGameState.map.connections[currentRoomId] };
-    
-    // Initialize elevator floor positions tracking if not exists
-    if (!currentRoom.floorPositions) {
-        currentRoom.floorPositions = {};
-    }
-    
-    // Save current floor position before moving (including doors)
-    currentRoom.floorPositions[previousFloor] = {
-        x: previousX,
-        y: previousY,
-        doors: previousDoors,
-        connections: previousConnections
-    };
-    
-    // Initialize elevator shafts tracking if not exists
-    if (!currentGameState.map.elevatorShafts) {
-        currentGameState.map.elevatorShafts = {};
-    }
-    
-    let newX, newY;
-    let newDoors = ['north']; // Default door direction
-    let newConnections = {};
-    
-    // Check if we have a saved position for target floor
-    if (currentRoom.floorPositions[targetFloor]) {
-        // Return to saved position on this floor
-        const savedPos = currentRoom.floorPositions[targetFloor];
-        newX = savedPos.x;
-        newY = savedPos.y;
-        newDoors = savedPos.doors || ['north'];
-        newConnections = { ...savedPos.connections };
-    } else {
-        // First time visiting this floor - snap to landing room
-        const landingNames = {
-            'upper': 'Upper Landing',
-            'basement': 'Basement Landing',
-            'ground': 'Foyer'
-        };
-        const landingName = landingNames[targetFloor];
-        
-        // Find the landing room
-        let landingRoom = null;
-        let landingRoomId = null;
-        for (const [roomId, room] of Object.entries(revealedRooms)) {
-            if (room.name === landingName && room.floor === targetFloor) {
-                landingRoom = room;
-                landingRoomId = roomId;
-                break;
-            }
-        }
-        
-        if (landingRoom) {
-            // Place elevator south of landing (elevator's north door connects to landing's south door)
-            newX = landingRoom.x;
-            newY = landingRoom.y - 1;
-            // Connect elevator (north) to landing (south)
-            newConnections = { north: landingRoomId };
-            if (!currentGameState.map.connections[landingRoomId]) {
-                currentGameState.map.connections[landingRoomId] = {};
-            }
-            currentGameState.map.connections[landingRoomId].south = currentRoomId;
-        } else {
-            // Fallback: place at origin if no landing found
-            newX = 0;
-            newY = 0;
-        }
-    }
-    
-    // Create elevator shaft on the floor we're leaving (blocked until elevator returns)
-    const shaftId = `elevator-shaft-${previousFloor}`;
-    revealedRooms[shaftId] = {
-        id: shaftId,
-        name: 'Elevator Shaft',
-        x: previousX,
-        y: previousY,
-        floor: previousFloor,
-        doors: previousDoors, // Same doors as elevator had on this floor
-        isElevatorShaft: true,
-        elevatorPresent: false
-    };
-    currentGameState.map.elevatorShafts[previousFloor] = shaftId;
-    
-    // Remove connections TO the old elevator position (now shaft)
-    // Find rooms that were connected to elevator and remove their connection
-    const oldConnections = currentGameState.map.connections[currentRoomId] || {};
-    for (const [dir, connectedRoomId] of Object.entries(oldConnections)) {
-        if (connectedRoomId && currentGameState.map.connections[connectedRoomId]) {
-            // Find and remove the reverse connection
-            const reverseDir = getOppositeDoor(dir);
-            if (currentGameState.map.connections[connectedRoomId][reverseDir] === currentRoomId) {
-                // Point to shaft instead (but shaft has no connections = blocked)
-                delete currentGameState.map.connections[connectedRoomId][reverseDir];
-            }
-        }
-    }
-    
-    // Shaft has no connections (blocked)
-    currentGameState.map.connections[shaftId] = {};
-    
-    // Remove shaft on target floor if exists (elevator is arriving)
-    const targetShaftId = currentGameState.map.elevatorShafts[targetFloor];
-    if (targetShaftId && revealedRooms[targetShaftId]) {
-        delete revealedRooms[targetShaftId];
-        delete currentGameState.map.connections[targetShaftId];
-        delete currentGameState.map.elevatorShafts[targetFloor];
-    }
-    
-    // Move elevator to new floor (player stays in elevator)
-    currentRoom.floor = targetFloor;
-    currentRoom.x = newX;
-    currentRoom.y = newY;
-    currentRoom.doors = newDoors; // Restore saved doors for this floor
-    
-    // Update connections
-    currentGameState.map.connections[currentRoomId] = newConnections;
-
-    // Using elevator does NOT cost a move (free action)
-    // Player can continue moving after using elevator
-
-    // Sync state with server in multiplayer mode
-    if (!isDebugMode) {
-        syncGameStateToServer();
-    }
-
-    updateGameUI(mountEl, currentGameState, mySocketId);
-}
 
 /**
  * Handle end turn early - skip remaining moves (unified for debug and multiplayer)
@@ -7204,50 +5593,6 @@ function handleEndTurn(mountEl) {
         return;
     }
 
-    if (isDebugMode) {
-        // Debug mode: update local state and switch to next player
-        currentGameState.playerMoves[playerId] = 0;
-        currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-
-        const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-        const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-        if (nextPlayer) {
-            const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-            currentGameState.playerMoves[nextPlayerId] = speed;
-        }
-
-        // Auto switch to next player
-        const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-        if (nextIdx !== -1) {
-            debugCurrentPlayerIndex = nextIdx;
-            mySocketId = nextPlayerId;
-        }
-
-        updateGameUI(mountEl, currentGameState, mySocketId);
-    } else {
-        // Multiplayer mode: sync current state first, then end turn
-        // This ensures any newly revealed rooms/cards are saved before turn ends
-        syncGameStateToServer().then((syncResult) => {
-            // Check if connected before trying to end turn
-            if (!socketClient.isConnected()) {
-                console.warn('[EndTurn] Not connected to server');
-                showToast('Mat ket noi voi server. Dang thu ket noi lai...', 'warning');
-                return;
-            }
-
-            socketClient.endTurn().then(result => {
-                console.log('[EndTurn] Server response:', result);
-                if (!result.success) {
-                    showToast('Khong the ket thuc luot. Thu lai sau.', 'warning');
-                }
-                // Server will broadcast updated game state, no need to update UI here
-            }).catch(err => {
-                console.error('[EndTurn] Error:', err);
-                showToast('Loi ket noi. Vui long thu lai.', 'warning');
-            });
-        });
-    }
 }
 
 /**
@@ -7455,9 +5800,7 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         currentGameState.playerState.drawnRooms.push(newRoomId);
 
         // Sync state BEFORE token drawing (so other players see position update)
-        if (!isDebugMode) {
-            syncGameStateToServer();
-        }
+        syncGameStateToServer();
 
         initTokenDrawing(mountEl, newRoom.tokens);
         // Don't end turn yet, wait for token drawing to complete
@@ -7467,32 +5810,11 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     
     // Check if turn ended (no more moves)
     if (currentGameState.playerMoves[playerId] <= 0) {
-        if (isDebugMode) {
-            // Debug mode: auto-switch to next player locally
-            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-
-            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-            if (nextPlayer) {
-                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-                currentGameState.playerMoves[nextPlayerId] = speed;
-            }
-
-            // Auto switch to next player
-            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-            if (nextIdx !== -1) {
-                debugCurrentPlayerIndex = nextIdx;
-                mySocketId = nextPlayerId;
-            }
-        }
         // Multiplayer mode: server will handle turn progression via game:state broadcast
     }
 
     // Sync state with server in multiplayer mode
-    if (!isDebugMode) {
         syncGameStateToServer();
-    }
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
@@ -7762,40 +6084,18 @@ function confirmTokenDrawing(mountEl) {
     if (immediateRollEvent) {
         console.log('[TokenDrawing] Event requires immediate roll:', immediateRollEvent);
         // Sync state BEFORE opening event dice modal (so other players see cards update)
-        if (!isDebugMode) {
-            syncGameStateToServer();
-        }
+        syncGameStateToServer();
         openEventDiceModal(mountEl, immediateRollEvent);
         return; // Don't proceed to next turn yet
     }
 
     // Check if turn ended (no more moves)
     if (currentGameState.playerMoves[playerId] <= 0) {
-        if (isDebugMode) {
-            // Debug mode: auto-switch to next player locally
-            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-
-            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-            if (nextPlayer) {
-                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId] || currentGameState.characterData?.[nextPlayerId];
-                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-                currentGameState.playerMoves[nextPlayerId] = speed;
-            }
-
-            const nextIdx = currentGameState.players.findIndex(p => p.id === nextPlayerId);
-            if (nextIdx !== -1) {
-                debugCurrentPlayerIndex = nextIdx;
-                mySocketId = nextPlayerId;
-            }
-        }
         // Multiplayer mode: server will handle turn progression via game:state broadcast
     }
 
     // Sync state with server in multiplayer mode
-    if (!isDebugMode) {
         syncGameStateToServer();
-    }
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
@@ -7973,9 +6273,9 @@ function renderCardsViewModal() {
 
 /**
  * Render game view
- * @param {{ mountEl: HTMLElement; onNavigate: (hash: string) => void; roomId: string | null; debugMode?: boolean }} options
+ * @param {{ mountEl: HTMLElement; onNavigate: (hash: string) => void; roomId: string | null }} options
  */
-export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false }) {
+export function renderGameView({ mountEl, onNavigate, roomId }) {
     // Clone and replace mountEl to remove all existing event listeners from previous views
     const newMountEl = mountEl.cloneNode(false);
     mountEl.parentNode?.replaceChild(newMountEl, mountEl);
@@ -7985,8 +6285,6 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
     eventListenersAttached = false;
 
     // Set debug mode flag
-    isDebugMode = debugMode;
-    debugCurrentPlayerIndex = 0;
 
     // Reset state for fresh game
     sidebarOpen = false;
@@ -7995,50 +6293,6 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
     expandedPlayers.clear();
     activePlayers.clear();
     endTurnModal = null;
-    
-    if (debugMode) {
-        // Initialize debug game state
-        currentGameState = createDebugGameState();
-        
-        // Set mySocketId to first player (will control all players in debug mode)
-        debugCurrentPlayerIndex = 0;
-        mySocketId = currentGameState.players[0]?.id || 'debug-player-0';
-        
-        // Show intro same as main game (will auto-hide after 5s or on click)
-        introShown = false;
-        
-        // Initial render
-        mountEl.innerHTML = renderGameScreen(currentGameState, mySocketId);
-
-        // Center map on player
-        centerMapOnPlayer(mountEl);
-
-        // Auto-hide intro after 5 seconds (same as main game behavior)
-        introTimeout = setTimeout(() => {
-            hideIntro(mountEl);
-        }, 5000);
-
-        // Attach debug event listeners
-        attachDebugEventListeners(mountEl);
-        
-        // Cleanup on navigate away
-        window.addEventListener('hashchange', () => {
-            if (introTimeout) {
-                clearTimeout(introTimeout);
-                introTimeout = null;
-            }
-            // Reset state for next game
-            sidebarOpen = false;
-            introShown = false;
-            movesInitializedForTurn = -1;
-            expandedPlayers.clear();
-            activePlayers.clear();
-            endTurnModal = null;
-            eventListenersAttached = false; // Reset listener flag for next game
-        }, { once: true });
-
-        return;
-    }
     
     // Normal mode - connect socket
     socketClient.connect();
@@ -8074,6 +6328,20 @@ export function renderGameView({ mountEl, onNavigate, roomId, debugMode = false 
     // Subscribe to game state updates
     unsubscribeGameState = socketClient.onGameState((state) => {
         clearLoadingTimeout();
+
+        // Handle debug room waiting state
+        if (state?.isDebug) {
+            if (state.gamePhase === 'lobby' && state.players?.length < 2) {
+                // Waiting for second player in debug mode
+                showDebugWaitingPopup();
+                currentGameState = state;
+                return; // Don't render game UI yet
+            } else if (state.gamePhase === 'playing') {
+                // Game started - hide waiting popup and skip intro
+                hideDebugWaitingPopup();
+                introShown = true; // Skip intro in debug mode
+            }
+        }
 
         // Check if haunt was just triggered (compare old vs new state)
         const wasHauntTriggered = currentGameState?.hauntState?.hauntTriggered;

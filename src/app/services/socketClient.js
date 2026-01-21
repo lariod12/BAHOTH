@@ -19,8 +19,6 @@ const gameStateListeners = [];
 /** @type {((data: { activePlayers: string[] }) => void)[]} */
 const playersActiveListeners = [];
 
-/** @type {((room: any) => void)[]} */
-const debugRoomStateListeners = [];
 
 // ============================================
 // Session Management for Reconnection
@@ -266,11 +264,6 @@ export function connect() {
     socket.on('game:players-active', (data) => {
         console.log('[SocketClient] Players active update:', data);
         playersActiveListeners.forEach((fn) => fn(data));
-    });
-
-    socket.on('debug-room-state', (room) => {
-        console.log('[SocketClient] Debug room state update:', room);
-        debugRoomStateListeners.forEach((fn) => fn(room));
     });
 
     return socket;
@@ -694,55 +687,25 @@ export function onPlayersActive(callback) {
 // ============================================
 
 /**
- * Create a debug room with auto-generated players
- * @param {number} playerCount - Number of players (3-6)
+ * Join or create a debug room with fixed ID "DEBUG"
+ * Used for quick multiplayer testing - auto-starts when 2 players join
+ * @param {string} playerName - Player's name
  * @returns {Promise<{ success: boolean; room?: any; error?: string }>}
  */
-export function createDebugRoom(playerCount) {
+export function joinOrCreateDebugRoom(playerName) {
     return new Promise((resolve) => {
         if (!socket?.connected) {
             resolve({ success: false, error: 'Not connected' });
             return;
         }
 
-        socket.emit('create-debug-room', { playerCount }, (response) => {
+        socket.emit('debug:join-or-create', { playerName }, (response) => {
+            if (response.success && response.room) {
+                saveSession(response.room.id, playerName);
+            }
             resolve(response);
         });
     });
-}
-
-/**
- * Select character for a specific player in debug mode
- * @param {string} playerId - Target player ID
- * @param {string} characterId - Character to select
- * @returns {Promise<{ success: boolean; room?: any; error?: string }>}
- */
-export function debugSelectCharacter(playerId, characterId) {
-    return new Promise((resolve) => {
-        if (!socket?.connected) {
-            resolve({ success: false, error: 'Not connected' });
-            return;
-        }
-
-        socket.emit('debug-select-character', { playerId, characterId }, (response) => {
-            resolve(response);
-        });
-    });
-}
-
-/**
- * Subscribe to debug room state updates
- * @param {(room: any) => void} callback
- * @returns {() => void} Unsubscribe function
- */
-export function onDebugRoomState(callback) {
-    debugRoomStateListeners.push(callback);
-    return () => {
-        const index = debugRoomStateListeners.indexOf(callback);
-        if (index > -1) {
-            debugRoomStateListeners.splice(index, 1);
-        }
-    };
 }
 
 // ============================================

@@ -605,43 +605,12 @@ export function socketIOPlugin() {
                 });
 
                 // ============================================
-                // Debug Mode Events
+                // Debug Mode Events (Multiplayer Quick Start)
                 // ============================================
 
-                // Create debug room with auto-generated players
-                socket.on('create-debug-room', ({ playerCount }, callback) => {
-                    const room = roomManager.createDebugRoom(socket.id, playerCount || 3);
-                    socket.join(room.id);
-                    console.log(`[Socket.IO] Debug room created: ${room.id} by ${socket.id} (players: ${room.players.length})`);
-
-                    if (callback) {
-                        callback({ success: true, room });
-                    }
-
-                    // Emit debug room state
-                    io.to(room.id).emit('debug-room-state', room);
-                    io.to(room.id).emit('room:state', room);
-                });
-
-                // Select character for a player in debug mode
-                socket.on('debug-select-character', ({ playerId, characterId }, callback) => {
-                    const room = roomManager.getRoomBySocket(socket.id);
-
-                    if (!room) {
-                        if (callback) {
-                            callback({ success: false, error: 'Not in a room' });
-                        }
-                        return;
-                    }
-
-                    if (!room.isDebug) {
-                        if (callback) {
-                            callback({ success: false, error: 'Not a debug room' });
-                        }
-                        return;
-                    }
-
-                    const result = roomManager.debugSelectCharacter(room.id, playerId, characterId);
+                // Join or create debug room with fixed ID "DEBUG"
+                socket.on('debug:join-or-create', ({ playerName }, callback) => {
+                    const result = roomManager.joinOrCreateDebugRoom(socket.id, playerName);
 
                     if (!result.success) {
                         if (callback) {
@@ -650,15 +619,42 @@ export function socketIOPlugin() {
                         return;
                     }
 
-                    console.log(`[Socket.IO] Debug character selected: ${characterId} for player ${playerId} in room ${room.id}`);
+                    socket.join(result.room.id);
+                    console.log(`[Socket.IO] Player ${socket.id} joined debug room (players: ${result.room.players.length})`);
 
                     if (callback) {
                         callback({ success: true, room: result.room });
                     }
 
-                    // Emit updated debug room state
-                    io.to(room.id).emit('debug-room-state', result.room);
-                    io.to(room.id).emit('room:state', result.room);
+                    // Emit room state to all players in room
+                    io.to(result.room.id).emit('room:state', result.room);
+
+                    // Also emit as game:state so gameView can receive it
+                    let mapState = mapManager.getMapState(result.room.id);
+                    let playerState = playerManager.getPlayerState(result.room.id);
+
+                    // For debug room: always reinitialize map and player state when game starts
+                    // This ensures fresh state for each debug session
+                    if (result.started) {
+                        mapState = mapManager.initializeMap(result.room.id);
+                        playerState = playerManager.initializeGame(result.room.id, result.room.players);
+                        console.log('[Socket.IO] Debug game started - initialized fresh map and player state');
+                    } else if (!mapState) {
+                        mapState = mapManager.initializeMap(result.room.id);
+                    }
+
+                    const fullState = {
+                        ...result.room,
+                        map: mapState,
+                        playerState: playerState || {},
+                    };
+                    io.to(result.room.id).emit('game:state', fullState);
+
+                    // If game started (2 players), emit game start
+                    if (result.started) {
+                        console.log('[Socket.IO] Debug room has 2 players, game auto-started in playing phase');
+                        io.to(result.room.id).emit('room:game-start', { roomId: result.room.id });
+                    }
                 });
 
                 // Get current room state
@@ -769,7 +765,12 @@ export function socketIOPlugin() {
                             }
                         });
 
-                        if (result.room) {
+                        if (result.debugReset) {
+                            // Debug room was reset - clean up map and player state
+                            mapManager.cleanupMap('DEBUG');
+                            playerManager.cleanupGame('DEBUG');
+                            console.log('[Socket.IO] Debug room reset - cleaned up map and player state');
+                        } else if (result.room) {
                             io.to(result.room.id).emit('room:state', result.room);
                             io.to(result.room.id).emit('room:player-disconnected', {
                                 playerId: socket.id,
@@ -788,9 +789,16 @@ export function socketIOPlugin() {
                         }
                     } else {
                         // In lobby or no room - remove immediately (original behavior)
+                        // Check if this is debug room before leaving
+                        const wasInDebugRoom = room?.id === 'DEBUG';
                         const result = roomManager.leaveRoom(socket.id);
 
-                        if (result.room) {
+                        if (wasInDebugRoom && result.roomDeleted) {
+                            // Debug room was reset - clean up map and player state
+                            mapManager.cleanupMap('DEBUG');
+                            playerManager.cleanupGame('DEBUG');
+                            console.log('[Socket.IO] Debug room reset (from lobby) - cleaned up map and player state');
+                        } else if (result.room) {
                             io.to(result.room.id).emit('room:state', result.room);
                             io.to(result.room.id).emit('room:player-left', {
                                 playerId: socket.id,

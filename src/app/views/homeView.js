@@ -1,8 +1,8 @@
 import * as socketClient from '../services/socketClient.js';
 
-// Debug mode state
-let isDebugMode = false;
-let debugPlayerCount = 2;
+// Debug mode constants
+const DEBUG_ROOM_ID = 'DEBUG';
+const DEBUG_STORAGE_KEY = 'bahoth_debug_mode';
 
 // Random name generator - Horror/Haunted theme
 const ADJECTIVES = [
@@ -79,18 +79,8 @@ function renderHomeMarkup() {
                 <div class="debug-mode-section">
                     <label class="debug-toggle">
                         <input type="checkbox" id="debug-mode-toggle" />
-                        <span class="debug-toggle__label">Debug Mode</span>
+                        <span class="debug-toggle__label">Debug Mode (2 players, auto-start)</span>
                     </label>
-                    <div class="debug-options" id="debug-options">
-                        <label class="debug-options__label">Players:</label>
-                        <select class="debug-options__select" id="debug-player-count">
-                            <option value="2" selected>2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
-                            <option value="5">5</option>
-                            <option value="6">6</option>
-                        </select>
-                    </div>
                 </div>
             </div>
         </div>
@@ -188,27 +178,49 @@ export function renderHomeView({ mountEl, onNavigate }) {
 
     // Debug mode elements
     const debugModeToggle = /** @type {HTMLInputElement} */ (mountEl.querySelector('#debug-mode-toggle'));
-    const debugOptions = mountEl.querySelector('#debug-options');
-    const debugPlayerCountSelect = /** @type {HTMLSelectElement} */ (mountEl.querySelector('#debug-player-count'));
 
-    // Debug mode toggle handler
-    const updateDebugOptionsVisibility = () => {
-        if (debugOptions) {
-            debugOptions.classList.toggle('is-visible', isDebugMode);
+    // Auto-join debug room function
+    const autoJoinDebugRoom = async () => {
+        const randomName = generateRandomName();
+        socketClient.clearSession();
+
+        try {
+            const result = await socketClient.joinOrCreateDebugRoom(randomName);
+            if (result.success && result.room) {
+                // Navigate directly to game view (skip room/character selection)
+                onNavigate(`#/game/${DEBUG_ROOM_ID}`);
+            } else {
+                console.error('Failed to join debug room:', result.error);
+                // Uncheck the toggle on failure
+                if (debugModeToggle) debugModeToggle.checked = false;
+                localStorage.setItem(DEBUG_STORAGE_KEY, 'false');
+            }
+        } catch (error) {
+            console.error('Error joining debug room:', error);
+            if (debugModeToggle) debugModeToggle.checked = false;
+            localStorage.setItem(DEBUG_STORAGE_KEY, 'false');
         }
     };
 
+    // Debug mode toggle handler
     debugModeToggle?.addEventListener('change', () => {
-        isDebugMode = debugModeToggle.checked;
-        updateDebugOptionsVisibility();
+        const isChecked = debugModeToggle.checked;
+        localStorage.setItem(DEBUG_STORAGE_KEY, isChecked.toString());
+
+        if (isChecked) {
+            autoJoinDebugRoom();
+        }
     });
 
-    debugPlayerCountSelect?.addEventListener('change', () => {
-        debugPlayerCount = parseInt(debugPlayerCountSelect.value, 10);
-    });
-
-    // Initialize debug options visibility
-    updateDebugOptionsVisibility();
+    // Check saved debug mode state on page load
+    const savedDebugMode = localStorage.getItem(DEBUG_STORAGE_KEY) === 'true';
+    if (debugModeToggle) {
+        debugModeToggle.checked = savedDebugMode;
+    }
+    if (savedDebugMode) {
+        // Auto-join debug room if debug mode was saved
+        autoJoinDebugRoom();
+    }
 
     // Track room check state
     let checkedRoomId = null;
@@ -303,20 +315,8 @@ export function renderHomeView({ mountEl, onNavigate }) {
     const joinRoomButton = mountEl.querySelector('[data-action="join-room"]');
     const tutorialButton = mountEl.querySelector('[data-action="tutorial"]');
 
-    createRoomButton?.addEventListener('click', async () => {
-        if (isDebugMode) {
-            // Clear any existing session before creating debug room
-            socketClient.clearSession();
-            // Create debug room directly without modal
-            const result = await socketClient.createDebugRoom(debugPlayerCount);
-            if (result.success && result.room) {
-                onNavigate(`#/room/${result.room.id}`);
-            } else {
-                console.error('Failed to create debug room:', result.error);
-            }
-        } else {
-            openCreateModal();
-        }
+    createRoomButton?.addEventListener('click', () => {
+        openCreateModal();
     });
 
     joinRoomButton?.addEventListener('click', () => {
