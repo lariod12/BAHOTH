@@ -975,6 +975,18 @@ function closeCombatModal(mountEl, attackerLost = false, resultInfo = null) {
         // Resume the movement that was interrupted
         handleMoveAfterCombat(mountEl, movement.direction, movement.targetRoomId);
     } else {
+        // Check if current player's turn should end (moves depleted)
+        if (currentGameState) {
+            const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+            const currentPlayerMoves = currentGameState.playerMoves[currentTurnPlayer] || 0;
+
+            if (currentPlayerMoves <= 0) {
+                console.log('[Combat] Current player has 0 moves after combat, advancing turn');
+                advanceToNextTurn();
+                syncGameStateToServer();
+            }
+        }
+
         updateGameUI(mountEl, currentGameState, mySocketId);
     }
 }
