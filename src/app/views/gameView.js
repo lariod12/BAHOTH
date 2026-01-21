@@ -2726,11 +2726,26 @@ function renderDamageDistributionModal() {
     const remainingDamage = totalDamage - stat1Damage - stat2Damage;
     const canConfirm = remainingDamage === 0;
 
-    // Get current stat values to show player
+    // Get current stat indices and values
     const playerId = mySocketId;
     const charData = currentGameState?.playerState?.characterData?.[playerId];
-    const stat1Current = charData?.stats?.[stat1] ?? 0;
-    const stat2Current = charData?.stats?.[stat2] ?? 0;
+    const characterId = charData?.characterId;
+    const stat1Index = charData?.stats?.[stat1] ?? 0;
+    const stat2Index = charData?.stats?.[stat2] ?? 0;
+
+    // Get actual stat values from character trait tracks
+    const stat1Value = characterId ? getStatValue(characterId, stat1, stat1Index) : 0;
+    const stat2Value = characterId ? getStatValue(characterId, stat2, stat2Index) : 0;
+
+    // Calculate new values after applying damage
+    const stat1NewIndex = Math.max(0, stat1Index - stat1Damage);
+    const stat2NewIndex = Math.max(0, stat2Index - stat2Damage);
+    const stat1NewValue = characterId ? getStatValue(characterId, stat1, stat1NewIndex) : 0;
+    const stat2NewValue = characterId ? getStatValue(characterId, stat2, stat2NewIndex) : 0;
+
+    // Check for death warning (index reaches 0)
+    const stat1IsDead = stat1NewIndex === 0;
+    const stat2IsDead = stat2NewIndex === 0;
 
     return `
         <div class="damage-dist-overlay">
@@ -2743,10 +2758,16 @@ function renderDamageDistributionModal() {
                         Sat thuong con lai: <strong>${remainingDamage}</strong>
                     </div>
 
-                    <div class="damage-dist-modal__stat-row">
-                        <label class="damage-dist-modal__stat-label">
-                            ${statLabels[stat1]} <span class="damage-dist-modal__current">(index: ${stat1Current})</span>
-                        </label>
+                    <div class="damage-dist-modal__stat-row ${stat1IsDead ? 'damage-dist-modal__stat-row--dead' : ''}">
+                        <div class="damage-dist-modal__stat-info">
+                            <label class="damage-dist-modal__stat-label">${statLabels[stat1]}</label>
+                            <div class="damage-dist-modal__stat-preview">
+                                <span class="damage-dist-modal__stat-current">${stat1Value}</span>
+                                ${stat1Damage > 0 ? `<span class="damage-dist-modal__stat-arrow">→</span>
+                                <span class="damage-dist-modal__stat-new ${stat1IsDead ? 'damage-dist-modal__stat-new--dead' : ''}">${stat1NewValue}</span>` : ''}
+                                ${stat1IsDead ? '<span class="damage-dist-modal__death-warning">☠ CHET</span>' : ''}
+                            </div>
+                        </div>
                         <div class="damage-dist-modal__stat-input">
                             <button class="damage-dist-modal__btn damage-dist-modal__btn--minus"
                                     type="button" data-action="damage-adjust" data-stat="1" data-delta="-1"
@@ -2758,10 +2779,16 @@ function renderDamageDistributionModal() {
                         </div>
                     </div>
 
-                    <div class="damage-dist-modal__stat-row">
-                        <label class="damage-dist-modal__stat-label">
-                            ${statLabels[stat2]} <span class="damage-dist-modal__current">(index: ${stat2Current})</span>
-                        </label>
+                    <div class="damage-dist-modal__stat-row ${stat2IsDead ? 'damage-dist-modal__stat-row--dead' : ''}">
+                        <div class="damage-dist-modal__stat-info">
+                            <label class="damage-dist-modal__stat-label">${statLabels[stat2]}</label>
+                            <div class="damage-dist-modal__stat-preview">
+                                <span class="damage-dist-modal__stat-current">${stat2Value}</span>
+                                ${stat2Damage > 0 ? `<span class="damage-dist-modal__stat-arrow">→</span>
+                                <span class="damage-dist-modal__stat-new ${stat2IsDead ? 'damage-dist-modal__stat-new--dead' : ''}">${stat2NewValue}</span>` : ''}
+                                ${stat2IsDead ? '<span class="damage-dist-modal__death-warning">☠ CHET</span>' : ''}
+                            </div>
+                        </div>
                         <div class="damage-dist-modal__stat-input">
                             <button class="damage-dist-modal__btn damage-dist-modal__btn--minus"
                                     type="button" data-action="damage-adjust" data-stat="2" data-delta="-1"
@@ -3859,8 +3886,6 @@ function attachDebugEventListeners(mountEl) {
         const actionEl = target.closest('[data-action]');
         const action = target.dataset.action || actionEl?.dataset.action;
 
-        console.log('[ClickListener1] action:', action, 'target:', target.tagName);
-
         // Check if click is inside any modal overlay
         const isInsideModal = target.closest('.combat-overlay') ||
                               target.closest('.damage-dice-overlay') ||
@@ -4440,14 +4465,9 @@ function attachDebugEventListeners(mountEl) {
 
         // Damage distribution: Type selection
         if (action === 'damage-type-select') {
-            console.log('[DamageDistribution] Type click - modal:', damageDistributionModal, 'actionEl:', actionEl);
-            if (!damageDistributionModal) {
-                console.log('[DamageDistribution] Modal is null, returning');
-                return;
-            }
+            if (!damageDistributionModal) return;
 
             const type = actionEl?.dataset?.type; // 'physical' or 'mental'
-            console.log('[DamageDistribution] Got type from actionEl:', type);
             damageDistributionModal.damageType = type;
 
             if (type === 'physical') {
@@ -5828,14 +5848,9 @@ function attachEventListeners(mountEl, roomId) {
 
         // Damage distribution: Type selection
         if (action === 'damage-type-select') {
-            console.log('[DamageDistribution-MP] Type click - modal:', damageDistributionModal, 'actionEl:', actionEl);
-            if (!damageDistributionModal) {
-                console.log('[DamageDistribution-MP] Modal is null, returning');
-                return;
-            }
+            if (!damageDistributionModal) return;
 
             const type = actionEl?.dataset?.type; // 'physical' or 'mental'
-            console.log('[DamageDistribution-MP] Got type from actionEl:', type);
             damageDistributionModal.damageType = type;
 
             if (type === 'physical') {
@@ -5846,7 +5861,6 @@ function attachEventListeners(mountEl, roomId) {
                 damageDistributionModal.stat2 = 'knowledge';
             }
 
-            console.log('[DamageDistribution-MP] Type selected:', type);
             skipMapCentering = true;
             updateGameUI(mountEl, currentGameState, mySocketId);
             return;
@@ -5854,7 +5868,6 @@ function attachEventListeners(mountEl, roomId) {
 
         // Damage distribution: Adjust damage allocation (+/- buttons)
         if (action === 'damage-adjust') {
-            console.log('[DamageDistribution-MP] Adjust click - modal:', damageDistributionModal);
             if (!damageDistributionModal) return;
 
             const statNum = actionEl?.dataset?.stat; // '1' or '2'
@@ -5882,16 +5895,12 @@ function attachEventListeners(mountEl, roomId) {
 
         // Damage distribution: Confirm and apply
         if (action === 'damage-dist-confirm') {
-            console.log('[DamageDistribution-MP] Confirm click - modal:', damageDistributionModal);
             if (!damageDistributionModal) return;
 
             const remaining = damageDistributionModal.totalDamage -
                 damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
 
-            if (remaining !== 0) {
-                console.log('[DamageDistribution-MP] Cannot confirm - remaining damage:', remaining);
-                return;
-            }
+            if (remaining !== 0) return;
 
             closeDamageDistributionModal(mountEl);
             return;

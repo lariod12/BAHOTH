@@ -6844,6 +6844,63 @@ select.field__input option {
     cursor: not-allowed;
 }
 
+/* Damage distribution - stat info and preview */
+.damage-dist-modal__stat-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.damage-dist-modal__stat-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.damage-dist-modal__stat-current {
+    color: #4ade80;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.damage-dist-modal__stat-arrow {
+    color: #f87171;
+    font-weight: 700;
+}
+
+.damage-dist-modal__stat-new {
+    color: #fbbf24;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.damage-dist-modal__stat-new--dead {
+    color: #ef4444;
+    font-weight: 700;
+}
+
+.damage-dist-modal__death-warning {
+    color: #ef4444;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: rgba(239, 68, 68, 0.2);
+    border-radius: 4px;
+    animation: pulse 1s infinite;
+}
+
+.damage-dist-modal__stat-row--dead {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 /* ===== VICTORY MODAL ===== */
 .victory-overlay {
     position: fixed;
@@ -6993,6 +7050,8 @@ select.field__input option {
     background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
     color: #1a1a1a;
     transition: all 0.2s ease;
+    width: auto !important;
+    display: inline-block;
 }
 
 .victory-modal__btn:hover {
