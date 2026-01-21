@@ -3015,12 +3015,6 @@ function renderSidebar(gameState, myId) {
                 <span class="sidebar-title">${charName}</span>
                 <button class="sidebar-close" type="button" data-action="close-sidebar">&times;</button>
             </div>
-            ${myFaction ? `
-                <div class="sidebar-faction ${factionClass}">
-                    <span class="sidebar-faction__icon">${myFaction === 'traitor' ? '☠' : '◆'}</span>
-                    <span class="sidebar-faction__label">${factionLabel}</span>
-                </div>
-            ` : ''}
             <div class="sidebar-content">
                 <div class="sidebar-stats">
                     <div class="sidebar-stat">
@@ -3055,6 +3049,12 @@ function renderSidebar(gameState, myId) {
                     Xem chi tiet nhan vat
                 </button>
             </div>
+            ${myFaction ? `
+                <div class="sidebar-faction ${factionClass}">
+                    <span class="sidebar-faction__icon">${myFaction === 'traitor' ? '☠' : '◆'}</span>
+                    <span class="sidebar-faction__label">${factionLabel}</span>
+                </div>
+            ` : ''}
         </aside>
     `;
 }

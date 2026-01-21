@@ -914,12 +914,12 @@ export function getGameState(roomId) {
 // Debug Mode Functions (Multiplayer Quick Start)
 // ============================================
 
-// Character IDs for random selection
+// Character IDs for random selection (must match charactersData.js)
 const CHARACTER_IDS = [
-    'flash-williams', 'zoe-ingrid', 'misty-gray', 'brandon-grey',
-    'peter-akimoto', 'heather-granville', 'professor-longfellow',
-    'darrin-flash-williams', 'ox-bellows', 'vivian-lopez',
-    'jenny-leclerc', 'madame-zostra'
+    'professor-longfellow', 'heather-granville', 'father-rhinehardt',
+    'jenny-leclerc', 'darrin-flash-williams', 'vivian-lopez',
+    'ox-bellows', 'madame-zostra', 'peter-akimoto',
+    'missy-dubourde', 'brandon-jaspers', 'zoe-ingstrom'
 ];
 
 /**
@@ -962,7 +962,42 @@ export function joinOrCreateDebugRoom(socketId, playerName) {
         rooms.set(DEBUG_ROOM_ID, room);
     }
 
-    // Check if room is full
+    // Clean up stale players (players whose socket IDs are no longer in socketToRoom)
+    // This handles cases where server restarted and loaded old room data
+    const activePlayers = room.players.filter(p => socketToRoom.has(p.id));
+    const stalePlayers = room.players.filter(p => !socketToRoom.has(p.id));
+
+    if (stalePlayers.length > 0) {
+        console.log('[RoomManager] Found', stalePlayers.length, 'stale players in debug room');
+
+        // If ALL players are stale, reset the entire room
+        if (activePlayers.length === 0) {
+            console.log('[RoomManager] All players stale, resetting debug room');
+            rooms.delete(DEBUG_ROOM_ID);
+            // Create fresh room
+            room = {
+                id: DEBUG_ROOM_ID,
+                hostId: socketId,
+                players: [],
+                maxPlayers: DEBUG_MAX_PLAYERS,
+                minPlayers: 2,
+                createdAt: new Date().toISOString(),
+                gamePhase: 'lobby',
+                isDebug: true,
+                diceRolls: {},
+                needsRoll: [],
+                turnOrder: [],
+                currentTurnIndex: 0,
+                playerMoves: {}
+            };
+            rooms.set(DEBUG_ROOM_ID, room);
+        } else {
+            // Just remove stale players
+            room.players = activePlayers;
+        }
+    }
+
+    // Check if room is full (after cleanup)
     if (room.players.length >= DEBUG_MAX_PLAYERS) {
         return { success: false, error: 'Debug room is full' };
     }

@@ -3145,14 +3145,14 @@ select.field__input option {
     color: #fff;
 }
 
-/* Faction indicator in sidebar (after haunt) */
+/* Faction indicator in sidebar (after haunt) - positioned at bottom */
 .sidebar-faction {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     padding: 10px 12px;
-    margin: 0;
+    margin-top: auto;
     font-size: 0.85rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -3161,13 +3161,13 @@ select.field__input option {
 
 .sidebar-faction--traitor {
     background: linear-gradient(135deg, rgba(180, 40, 40, 0.3) 0%, rgba(120, 20, 20, 0.4) 100%);
-    border-bottom: 2px solid rgba(200, 60, 60, 0.6);
+    border-top: 2px solid rgba(200, 60, 60, 0.6);
     color: #ff6b6b;
 }
 
 .sidebar-faction--survivor {
     background: transparent;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.7);
 }
 
@@ -5610,14 +5610,14 @@ select.field__input option {
    FACTION SYSTEM STYLES
    ============================================ */
 
-/* Sidebar Faction Indicator */
+/* Sidebar Faction Indicator - positioned at bottom */
 .sidebar-faction {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
     padding: 8px 14px;
-    margin: 0 12px 10px;
+    margin: auto 12px 10px;
     border-radius: 4px;
     font-weight: 500;
     font-size: 0.8rem;
