@@ -946,21 +946,11 @@ function closeCombatModal(mountEl, attackerLost = false, resultInfo = null) {
         // Set attacker's moves to 0
         currentGameState.playerMoves[attackerId] = 0;
 
-        // Advance to next player's turn
+        // Advance to next player's turn if attacker's turn
         const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
         if (currentTurnPlayer === attackerId) {
-            currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
-
-            // Set moves for next player
-            const nextPlayerId = currentGameState.turnOrder[currentGameState.currentTurnIndex];
-            const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
-            if (nextPlayer) {
-                const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId];
-                const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-                currentGameState.playerMoves[nextPlayerId] = speed;
-            }
-
-            console.log('[Combat] Attacker lost - turn advanced to:', nextPlayerId);
+            console.log('[Combat] Attacker lost - advancing turn');
+            advanceToNextTurn();
         }
     }
 
@@ -1534,10 +1524,13 @@ function applyRoomEffectDiceResult(mountEl, result) {
 
         switch (failEffect.type) {
             case 'stopMoving':
-                // Player stops - consume remaining moves
+                // Player stops - consume remaining moves and advance turn
                 currentGameState.playerMoves[playerId] = 0;
                 showToast(`That bai! Ban dung lai o ${roomName}.`, 'error');
                 roomEffectDiceModal = null;
+                console.log('[Turn] Player', playerId, 'failed room effect, advancing turn');
+                advanceToNextTurn();
+                syncGameStateToServer();
                 updateGameUI(mountEl, currentGameState, mySocketId);
                 break;
 
@@ -1837,6 +1830,15 @@ function applyEventDiceResult(mountEl, result, stat) {
  */
 function closeEventDiceModal(mountEl) {
     eventDiceModal = null;
+
+    const playerId = mySocketId;
+
+    // Check if turn ended (no more moves) - advance to next player
+    if (currentGameState && currentGameState.playerMoves[playerId] <= 0) {
+        console.log('[Turn] Player', playerId, 'moves depleted after event dice, advancing turn');
+        advanceToNextTurn();
+    }
+
     updateGameUI(mountEl, currentGameState, mySocketId);
 
     // Sync stat changes to server for multiplayer
@@ -1858,6 +1860,15 @@ function closeDamageDiceModal(mountEl) {
     applyDamageToPlayer(mySocketId, physicalDamage, mentalDamage, physicalStat, mentalStat);
 
     damageDiceModal = null;
+
+    const playerId = mySocketId;
+
+    // Check if turn ended (no more moves) - advance to next player
+    if (currentGameState && currentGameState.playerMoves[playerId] <= 0) {
+        console.log('[Turn] Player', playerId, 'moves depleted after damage dice, advancing turn');
+        advanceToNextTurn();
+    }
+
     updateGameUI(mountEl, currentGameState, mySocketId);
 
     // Sync damage stats to server for multiplayer
@@ -5429,9 +5440,10 @@ function handleMove(mountEl, direction) {
                         }
                     }
 
-                    // Check if turn ended
+                    // Check if turn ended - advance to next player
                     if (currentGameState.playerMoves[playerId] <= 0) {
-                        // Multiplayer mode: server will handle turn progression via game:state broadcast
+                        console.log('[Turn] Player', playerId, 'moves depleted after elevator move, advancing turn');
+                        advanceToNextTurn();
                     }
 
                     // Sync state with server in multiplayer mode
@@ -5537,13 +5549,14 @@ function handleMove(mountEl, direction) {
         }
     }
 
-    // Check if turn ended
+    // Check if turn ended - auto advance to next player
     if (currentGameState.playerMoves[playerId] <= 0) {
-        // Multiplayer mode: server will handle turn progression via game:state broadcast
+        console.log('[Turn] Player', playerId, 'moves depleted after movement, advancing turn');
+        advanceToNextTurn();
     }
 
     // Sync state with server in multiplayer mode
-        syncGameStateToServer();
+    syncGameStateToServer();
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
@@ -5578,6 +5591,42 @@ async function syncGameStateToServer() {
 
 
 /**
+ * Advance to next player's turn
+ * Updates currentTurnIndex and sets next player's moves
+ */
+function advanceToNextTurn() {
+    if (!currentGameState || !currentGameState.turnOrder?.length) {
+        console.log('[Turn] Cannot advance - no game state or turn order');
+        return;
+    }
+
+    const prevIndex = currentGameState.currentTurnIndex;
+    const prevPlayerId = currentGameState.turnOrder[prevIndex];
+
+    // Advance turn index
+    currentGameState.currentTurnIndex = (currentGameState.currentTurnIndex + 1) % currentGameState.turnOrder.length;
+
+    const nextIndex = currentGameState.currentTurnIndex;
+    const nextPlayerId = currentGameState.turnOrder[nextIndex];
+    const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
+
+    // Set moves for next player based on their speed
+    if (nextPlayer) {
+        const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId];
+        const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+        currentGameState.playerMoves[nextPlayerId] = speed;
+
+        console.log('[Turn] === TURN ADVANCED ===');
+        console.log('[Turn] Previous: Player', prevPlayerId, 'Index:', prevIndex);
+        console.log('[Turn] Next: Player', nextPlayerId, 'Index:', nextIndex, 'Speed:', speed);
+        console.log('[Turn] TurnOrder:', currentGameState.turnOrder);
+        console.log('[Turn] PlayerMoves:', currentGameState.playerMoves);
+    } else {
+        console.log('[Turn] ERROR: Next player not found:', nextPlayerId);
+    }
+}
+
+/**
  * Handle end turn early - skip remaining moves (unified for debug and multiplayer)
  * @param {HTMLElement} mountEl
  */
@@ -5589,10 +5638,23 @@ function handleEndTurn(mountEl) {
 
     // Only allow if it's this player's turn
     if (playerId !== currentTurnPlayer) {
-        console.log(`Not ${playerId}'s turn`);
+        console.log('[Turn] Cannot end turn - not your turn. You:', playerId, 'Current:', currentTurnPlayer);
         return;
     }
 
+    console.log('[Turn] Player', playerId, 'ending turn early');
+
+    // Set remaining moves to 0
+    currentGameState.playerMoves[playerId] = 0;
+
+    // Advance to next player
+    advanceToNextTurn();
+
+    // Sync state with server
+    syncGameStateToServer();
+
+    // Update UI
+    updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**
@@ -5808,13 +5870,14 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
         return;
     }
     
-    // Check if turn ended (no more moves)
+    // Check if turn ended (no more moves) - advance to next player
     if (currentGameState.playerMoves[playerId] <= 0) {
-        // Multiplayer mode: server will handle turn progression via game:state broadcast
+        console.log('[Turn] Player', playerId, 'moves depleted after room discovery, advancing turn');
+        advanceToNextTurn();
     }
 
     // Sync state with server in multiplayer mode
-        syncGameStateToServer();
+    syncGameStateToServer();
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
@@ -6089,13 +6152,14 @@ function confirmTokenDrawing(mountEl) {
         return; // Don't proceed to next turn yet
     }
 
-    // Check if turn ended (no more moves)
+    // Check if turn ended (no more moves) - advance to next player
     if (currentGameState.playerMoves[playerId] <= 0) {
-        // Multiplayer mode: server will handle turn progression via game:state broadcast
+        console.log('[Turn] Player', playerId, 'moves depleted after token drawing, advancing turn');
+        advanceToNextTurn();
     }
 
     // Sync state with server in multiplayer mode
-        syncGameStateToServer();
+    syncGameStateToServer();
 
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
