@@ -104,6 +104,11 @@ let pendingCombatMovement = null;
  * @type {Map<string, boolean>} */
 let completedCombats = new Map();
 
+/** Track if current player has already attacked this turn
+ * Reset when turn advances - enforces "1 attack per turn" rule
+ * @type {boolean} */
+let hasAttackedThisTurn = false;
+
 /** Damage distribution modal state - for distributing combat/event damage across stats
  * @type {{
  *   isOpen: boolean;
@@ -930,12 +935,16 @@ function closeCombatModal(mountEl, attackerLost = false, resultInfo = null) {
 
     // Mark combat as completed so it won't trigger again in the same room
     // Combat will only trigger again when one player leaves and re-enters
+    console.log('[Combat] closeCombatModal - attackerId:', attackerId, 'defenderId:', defenderId, 'currentGameState:', !!currentGameState);
     if (attackerId && defenderId && currentGameState) {
         const playerPositions = currentGameState.playerState?.playerPositions || {};
         const combatRoomId = playerPositions[attackerId] || playerPositions[defenderId];
+        console.log('[Combat] closeCombatModal - combatRoomId:', combatRoomId);
         if (combatRoomId) {
             markCombatCompleted(combatRoomId, attackerId, defenderId);
         }
+    } else {
+        console.log('[Combat] closeCombatModal - NOT calling markCombatCompleted due to missing data');
     }
 
     combatModal = null;
@@ -1405,6 +1414,21 @@ function markCombatCompleted(roomId, playerId1, playerId2) {
     const key = getCombatKey(roomId, playerId1, playerId2);
     completedCombats.set(key, true);
     console.log('[Combat] Marked combat as completed:', key);
+
+    // Mark that this player has attacked this turn (cannot attack again)
+    // Only the current turn player gets flagged
+    if (currentGameState) {
+        const currentTurnPlayer = currentGameState.turnOrder?.[currentGameState.currentTurnIndex];
+        console.log('[Combat] markCombatCompleted - playerId1:', playerId1, 'playerId2:', playerId2, 'currentTurnPlayer:', currentTurnPlayer);
+        if (playerId1 === currentTurnPlayer || playerId2 === currentTurnPlayer) {
+            hasAttackedThisTurn = true;
+            console.log('[Combat] hasAttackedThisTurn SET TO TRUE - player cannot attack again this turn');
+        } else {
+            console.log('[Combat] markCombatCompleted - neither player is current turn player, NOT setting hasAttackedThisTurn');
+        }
+    } else {
+        console.log('[Combat] markCombatCompleted - no currentGameState, NOT setting hasAttackedThisTurn');
+    }
 }
 
 /**
@@ -1433,6 +1457,17 @@ function getEnemyInRoom(roomId, currentPlayerId) {
     if (!currentGameState || !isHauntTriggered(currentGameState)) {
         console.log('[Combat] getEnemyInRoom - haunt not triggered or no state');
         return null;
+    }
+
+    // Check if current player already attacked this turn (1 attack per turn rule)
+    const currentTurnPlayer = currentGameState.turnOrder?.[currentGameState.currentTurnIndex];
+    console.log('[Combat] getEnemyInRoom - hasAttackedThisTurn:', hasAttackedThisTurn, 'currentPlayerId:', currentPlayerId, 'currentTurnPlayer:', currentTurnPlayer);
+
+    if (hasAttackedThisTurn) {
+        if (currentPlayerId === currentTurnPlayer) {
+            console.log('[Combat] getEnemyInRoom - already attacked this turn, BLOCKING combat');
+            return null;
+        }
     }
 
     const playerPositions = currentGameState.playerState?.playerPositions || {};
@@ -5636,6 +5671,10 @@ function advanceToNextTurn() {
     } else {
         console.log('[Turn] ERROR: Next player not found:', nextPlayerId);
     }
+
+    // Reset attack flag for new turn (1 attack per turn rule)
+    hasAttackedThisTurn = false;
+    console.log('[Turn] Reset hasAttackedThisTurn flag');
 }
 
 /**
@@ -6431,6 +6470,15 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         const hadGameOver = currentGameState?.gameOver;
         const newGameOver = state?.gameOver;
 
+        // Check if turn changed - reset attack flag (1 attack per turn rule)
+        const oldTurnPlayer = currentGameState?.turnOrder?.[currentGameState?.currentTurnIndex];
+        const newTurnPlayer = state?.turnOrder?.[state?.currentTurnIndex];
+        console.log('[Turn] onGameState - oldTurnPlayer:', oldTurnPlayer, 'newTurnPlayer:', newTurnPlayer, 'hasAttackedThisTurn before:', hasAttackedThisTurn);
+        if (oldTurnPlayer !== newTurnPlayer && oldTurnPlayer !== undefined) {
+            hasAttackedThisTurn = false;
+            console.log('[Turn] Turn changed via server sync, RESET hasAttackedThisTurn to false');
+        }
+
         currentGameState = state;
         mySocketId = socketClient.getSocketId();
 
@@ -6530,6 +6578,18 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
             const isAttackerWhoJustOpened = combatModal.attackerId === mySocketId && combatModal.phase === 'confirm';
             if (!isAttackerWhoJustOpened) {
                 console.log('[Combat] Closing modal - server says combat is not active');
+
+                // Mark combat as completed before closing modal (1 attack per turn rule)
+                const attackerId = combatModal.attackerId;
+                const defenderId = combatModal.defenderId;
+                if (attackerId && defenderId && state) {
+                    const playerPositions = state.playerState?.playerPositions || {};
+                    const combatRoomId = playerPositions[attackerId] || playerPositions[defenderId];
+                    if (combatRoomId) {
+                        markCombatCompleted(combatRoomId, attackerId, defenderId);
+                    }
+                }
+
                 combatModal = null;
                 pendingCombatMovement = null;
             } else {
