@@ -3179,15 +3179,6 @@ select.field__input option {
     font-size: 0.8rem;
 }
 
-/* Haunt active state for sidebar */
-.game-sidebar.is-haunt-active {
-    border-right-color: rgba(180, 40, 40, 0.4);
-}
-
-.game-sidebar.is-haunt-active .sidebar-header {
-    background: rgba(80, 20, 20, 0.3);
-}
-
 .sidebar-title {
     font-family: 'Playfair Display', Georgia, serif;
     font-size: 0.85rem;
@@ -5838,11 +5829,6 @@ select.field__input option {
 
 .sidebar-faction--traitor::before {
     background: linear-gradient(135deg, #C62828 0%, #8B0000 100%);
-}
-
-/* Sidebar Haunt Active State */
-.game-sidebar.is-haunt-active {
-    border-color: rgba(183, 28, 28, 0.2);
 }
 
 /* Turn Order Faction Colors */

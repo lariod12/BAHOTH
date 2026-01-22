@@ -3087,17 +3087,22 @@ function renderSidebar(gameState, myId) {
 
     const openClass = sidebarOpen ? 'is-open' : '';
 
-    // Get faction info
-    const myFaction = getFaction(gameState, myId);
-    const factionLabel = getFactionLabel(myFaction);
+    // Get faction info - before haunt everyone is survivor
     const hauntActive = isHauntTriggered(gameState);
-    const factionClass = myFaction ? `sidebar-faction--${myFaction}` : '';
+    const myFaction = hauntActive ? getFaction(gameState, myId) : 'survivor';
+    const factionLabel = hauntActive ? getFactionLabel(myFaction) : 'Survivor';
+    const factionClass = `sidebar-faction--${myFaction}`;
+    const factionIcon = myFaction === 'traitor' ? '☠' : '◆';
 
     return `
         <aside class="game-sidebar ${openClass} ${myTurn ? 'is-my-turn' : ''} ${hauntActive ? 'is-haunt-active' : ''}">
             <div class="sidebar-header">
                 <span class="sidebar-title">${charName}</span>
                 <button class="sidebar-close" type="button" data-action="close-sidebar">&times;</button>
+            </div>
+            <div class="sidebar-faction ${factionClass}">
+                <span class="sidebar-faction__icon">${factionIcon}</span>
+                <span class="sidebar-faction__label">${factionLabel}</span>
             </div>
             <div class="sidebar-content">
                 <div class="sidebar-stats">
@@ -3133,12 +3138,6 @@ function renderSidebar(gameState, myId) {
                     Xem chi tiet nhan vat
                 </button>
             </div>
-            ${myFaction ? `
-                <div class="sidebar-faction ${factionClass}">
-                    <span class="sidebar-faction__icon">${myFaction === 'traitor' ? '☠' : '◆'}</span>
-                    <span class="sidebar-faction__label">${factionLabel}</span>
-                </div>
-            ` : ''}
             ${gameState.isDebug ? `
                 <div class="sidebar-debug">
                     <button class="sidebar-reset-btn" type="button" data-action="reset-debug-game">
