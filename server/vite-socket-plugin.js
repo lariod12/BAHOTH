@@ -657,6 +657,42 @@ export function socketIOPlugin() {
                     }
                 });
 
+                // Reset debug game - both players return to initial state
+                socket.on('debug:reset', ({}, callback) => {
+                    const roomId = roomManager.getPlayerRoom(socket.id);
+
+                    if (roomId !== 'DEBUG') {
+                        if (callback) {
+                            callback({ success: false, error: 'Not in debug room' });
+                        }
+                        return;
+                    }
+
+                    const room = roomManager.getRoom(roomId);
+                    if (!room) {
+                        if (callback) {
+                            callback({ success: false, error: 'Debug room not found' });
+                        }
+                        return;
+                    }
+
+                    console.log('[Socket.IO] Debug game reset requested by', socket.id);
+
+                    // Notify all players in the room about reset BEFORE clearing state
+                    io.to(roomId).emit('debug:reset', { message: 'Game reset by player' });
+
+                    // Clear map and player state
+                    mapManager.cleanupMap(roomId);
+                    playerManager.cleanupGame(roomId);
+
+                    // Reset room manager state for debug room
+                    roomManager.resetDebugRoom();
+
+                    if (callback) {
+                        callback({ success: true });
+                    }
+                });
+
                 // Get current room state
                 socket.on('room:get-state', ({ roomId }, callback) => {
                     const room = roomManager.getRoom(roomId);

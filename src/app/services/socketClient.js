@@ -50,6 +50,9 @@ const playerDisconnectedListeners = [];
 /** @type {((data: { playerId: string; playerName: string }) => void)[]} */
 const playerReconnectedListeners = [];
 
+/** @type {((data: { message: string }) => void)[]} */
+const debugResetListeners = [];
+
 /**
  * Save session info for reconnection
  * @param {string} roomId
@@ -264,6 +267,11 @@ export function connect() {
     socket.on('game:players-active', (data) => {
         console.log('[SocketClient] Players active update:', data);
         playersActiveListeners.forEach((fn) => fn(data));
+    });
+
+    socket.on('debug:reset', (data) => {
+        console.log('[SocketClient] Debug reset received:', data);
+        debugResetListeners.forEach((fn) => fn(data));
     });
 
     return socket;
@@ -706,6 +714,38 @@ export function joinOrCreateDebugRoom(playerName) {
             resolve(response);
         });
     });
+}
+
+/**
+ * Reset debug game - both players return to initial game state
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export function resetDebugGame() {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        socket.emit('debug:reset', {}, (response) => {
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Subscribe to debug reset events (game reset notification)
+ * @param {(data: { message: string }) => void} callback
+ * @returns {() => void} Unsubscribe function
+ */
+export function onDebugReset(callback) {
+    debugResetListeners.push(callback);
+    return () => {
+        const index = debugResetListeners.indexOf(callback);
+        if (index > -1) {
+            debugResetListeners.splice(index, 1);
+        }
+    };
 }
 
 // ============================================

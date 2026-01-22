@@ -474,6 +474,15 @@ export function getAllRooms() {
 }
 
 /**
+ * Get room ID for a player
+ * @param {string} socketId
+ * @returns {string | undefined}
+ */
+export function getPlayerRoom(socketId) {
+    return socketToRoom.get(socketId);
+}
+
+/**
  * Clean up old/stale rooms (rooms with no players or older than 24 hours)
  */
 export function cleanupStaleRooms() {

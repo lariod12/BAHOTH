@@ -27,6 +27,10 @@ let diceEventModal = null;
 /** @type {{ isOpen: boolean } | null} */
 let endTurnModal = null;
 
+// Reset game confirmation modal state (debug mode)
+/** @type {{ isOpen: boolean } | null} */
+let resetGameModal = null;
+
 // Event dice modal state - for immediate roll events
 /** @type {{
  *   isOpen: boolean;
@@ -122,6 +126,9 @@ let hasAttackedThisTurn = false;
  * } | null} */
 let damageDistributionModal = null;
 
+// Pending mental damage (when both physical and mental damage need to be distributed)
+let pendingMentalDamage = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -130,6 +137,7 @@ let diceResultsTimeout = null;
 let unsubscribeReconnectResult = null;
 let unsubscribePlayerDisconnected = null;
 let unsubscribePlayerReconnected = null;
+let unsubscribeDebugReset = null;
 
 /** @type {any} */
 let currentGameState = null;
@@ -812,14 +820,14 @@ function findMatchingOutcome(rollResults, result) {
  */
 function openDamageDiceModal(mountEl, physicalDice, mentalDice) {
     let damageType = 'both';
-    let startPhase = 'selectPhysicalStat'; // Start with stat selection
+    let startPhase = 'rollPhysical'; // NEW: Start with rolling, not stat selection
 
     if (physicalDice > 0 && mentalDice === 0) {
         damageType = 'physical';
-        startPhase = 'selectPhysicalStat';
+        startPhase = 'rollPhysical';
     } else if (physicalDice === 0 && mentalDice > 0) {
         damageType = 'mental';
-        startPhase = 'selectMentalStat';
+        startPhase = 'rollMental';
     }
 
     damageDiceModal = {
@@ -832,12 +840,13 @@ function openDamageDiceModal(mountEl, physicalDice, mentalDice) {
         physicalResult: null,
         mentalResult: null,
         currentPhase: startPhase,
-        // Selected stats for damage application
-        selectedPhysicalStat: null, // 'speed' or 'might'
-        selectedMentalStat: null,   // 'knowledge' or 'sanity'
+        // Stats are no longer selected here - will be distributed in damageDistributionModal
+        selectedPhysicalStat: null,
+        selectedMentalStat: null,
     };
 
-    console.log('[DamageDice] Opened modal - physical:', physicalDice, 'mental:', mentalDice);
+    console.log('[DamageDice] Opened modal - physical:', physicalDice, 'mental:', mentalDice, 'startPhase:', startPhase);
+    skipMapCentering = true;
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
@@ -1180,6 +1189,17 @@ function closeDamageDistributionModal(mountEl) {
 
     // Sync to server
     syncGameStateToServer();
+
+    // Check if there's pending mental damage to distribute (after physical damage was done)
+    if (!died && pendingMentalDamage !== null && pendingMentalDamage > 0) {
+        const mentalDamage = pendingMentalDamage;
+        pendingMentalDamage = null; // Clear pending
+        console.log('[DamageDistribution] Opening modal for pending mental damage:', mentalDamage);
+        openDamageDistributionModal(mountEl, mentalDamage, 'event', 'mental');
+        return; // Don't update UI yet, let the new modal handle it
+    }
+
+    pendingMentalDamage = null; // Clear any pending
 
     if (!died) {
         updateGameUI(mountEl, currentGameState, mySocketId);
@@ -2171,6 +2191,46 @@ function renderEndTurnModal() {
 }
 
 /**
+ * Render reset game confirmation modal (debug mode only)
+ * @returns {string} HTML string
+ */
+function renderResetGameModal() {
+    if (!resetGameModal?.isOpen) return '';
+
+    return `
+        <div class="reset-game-overlay" data-action="close-reset-game">
+            <div class="reset-game-modal" data-modal-content="true">
+                <header class="reset-game-modal__header">
+                    <span class="reset-game-modal__icon">🔄</span>
+                    <h3 class="reset-game-modal__title">Reset Game</h3>
+                    <button class="reset-game-modal__close" type="button" data-action="close-reset-game">×</button>
+                </header>
+                <div class="reset-game-modal__body">
+                    <p class="reset-game-modal__message">
+                        Ca 2 nguoi choi se quay lai trang thai ban dau.
+                    </p>
+                    <p class="reset-game-modal__warning">
+                        ⚠️ Tien trinh game hien tai se bi mat!
+                    </p>
+                </div>
+                <div class="reset-game-modal__actions">
+                    <button class="reset-game-modal__btn reset-game-modal__btn--cancel"
+                            type="button"
+                            data-action="close-reset-game">
+                        Huy bo
+                    </button>
+                    <button class="reset-game-modal__btn reset-game-modal__btn--confirm"
+                            type="button"
+                            data-action="confirm-reset-game">
+                        Reset Game
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render dice event modal - allows manual input or random roll (0-16)
  * @returns {string} HTML string
  */
@@ -2449,75 +2509,28 @@ function renderDamageDiceModal() {
 
     const {
         damageType, physicalDice, mentalDice, inputValue, currentPhase,
-        physicalResult, mentalResult, selectedPhysicalStat, selectedMentalStat
+        physicalResult, mentalResult
     } = damageDiceModal;
 
-    const statLabels = {
-        speed: 'Toc do (Speed)',
-        might: 'Suc manh (Might)',
-        knowledge: 'Kien thuc (Knowledge)',
-        sanity: 'Tam tri (Sanity)'
-    };
-
-    // Build results display
+    // Build results display (for showing what's been rolled so far)
     let resultsHtml = '';
-    if (physicalResult !== null && selectedPhysicalStat) {
-        resultsHtml += `<p class="damage-dice-modal__result-item">Sat thuong vat li: <strong>${physicalResult}</strong> vao <strong>${statLabels[selectedPhysicalStat]}</strong></p>`;
+    if (physicalResult !== null) {
+        resultsHtml += `<p class="damage-dice-modal__result-item">Sat thuong vat li: <strong>${physicalResult}</strong></p>`;
     }
-    if (mentalResult !== null && selectedMentalStat) {
-        resultsHtml += `<p class="damage-dice-modal__result-item">Sat thuong tinh than: <strong>${mentalResult}</strong> vao <strong>${statLabels[selectedMentalStat]}</strong></p>`;
+    if (mentalResult !== null) {
+        resultsHtml += `<p class="damage-dice-modal__result-item">Sat thuong tinh than: <strong>${mentalResult}</strong></p>`;
     }
 
     // Determine what to render based on phase
     let bodyContent = '';
 
-    if (currentPhase === 'selectPhysicalStat') {
-        // Select stat for physical damage
+    // NEW FLOW: Roll dice first, then distribute damage
+    if (currentPhase === 'rollPhysical') {
+        // Roll physical damage dice
         bodyContent = `
-            <div class="damage-dice-modal__select-stat">
-                <p class="damage-dice-modal__instruction">Chon chi so chiu sat thuong vat li (${physicalDice} xuc xac):</p>
-                <div class="damage-dice-modal__stat-buttons">
-                    <button class="damage-dice-modal__btn damage-dice-modal__btn--stat"
-                            type="button" data-action="damage-select-stat" data-stat="speed">
-                        Toc do (Speed)
-                    </button>
-                    <button class="damage-dice-modal__btn damage-dice-modal__btn--stat"
-                            type="button" data-action="damage-select-stat" data-stat="might">
-                        Suc manh (Might)
-                    </button>
-                </div>
-            </div>
-        `;
-    } else if (currentPhase === 'selectMentalStat') {
-        // Select stat for mental damage
-        bodyContent = `
-            ${resultsHtml ? `<div class="damage-dice-modal__results">${resultsHtml}</div>` : ''}
-            <div class="damage-dice-modal__select-stat">
-                <p class="damage-dice-modal__instruction">Chon chi so chiu sat thuong tinh than (${mentalDice} xuc xac):</p>
-                <div class="damage-dice-modal__stat-buttons">
-                    <button class="damage-dice-modal__btn damage-dice-modal__btn--stat"
-                            type="button" data-action="damage-select-stat" data-stat="knowledge">
-                        Kien thuc (Knowledge)
-                    </button>
-                    <button class="damage-dice-modal__btn damage-dice-modal__btn--stat"
-                            type="button" data-action="damage-select-stat" data-stat="sanity">
-                        Tam tri (Sanity)
-                    </button>
-                </div>
-            </div>
-        `;
-    } else if (currentPhase === 'physical' || currentPhase === 'mental') {
-        // Rolling phase
-        const currentDice = currentPhase === 'physical' ? physicalDice : mentalDice;
-        const currentStat = currentPhase === 'physical' ? selectedPhysicalStat : selectedMentalStat;
-        const phaseLabel = currentPhase === 'physical'
-            ? `Do ${physicalDice} xuc xac sat thuong vat li (${statLabels[currentStat]})`
-            : `Do ${mentalDice} xuc xac sat thuong tinh than (${statLabels[currentStat]})`;
-
-        bodyContent = `
-            ${resultsHtml ? `<div class="damage-dice-modal__results">${resultsHtml}</div>` : ''}
             <div class="damage-dice-modal__roll-info">
-                <p>${phaseLabel}</p>
+                <p class="damage-dice-modal__instruction">Do <strong>${physicalDice}</strong> xuc xac sat thuong vat li</p>
+                <p class="damage-dice-modal__hint">(Sat thuong se duoc phan bo vao Speed hoac Might)</p>
             </div>
             <div class="damage-dice-modal__input-group">
                 <label class="damage-dice-modal__label">Nhap ket qua xuc xac:</label>
@@ -2543,17 +2556,41 @@ function renderDamageDiceModal() {
                 </button>
             </div>
         `;
-    } else if (currentPhase === 'done') {
-        // All done, show results and apply button
+    } else if (currentPhase === 'rollMental') {
+        // Roll mental damage dice
         bodyContent = `
-            <div class="damage-dice-modal__results">${resultsHtml}</div>
-            <button class="damage-dice-modal__btn damage-dice-modal__btn--apply"
-                    type="button"
-                    data-action="damage-dice-apply">
-                Ap dung sat thuong
-            </button>
+            ${resultsHtml ? `<div class="damage-dice-modal__results">${resultsHtml}</div>` : ''}
+            <div class="damage-dice-modal__roll-info">
+                <p class="damage-dice-modal__instruction">Do <strong>${mentalDice}</strong> xuc xac sat thuong tinh than</p>
+                <p class="damage-dice-modal__hint">(Sat thuong se duoc phan bo vao Knowledge hoac Sanity)</p>
+            </div>
+            <div class="damage-dice-modal__input-group">
+                <label class="damage-dice-modal__label">Nhap ket qua xuc xac:</label>
+                <input
+                    type="number"
+                    class="damage-dice-modal__input"
+                    min="0"
+                    value="${inputValue}"
+                    data-input="damage-dice-value"
+                    placeholder="Nhap so"
+                />
+            </div>
+            <div class="damage-dice-modal__actions">
+                <button class="damage-dice-modal__btn damage-dice-modal__btn--confirm"
+                        type="button"
+                        data-action="damage-dice-confirm">
+                    Xac nhan
+                </button>
+                <button class="damage-dice-modal__btn damage-dice-modal__btn--random"
+                        type="button"
+                        data-action="damage-dice-random">
+                    Ngau nhien
+                </button>
+            </div>
         `;
     }
+
+    // Note: 'done' phase is no longer used - we transition to damageDistributionModal instead
 
     return `
         <div class="damage-dice-overlay">
@@ -3100,6 +3137,13 @@ function renderSidebar(gameState, myId) {
                 <div class="sidebar-faction ${factionClass}">
                     <span class="sidebar-faction__icon">${myFaction === 'traitor' ? '☠' : '◆'}</span>
                     <span class="sidebar-faction__label">${factionLabel}</span>
+                </div>
+            ` : ''}
+            ${gameState.isDebug ? `
+                <div class="sidebar-debug">
+                    <button class="sidebar-reset-btn" type="button" data-action="reset-debug-game">
+                        🔄 Reset Game
+                    </button>
                 </div>
             ` : ''}
         </aside>
@@ -3655,6 +3699,7 @@ function renderGameScreen(gameState, myId) {
             ${renderCombatModal()}
             ${renderDamageDistributionModal()}
             ${renderEndTurnModal()}
+            ${renderResetGameModal()}
             ${renderTutorialModal()}
         `;
     } else {
@@ -4081,6 +4126,27 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        // Reset debug game - open confirmation modal
+        if (action === 'reset-debug-game') {
+            resetGameModal = { isOpen: true };
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Close reset game modal
+        if (action === 'close-reset-game') {
+            resetGameModal = null;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Confirm reset game
+        if (action === 'confirm-reset-game') {
+            resetGameModal = null;
+            await socketClient.resetDebugGame();
+            return;
+        }
+
         // Expand/collapse player in sidebar
         if (action === 'expand-player') {
             const playerEl = target.closest('[data-player-id]');
@@ -4447,28 +4513,7 @@ function attachEventListeners(mountEl, roomId) {
         // === Damage Dice Modal Actions ===
 
         // Damage dice stat selection
-        if (action === 'damage-select-stat') {
-            if (!damageDiceModal) return;
-            const stat = actionEl?.dataset.stat;
-            if (!stat) return;
-
-            if (damageDiceModal.currentPhase === 'selectPhysicalStat') {
-                // Selected physical stat (speed or might)
-                damageDiceModal.selectedPhysicalStat = stat;
-                damageDiceModal.currentPhase = 'physical';
-                damageDiceModal.inputValue = '';
-            } else if (damageDiceModal.currentPhase === 'selectMentalStat') {
-                // Selected mental stat (knowledge or sanity)
-                damageDiceModal.selectedMentalStat = stat;
-                damageDiceModal.currentPhase = 'mental';
-                damageDiceModal.inputValue = '';
-            }
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
-
-        // Damage dice confirm (manual input)
+        // Damage dice confirm (manual input) - NEW FLOW: roll first, then distribute
         if (action === 'damage-dice-confirm') {
             if (!damageDiceModal) return;
             const input = mountEl.querySelector('[data-input="damage-dice-value"]');
@@ -4476,55 +4521,81 @@ function attachEventListeners(mountEl, roomId) {
 
             // Accept any non-negative number (no max limit for dice results)
             if (!isNaN(value) && value >= 0) {
-                if (damageDiceModal.currentPhase === 'physical') {
+                if (damageDiceModal.currentPhase === 'rollPhysical') {
                     damageDiceModal.physicalResult = value;
                     // Check if mental damage also needed
                     if (damageDiceModal.mentalDice > 0) {
-                        damageDiceModal.currentPhase = 'selectMentalStat';
+                        damageDiceModal.currentPhase = 'rollMental';
                         damageDiceModal.inputValue = '';
+                        skipMapCentering = true;
+                        updateGameUI(mountEl, currentGameState, mySocketId);
                     } else {
-                        damageDiceModal.currentPhase = 'done';
+                        // Only physical damage - open distribution modal
+                        const physicalDamage = damageDiceModal.physicalResult;
+                        damageDiceModal = null; // Close dice modal
+                        openDamageDistributionModal(mountEl, physicalDamage, 'event', 'physical');
                     }
-                } else if (damageDiceModal.currentPhase === 'mental') {
+                } else if (damageDiceModal.currentPhase === 'rollMental') {
                     damageDiceModal.mentalResult = value;
-                    damageDiceModal.currentPhase = 'done';
+                    // Done rolling - open distribution modal for mental damage
+                    // If there was physical damage too, we need to handle both
+                    const physicalDamage = damageDiceModal.physicalResult || 0;
+                    const mentalDamage = damageDiceModal.mentalResult;
+                    damageDiceModal = null; // Close dice modal
+
+                    if (physicalDamage > 0) {
+                        // Both damages - open physical first, then mental after
+                        // For now, open physical first
+                        openDamageDistributionModal(mountEl, physicalDamage, 'event', 'physical');
+                        // Store pending mental damage to apply after physical
+                        pendingMentalDamage = mentalDamage;
+                    } else {
+                        // Only mental damage
+                        openDamageDistributionModal(mountEl, mentalDamage, 'event', 'mental');
+                    }
                 }
-                skipMapCentering = true;
-                updateGameUI(mountEl, currentGameState, mySocketId);
             }
             return;
         }
 
-        // Damage dice random roll
+        // Damage dice random roll - NEW FLOW
         if (action === 'damage-dice-random') {
             if (!damageDiceModal) return;
-            const currentDice = damageDiceModal.currentPhase === 'physical' ? damageDiceModal.physicalDice : damageDiceModal.mentalDice;
+            const isPhysical = damageDiceModal.currentPhase === 'rollPhysical';
+            const currentDice = isPhysical ? damageDiceModal.physicalDice : damageDiceModal.mentalDice;
+
             // Roll dice (each 0-2) and sum
             let total = 0;
             for (let i = 0; i < currentDice; i++) {
                 total += Math.floor(Math.random() * 3);
             }
 
-            if (damageDiceModal.currentPhase === 'physical') {
+            if (isPhysical) {
                 damageDiceModal.physicalResult = total;
                 if (damageDiceModal.mentalDice > 0) {
-                    damageDiceModal.currentPhase = 'selectMentalStat';
+                    damageDiceModal.currentPhase = 'rollMental';
                     damageDiceModal.inputValue = '';
+                    skipMapCentering = true;
+                    updateGameUI(mountEl, currentGameState, mySocketId);
                 } else {
-                    damageDiceModal.currentPhase = 'done';
+                    // Only physical damage - open distribution modal
+                    const physicalDamage = damageDiceModal.physicalResult;
+                    damageDiceModal = null;
+                    openDamageDistributionModal(mountEl, physicalDamage, 'event', 'physical');
                 }
-            } else if (damageDiceModal.currentPhase === 'mental') {
+            } else {
                 damageDiceModal.mentalResult = total;
-                damageDiceModal.currentPhase = 'done';
-            }
-            skipMapCentering = true;
-            updateGameUI(mountEl, currentGameState, mySocketId);
-            return;
-        }
+                const physicalDamage = damageDiceModal.physicalResult || 0;
+                const mentalDamage = damageDiceModal.mentalResult;
+                damageDiceModal = null;
 
-        // Damage dice apply
-        if (action === 'damage-dice-apply') {
-            closeDamageDiceModal(mountEl);
+                if (physicalDamage > 0) {
+                    openDamageDistributionModal(mountEl, physicalDamage, 'event', 'physical');
+                    pendingMentalDamage = mentalDamage;
+                } else {
+                    openDamageDistributionModal(mountEl, mentalDamage, 'event', 'mental');
+                }
+            }
             return;
         }
 
@@ -6650,6 +6721,17 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         showToast(`${playerName} da ket noi lai!`, 'success');
     });
 
+    // Listen for debug reset event - redirect both players back to debug room
+    unsubscribeDebugReset = socketClient.onDebugReset(() => {
+        console.log('[GameView] Debug reset received, redirecting to debug room...');
+        showToast('Game da duoc reset!', 'info', 2000);
+        // Clear session and redirect to debug game page
+        socketClient.clearSession();
+        setTimeout(() => {
+            onNavigate('#/game/debug');
+        }, 500);
+    });
+
     // Setup visibility tracking for active status
     setupVisibilityTracking();
 
@@ -6694,6 +6776,10 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         if (unsubscribePlayerReconnected) {
             unsubscribePlayerReconnected();
             unsubscribePlayerReconnected = null;
+        }
+        if (unsubscribeDebugReset) {
+            unsubscribeDebugReset();
+            unsubscribeDebugReset = null;
         }
         if (introTimeout) {
             clearTimeout(introTimeout);
