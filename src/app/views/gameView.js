@@ -153,6 +153,7 @@ let introTimeout = null;
 let turnOrderExpanded = false; // Turn order collapsed by default
 let skipMapCentering = false; // Flag to skip map centering on next updateGameUI
 let tutorialOpen = false; // Tutorial modal state
+let isDebugMode = false; // Flag to track if we're in debug mode
 /** @type {Set<string>} Track expanded player IDs in sidebar */
 let expandedPlayers = new Set();
 /** @type {Set<string>} Track active player IDs */
@@ -860,8 +861,9 @@ function openDamageDiceModal(mountEl, physicalDice, mentalDice) {
  * @param {string} attackerId - Player initiating combat
  * @param {string} defenderId - Player being attacked
  * @param {{ direction: string; targetRoomId: string } | null} movement - Pending movement info (null if player already moved)
+ * @param {boolean} isForced - If true, attack is forced (no skip option)
  */
-function openCombatModal(mountEl, attackerId, defenderId, movement) {
+function openCombatModal(mountEl, attackerId, defenderId, movement, isForced = false) {
     const attacker = currentGameState.players?.find(p => p.id === attackerId);
     const defender = currentGameState.players?.find(p => p.id === defenderId);
 
@@ -897,7 +899,8 @@ function openCombatModal(mountEl, attackerId, defenderId, movement) {
         inputValue: '',
         winner: null,
         damage: 0,
-        loserId: null
+        loserId: null,
+        isForced: isForced
     };
 
     // Store pending movement to resume after combat
@@ -917,7 +920,8 @@ function openCombatModal(mountEl, attackerId, defenderId, movement) {
         defenderRoll: null,
         winner: null,
         damage: 0,
-        loserId: null
+        loserId: null,
+        isForced: isForced
         };
         syncGameStateToServer();
 
@@ -1852,6 +1856,148 @@ function findRoomIdByDestination(destination) {
 }
 
 /**
+ * Get all adjacent room IDs from current room (connected via doors)
+ * @param {string} currentRoomId - Current room ID
+ * @returns {string[]} Array of adjacent room IDs
+ */
+function getAdjacentRoomIds(currentRoomId) {
+    if (!currentGameState?.map?.revealedRooms) return [];
+
+    const revealedRooms = currentGameState.map.revealedRooms;
+    const currentRoom = revealedRooms[currentRoomId];
+    if (!currentRoom || !currentRoom.doors) return [];
+
+    const directionOffsets = {
+        'north': { x: 0, y: 1 },
+        'south': { x: 0, y: -1 },
+        'east': { x: 1, y: 0 },
+        'west': { x: -1, y: 0 }
+    };
+
+    const adjacentRoomIds = [];
+
+    for (const doorDir of currentRoom.doors) {
+        const offset = directionOffsets[doorDir];
+        if (!offset) continue;
+
+        const adjacentX = currentRoom.x + offset.x;
+        const adjacentY = currentRoom.y + offset.y;
+
+        // Find room at adjacent position
+        for (const [roomId, room] of Object.entries(revealedRooms)) {
+            if (room.x === adjacentX && room.y === adjacentY && room.floor === currentRoom.floor) {
+                adjacentRoomIds.push(roomId);
+                break;
+            }
+        }
+    }
+
+    return adjacentRoomIds;
+}
+
+/**
+ * Get players in a specific room
+ * @param {string} roomId - Room ID
+ * @param {string} excludePlayerId - Player ID to exclude (optional)
+ * @returns {Object[]} Array of player objects in the room
+ */
+function getPlayersInRoom(roomId, excludePlayerId = null) {
+    if (!currentGameState?.players || !currentGameState?.playerState?.playerPositions) return [];
+
+    const playerPositions = currentGameState.playerState.playerPositions;
+
+    return currentGameState.players.filter(player => {
+        if (excludePlayerId && player.id === excludePlayerId) return false;
+        return playerPositions[player.id] === roomId;
+    });
+}
+
+/**
+ * Find player with lowest Might in adjacent rooms
+ * @param {string} currentPlayerId - Current player ID
+ * @returns {{ player: Object, roomId: string } | null} Player with lowest Might and their room ID
+ */
+function findAdjacentPlayerWithLowestMight(currentPlayerId) {
+    const playerPositions = currentGameState?.playerState?.playerPositions;
+    if (!playerPositions) return null;
+
+    const currentRoomId = playerPositions[currentPlayerId];
+    if (!currentRoomId) return null;
+
+    const adjacentRoomIds = getAdjacentRoomIds(currentRoomId);
+
+    let lowestMightPlayer = null;
+    let lowestMight = Infinity;
+    let targetRoomId = null;
+
+    for (const roomId of adjacentRoomIds) {
+        const playersInRoom = getPlayersInRoom(roomId, currentPlayerId);
+
+        for (const player of playersInRoom) {
+            const playerMight = getCharacterMight(
+                player.characterId,
+                currentGameState.playerState?.characterData?.[player.id]
+            );
+
+            if (playerMight < lowestMight) {
+                lowestMight = playerMight;
+                lowestMightPlayer = player;
+                targetRoomId = roomId;
+            }
+        }
+    }
+
+    if (lowestMightPlayer) {
+        return { player: lowestMightPlayer, roomId: targetRoomId };
+    }
+
+    return null;
+}
+
+/**
+ * Execute forced attack - move to adjacent room and attack target
+ * @param {HTMLElement} mountEl
+ * @param {string} attackerId - Attacker player ID
+ * @param {string} targetType - Target type ('adjacentLowestMight', 'rightPlayer', etc.)
+ */
+function executeForcedAttack(mountEl, attackerId, targetType) {
+    let target = null;
+
+    if (targetType === 'adjacentLowestMight') {
+        target = findAdjacentPlayerWithLowestMight(attackerId);
+    }
+    // Add more target types as needed
+
+    if (!target) {
+        // No valid target found
+        openEventResultModal(
+            mountEl,
+            'KHÔNG CÓ MỤC TIÊU',
+            'Không có người chơi nào ở phòng liền kề để tấn công.',
+            'neutral'
+        );
+        return;
+    }
+
+    const { player: targetPlayer, roomId: targetRoomId } = target;
+
+    // Move attacker to target room
+    if (!currentGameState.playerState.playerPositions) {
+        currentGameState.playerState.playerPositions = {};
+    }
+    currentGameState.playerState.playerPositions[attackerId] = targetRoomId;
+
+    console.log(`[ForcedAttack] Moving ${attackerId} to room ${targetRoomId} to attack ${targetPlayer.id}`);
+
+    // Sync movement
+    syncGameStateToServer();
+    renderGameScreen(currentGameState, mySocketId);
+
+    // Open combat modal - no pending movement since we already moved, isForced = true
+    openCombatModal(mountEl, attackerId, targetPlayer.id, null, true);
+}
+
+/**
  * Apply multiple stat changes
  * @param {string} playerId - Player ID
  * @param {object} stats - Object with stat names as keys and amounts as values
@@ -2038,11 +2184,13 @@ function applyEventDiceResult(mountEl, result, stat) {
             closeEventDiceModal(mountEl);
             break;
 
-        case 'forcedAttack':
+        case 'forcedAttack': {
             console.log('[EventDice] Effect: forced attack on', outcome.target);
-            // TODO: Implement forced attack
-            closeEventDiceModal(mountEl);
+            eventDiceModal = null;
+            // Execute forced attack - find target and initiate combat
+            executeForcedAttack(mountEl, playerId, outcome.target);
             break;
+        }
 
         default:
             console.log('[EventDice] Unknown effect:', outcome.effect);
@@ -2842,7 +2990,6 @@ function renderDamageDistributionModal() {
 
     // Phase 2: Distribution
     const remainingDamage = totalDamage - stat1Damage - stat2Damage;
-    const canConfirm = remainingDamage === 0;
 
     // Get current stat indices and values
     const playerId = mySocketId;
@@ -2864,6 +3011,22 @@ function renderDamageDistributionModal() {
     // Check for death warning (index reaches 0)
     const stat1IsDead = stat1NewIndex === 0;
     const stat2IsDead = stat2NewIndex === 0;
+
+    // Calculate how much more damage can be assigned to each stat
+    // A stat can only absorb damage up to its current index (reaching 0)
+    const stat1CanAbsorb = stat1Index - stat1Damage; // How much more stat1 can take
+    const stat2CanAbsorb = stat2Index - stat2Damage; // How much more stat2 can take
+    const totalCanAbsorb = Math.max(0, stat1CanAbsorb) + Math.max(0, stat2CanAbsorb);
+
+    // Can confirm when:
+    // 1. All damage has been distributed (remainingDamage === 0), OR
+    // 2. Both stats are at/will be at 0 and can't absorb more (totalCanAbsorb === 0)
+    //    This handles cases where damage exceeds total stat capacity
+    const canConfirm = remainingDamage === 0 || (remainingDamage > 0 && totalCanAbsorb === 0);
+
+    console.log('[DamageDistModal] totalDamage:', totalDamage, 'stat1Damage:', stat1Damage, 'stat2Damage:', stat2Damage,
+        'remaining:', remainingDamage, 'stat1CanAbsorb:', stat1CanAbsorb, 'stat2CanAbsorb:', stat2CanAbsorb,
+        'totalCanAbsorb:', totalCanAbsorb, 'canConfirm:', canConfirm);
 
     return `
         <div class="damage-dist-overlay">
@@ -2921,7 +3084,9 @@ function renderDamageDistributionModal() {
                     <button class="damage-dist-modal__btn damage-dist-modal__btn--confirm"
                             type="button" data-action="damage-dist-confirm"
                             ${!canConfirm ? 'disabled' : ''}>
-                        ${canConfirm ? 'Xac nhan' : `Phan bo het ${remainingDamage} sat thuong`}
+                        ${remainingDamage === 0 ? 'Xac nhan' :
+                          (canConfirm ? `Xac nhan (${remainingDamage} sat thuong bi bo qua)` :
+                           `Phan bo het ${remainingDamage} sat thuong`)}
                     </button>
                 </div>
             </div>
@@ -2939,7 +3104,7 @@ function renderCombatModal() {
     const {
         phase, attackerId, defenderId, attackerName, defenderName,
         defenderFactionLabel, attackStat, attackerDiceCount, defenderDiceCount,
-        attackerRoll, defenderRoll, inputValue, winner, damage, loserId
+        attackerRoll, defenderRoll, inputValue, winner, damage, loserId, isForced
     } = combatModal;
 
     const isAttacker = mySocketId === attackerId;
@@ -2951,22 +3116,28 @@ function renderCombatModal() {
 
     // Phase 1: Confirm (only attacker sees this)
     if (phase === 'confirm' && isAttacker) {
-        headerTitle = 'GAP KE DICH';
+        headerTitle = isForced ? 'HOA DIEN - TAN CONG BAT BUOC' : 'GAP KE DICH';
+        const questionText = isForced
+            ? 'Ban bi hoa dien va PHAI tan cong!'
+            : 'Ban muon tan cong?';
+        const skipButton = isForced
+            ? ''
+            : `<button class="combat-modal__btn combat-modal__btn--skip"
+                        type="button" data-action="combat-skip">
+                    BO QUA
+                </button>`;
         bodyContent = `
             <div class="combat-modal__encounter">
                 <p class="combat-modal__text">Ban gap <strong>${defenderName}</strong></p>
                 <p class="combat-modal__faction">(${defenderFactionLabel})</p>
-                <p class="combat-modal__question">Ban muon tan cong?</p>
+                <p class="combat-modal__question">${questionText}</p>
             </div>
             <div class="combat-modal__actions">
                 <button class="combat-modal__btn combat-modal__btn--attack"
                         type="button" data-action="combat-attack">
                     TAN CONG
                 </button>
-                <button class="combat-modal__btn combat-modal__btn--skip"
-                        type="button" data-action="combat-skip">
-                    BO QUA
-                </button>
+                ${skipButton}
             </div>
         `;
     }
@@ -4256,21 +4427,39 @@ function attachEventListeners(mountEl, roomId) {
         if (action === 'combat-continue') {
             if (!combatModal || combatModal.phase !== 'result') return;
 
-            const isLoser = combatModal.loserId === mySocketId;
+            const loserId = combatModal.loserId;
+            const isLoser = loserId === mySocketId;
             const attackerLost = combatModal.winner === 'defender';
+            const damage = combatModal.damage;
+            const isForced = combatModal.isForced;
 
-            // If there's damage and this player is the loser, open damage distribution modal
-            if (combatModal.damage > 0 && isLoser) {
-                const damage = combatModal.damage;
-                console.log('[Combat] Opening damage distribution modal for loser:', mySocketId, 'damage:', damage);
+            // If there's damage and a loser exists
+            if (damage > 0 && loserId) {
+                console.log('[Combat] Combat result - loser:', loserId, 'damage:', damage, 'isForced:', isForced, 'isDebugMode:', isDebugMode);
 
-                // Close combat modal first
-                closeCombatModal(mountEl, attackerLost);
+                // In debug mode or forced attack, apply damage directly to loser
+                // since all players are controlled by same user
+                if (isDebugMode || isForced) {
+                    console.log('[Combat] Debug/Forced mode - applying physical damage to loser:', loserId, 'damage:', damage);
+                    closeCombatModal(mountEl, attackerLost);
 
-                // Open damage distribution modal - player chooses physical or mental damage type
-                openDamageDistributionModal(mountEl, damage, 'combat', null);
+                    // Apply physical damage to loser (combat uses Might, so physical damage)
+                    // In debug mode, damage goes directly to might stat
+                    applyStatChange(loserId, 'might', -damage);
+                    syncGameStateToServer();
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                } else if (isLoser) {
+                    // Multiplayer - loser clicks, open damage distribution modal
+                    // Combat damage is always physical (Might vs Might)
+                    console.log('[Combat] Opening damage distribution modal for loser:', loserId);
+                    closeCombatModal(mountEl, attackerLost);
+                    openDamageDistributionModal(mountEl, damage, 'combat', 'physical');
+                } else {
+                    // Multiplayer - winner clicks, just close and wait for loser
+                    closeCombatModal(mountEl, attackerLost);
+                }
             } else {
-                // Not the loser or no damage (tie), just close
+                // No damage (tie) or no loser, just close
                 closeCombatModal(mountEl, attackerLost);
             }
             return;
@@ -4963,15 +5152,22 @@ function attachEventListeners(mountEl, roomId) {
             const remaining = damageDistributionModal.totalDamage -
                 damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
 
+            console.log('[DamageAdjust] statNum:', statNum, 'delta:', delta, 'remaining:', remaining,
+                'stat1Damage:', damageDistributionModal.stat1Damage, 'stat2Damage:', damageDistributionModal.stat2Damage);
+
             if (statNum === '1') {
                 const newValue = damageDistributionModal.stat1Damage + delta;
+                // Allow assigning damage even if it exceeds current stat index (stats will clamp to 0)
+                // Player can assign all damage to one stat - stats will just stop at 0
                 if (newValue >= 0 && (delta < 0 || remaining > 0)) {
                     damageDistributionModal.stat1Damage = newValue;
+                    console.log('[DamageAdjust] Updated stat1Damage to:', newValue);
                 }
             } else if (statNum === '2') {
                 const newValue = damageDistributionModal.stat2Damage + delta;
                 if (newValue >= 0 && (delta < 0 || remaining > 0)) {
                     damageDistributionModal.stat2Damage = newValue;
+                    console.log('[DamageAdjust] Updated stat2Damage to:', newValue);
                 }
             }
 
@@ -4984,10 +5180,26 @@ function attachEventListeners(mountEl, roomId) {
         if (action === 'damage-dist-confirm') {
             if (!damageDistributionModal) return;
 
-            const remaining = damageDistributionModal.totalDamage -
-                damageDistributionModal.stat1Damage - damageDistributionModal.stat2Damage;
+            const { stat1, stat2, stat1Damage, stat2Damage, totalDamage } = damageDistributionModal;
+            const remaining = totalDamage - stat1Damage - stat2Damage;
 
-            if (remaining !== 0) return;
+            // Check if stats can absorb more damage
+            const charData = currentGameState?.playerState?.characterData?.[mySocketId];
+            const stat1Index = charData?.stats?.[stat1] ?? 0;
+            const stat2Index = charData?.stats?.[stat2] ?? 0;
+            const stat1CanAbsorb = Math.max(0, stat1Index - stat1Damage);
+            const stat2CanAbsorb = Math.max(0, stat2Index - stat2Damage);
+            const totalCanAbsorb = stat1CanAbsorb + stat2CanAbsorb;
+
+            // Allow confirm if all damage distributed OR stats can't absorb more
+            if (remaining !== 0 && totalCanAbsorb > 0) {
+                console.log('[DamageDistConfirm] Cannot confirm - remaining:', remaining, 'totalCanAbsorb:', totalCanAbsorb);
+                return;
+            }
+
+            if (remaining > 0) {
+                console.log('[DamageDistConfirm] Confirming with wasted damage:', remaining, '(stats at max capacity)');
+            }
 
             closeDamageDistributionModal(mountEl);
             return;
@@ -6666,7 +6878,8 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
     // Reset event listener flag since we have a fresh element
     eventListenersAttached = false;
 
-    // Set debug mode flag
+    // Set debug mode flag based on roomId
+    isDebugMode = roomId === 'debug';
 
     // Reset state for fresh game
     sidebarOpen = false;
@@ -6823,7 +7036,8 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
                             inputValue: '',
                             winner: serverCombat.winner,
                             damage: serverCombat.damage || 0,
-                            loserId: serverCombat.loserId
+                            loserId: serverCombat.loserId,
+                            isForced: serverCombat.isForced || false
                         };
 
                         console.log('[Combat] Synced from server - phase:', combatModal.phase,
@@ -6846,7 +7060,17 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
             if (!isAttackerWhoJustOpened) {
                 console.log('[Combat] Closing modal - server says combat is not active');
 
-                // Mark combat as completed before closing modal (1 attack per turn rule)
+                // In debug mode or forced attack, apply damage to loser before closing
+                const damage = combatModal.damage || 0;
+                const loserId = combatModal.loserId;
+                const isForced = combatModal.isForced;
+
+                console.log('[Combat] Close check - isDebugMode:', isDebugMode, 'isForced:', isForced, 'damage:', damage, 'loserId:', loserId);
+
+                // Check if I am the loser and need to distribute damage
+                const iAmLoser = loserId === mySocketId;
+
+                // Mark combat as completed before any other processing (1 attack per turn rule)
                 const attackerId = combatModal.attackerId;
                 const defenderId = combatModal.defenderId;
                 if (attackerId && defenderId && state) {
@@ -6855,6 +7079,26 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
                     if (combatRoomId) {
                         markCombatCompleted(combatRoomId, attackerId, defenderId);
                     }
+                }
+
+                // In debug mode, always apply damage directly to loser's might
+                if (isDebugMode && damage > 0 && loserId) {
+                    console.log('[Combat] Debug mode - applying damage to loser:', loserId, 'damage:', damage);
+                    applyStatChange(loserId, 'might', -damage);
+                    syncGameStateToServer();
+                } else if (isForced && damage > 0 && loserId) {
+                    console.log('[Combat] Forced attack - applying damage to loser:', loserId, 'damage:', damage);
+                    applyStatChange(loserId, 'might', -damage);
+                    syncGameStateToServer();
+                } else if (iAmLoser && damage > 0) {
+                    // Multiplayer mode - loser needs to distribute damage
+                    console.log('[Combat] Multiplayer - I am loser, opening damage distribution modal for damage:', damage);
+                    // Close combat modal first, then open damage distribution
+                    combatModal = null;
+                    pendingCombatMovement = null;
+                    openDamageDistributionModal(mountEl, damage, 'combat', 'physical');
+                    // openDamageDistributionModal already calls updateGameUI, so we can return
+                    return;
                 }
 
                 combatModal = null;
