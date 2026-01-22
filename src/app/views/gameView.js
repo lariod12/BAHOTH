@@ -133,6 +133,18 @@ let pendingMentalDamage = null;
 /** @type {{ isOpen: boolean; title: string; message: string; type: 'success' | 'neutral' | 'danger' } | null} */
 let eventResultModal = null;
 
+// Stat choice modal (for bonus rewards where player chooses which stat to gain)
+/** @type {{ isOpen: boolean; effect: string; amount: number; title: string } | null} */
+let statChoiceModal = null;
+
+// Stat change notification popup (for multi-roll events to show damage applied)
+/** @type {{ isOpen: boolean; stat: string; oldValue: number; newValue: number; change: number; onClose: Function | null } | null} */
+let statChangeNotification = null;
+
+// Multi-roll summary popup (shows all results at the end)
+/** @type {{ isOpen: boolean; results: Array<{stat: string; result: number; passed: boolean}>; eventName: string; hasBonus: boolean; bonusText: string | null; bonusReward: {effect: string; amount: number; choice: boolean} | null } | null} */
+let multiRollSummary = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -1206,6 +1218,50 @@ function closeEventResultModal(mountEl) {
 
     updateGameUI(mountEl, currentGameState, mySocketId);
     syncGameStateToServer();
+}
+
+/**
+ * Open stat choice modal (for bonus rewards)
+ * @param {HTMLElement} mountEl
+ * @param {string} effect - 'gainStat' or 'loseStat'
+ * @param {number} amount - Amount to change
+ * @param {string} title - Modal title
+ */
+function openStatChoiceModal(mountEl, effect, amount, title) {
+    statChoiceModal = {
+        isOpen: true,
+        effect: effect,
+        amount: amount,
+        title: title,
+        selectedStat: null
+    };
+    console.log('[StatChoice] Opened modal -', title, effect, amount);
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close stat choice modal and apply stat change
+ * @param {HTMLElement} mountEl
+ * @param {string} chosenStat - The stat player chose
+ */
+function closeStatChoiceModal(mountEl, chosenStat) {
+    if (!statChoiceModal) return;
+
+    const { effect, amount } = statChoiceModal;
+    const playerId = mySocketId;
+
+    if (chosenStat && effect === 'gainStat') {
+        applyStatChange(playerId, chosenStat, amount);
+        console.log('[StatChoice] Applied +' + amount + ' to', chosenStat);
+    } else if (chosenStat && effect === 'loseStat') {
+        applyStatChange(playerId, chosenStat, -amount);
+        console.log('[StatChoice] Applied -' + amount + ' to', chosenStat);
+    }
+
+    statChoiceModal = null;
+    syncGameStateToServer();
+    updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**
@@ -2689,6 +2745,13 @@ function renderEventDiceModal() {
                             />
                         </div>
                         <div class="event-dice-modal__actions">
+                            ${isMultiRoll && allResults.length > 0 ? `
+                            <button class="event-dice-modal__btn event-dice-modal__btn--back"
+                                    type="button"
+                                    data-action="event-dice-back">
+                                ← Quay lai
+                            </button>
+                            ` : ''}
                             <button class="event-dice-modal__btn event-dice-modal__btn--confirm"
                                     type="button"
                                     data-action="event-dice-confirm">
@@ -2703,11 +2766,20 @@ function renderEventDiceModal() {
                     `}
 
                     ${hasResult ? `
-                        <button class="event-dice-modal__btn event-dice-modal__btn--continue"
-                                type="button"
-                                data-action="event-dice-continue">
-                            ${isMultiRoll && currentRollIndex < totalRolls - 1 ? 'Tiep theo' : 'Ap dung ket qua'}
-                        </button>
+                        <div class="event-dice-modal__actions event-dice-modal__actions--result">
+                            ${isMultiRoll ? `
+                            <button class="event-dice-modal__btn event-dice-modal__btn--back"
+                                    type="button"
+                                    data-action="event-dice-back">
+                                ← Nhap lai
+                            </button>
+                            ` : ''}
+                            <button class="event-dice-modal__btn event-dice-modal__btn--continue"
+                                    type="button"
+                                    data-action="event-dice-continue">
+                                ${isMultiRoll && currentRollIndex < totalRolls - 1 ? 'Tiep theo' : 'Ap dung ket qua'}
+                            </button>
+                        </div>
                     ` : ''}
                 </div>
             </div>
@@ -2938,6 +3010,162 @@ function renderEventResultModal() {
                 <h3 class="event-result-modal__title">${title}</h3>
                 <p class="event-result-modal__message">${message}</p>
                 <p class="event-result-modal__hint">Tap de dong</p>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render stat choice modal - for bonus rewards where player chooses a stat
+ * @returns {string} HTML string
+ */
+function renderStatChoiceModal() {
+    if (!statChoiceModal?.isOpen) return '';
+
+    const { effect, amount, title, selectedStat } = statChoiceModal;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    const actionText = effect === 'gainStat' ? `+${amount}` : `-${amount}`;
+
+    return `
+        <div class="stat-choice-overlay">
+            <div class="stat-choice-modal" data-modal-content="true">
+                <header class="stat-choice-modal__header">
+                    <h3 class="stat-choice-modal__title">${title}</h3>
+                </header>
+                <div class="stat-choice-modal__body">
+                    <p class="stat-choice-modal__description">Chon chi so de ${effect === 'gainStat' ? 'tang' : 'giam'} ${amount} nac:</p>
+                    <div class="stat-choice-modal__select-group">
+                        <select class="stat-choice-modal__select" data-input="stat-choice-select">
+                            <option value="">-- Chon chi so --</option>
+                            <option value="speed" ${selectedStat === 'speed' ? 'selected' : ''}>${statLabels.speed} ${actionText}</option>
+                            <option value="might" ${selectedStat === 'might' ? 'selected' : ''}>${statLabels.might} ${actionText}</option>
+                            <option value="sanity" ${selectedStat === 'sanity' ? 'selected' : ''}>${statLabels.sanity} ${actionText}</option>
+                            <option value="knowledge" ${selectedStat === 'knowledge' ? 'selected' : ''}>${statLabels.knowledge} ${actionText}</option>
+                        </select>
+                    </div>
+                    <button class="stat-choice-modal__btn stat-choice-modal__btn--confirm"
+                            type="button"
+                            data-action="stat-choice-confirm"
+                            ${!selectedStat ? 'disabled' : ''}>
+                        Xac nhan
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render stat change notification popup - shows when a stat is changed in multi-roll events
+ * @returns {string} HTML string
+ */
+function renderStatChangeNotification() {
+    if (!statChangeNotification?.isOpen) return '';
+
+    const { stat, oldValue, newValue, change } = statChangeNotification;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    const statLabel = statLabels[stat] || stat;
+    const changeText = change > 0 ? `+${change}` : `${change}`;
+    const changeClass = change > 0 ? 'gain' : 'loss';
+
+    return `
+        <div class="stat-change-overlay">
+            <div class="stat-change-modal" data-modal-content="true">
+                <header class="stat-change-modal__header">
+                    <h3 class="stat-change-modal__title">${change > 0 ? 'TANG CHI SO' : 'GIAM CHI SO'}</h3>
+                </header>
+                <div class="stat-change-modal__body">
+                    <div class="stat-change-modal__stat-name">${statLabel}</div>
+                    <div class="stat-change-modal__values">
+                        <span class="stat-change-modal__old-value">${oldValue}</span>
+                        <span class="stat-change-modal__arrow">→</span>
+                        <span class="stat-change-modal__new-value stat-change-modal__new-value--${changeClass}">${newValue}</span>
+                    </div>
+                    <div class="stat-change-modal__change stat-change-modal__change--${changeClass}">
+                        ${changeText}
+                    </div>
+                    <button class="stat-change-modal__btn"
+                            type="button"
+                            data-action="stat-change-ok">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render multi-roll summary popup - shows all results at the end of a multi-roll event
+ * @returns {string} HTML string
+ */
+function renderMultiRollSummary() {
+    if (!multiRollSummary?.isOpen) return '';
+
+    const { results, eventName, hasBonus, bonusText } = multiRollSummary;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    // Build results list
+    const resultsHtml = results.map(r => {
+        const statLabel = statLabels[r.stat] || r.stat;
+        const statusClass = r.passed ? 'pass' : 'fail';
+        const statusText = r.passed ? 'OK' : '-1';
+        return `
+            <div class="multi-roll-summary__result multi-roll-summary__result--${statusClass}">
+                <span class="multi-roll-summary__stat">${statLabel}</span>
+                <span class="multi-roll-summary__roll">Roll: ${r.result}</span>
+                <span class="multi-roll-summary__status multi-roll-summary__status--${statusClass}">${statusText}</span>
+            </div>
+        `;
+    }).join('');
+
+    // Count failed rolls
+    const failedCount = results.filter(r => !r.passed).length;
+    const summaryText = failedCount > 0
+        ? `Ban bi tru ${failedCount} chi so`
+        : 'Tat ca cac chi so deu an toan!';
+
+    return `
+        <div class="multi-roll-summary-overlay" data-action="multi-roll-summary-close">
+            <div class="multi-roll-summary-modal" data-modal-content="true">
+                <header class="multi-roll-summary-modal__header">
+                    <h3 class="multi-roll-summary-modal__title">${eventName}</h3>
+                    <span class="multi-roll-summary-modal__subtitle">KET QUA TONG KET</span>
+                </header>
+                <div class="multi-roll-summary-modal__body">
+                    <div class="multi-roll-summary__results">
+                        ${resultsHtml}
+                    </div>
+                    <div class="multi-roll-summary__summary ${failedCount > 0 ? 'multi-roll-summary__summary--fail' : 'multi-roll-summary__summary--pass'}">
+                        ${summaryText}
+                    </div>
+                    ${hasBonus ? `
+                        <div class="multi-roll-summary__bonus">
+                            ${bonusText}
+                        </div>
+                    ` : ''}
+                    <p class="multi-roll-summary__hint">Nhan de dong</p>
+                </div>
             </div>
         </div>
     `;
@@ -4057,6 +4285,9 @@ function renderGameScreen(gameState, myId) {
             ${renderRoomEffectDiceModal()}
             ${renderCombatModal()}
             ${renderDamageDistributionModal()}
+            ${renderStatChoiceModal()}
+            ${renderStatChangeNotification()}
+            ${renderMultiRollSummary()}
             ${renderEventResultModal()}
             ${renderEndTurnModal()}
             ${renderResetGameModal()}
@@ -4831,42 +5062,102 @@ function attachEventListeners(mountEl, roomId) {
             const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || eventCard.rollStat);
 
             if (isMultiRoll) {
-                // Save current result
-                eventDiceModal.allResults.push({ stat: currentStat, result: result });
+                // Check outcome for current roll
+                const outcome = findMatchingOutcome(eventCard.rollResults, result);
+                const passed = !outcome || outcome.effect === 'nothing';
 
-                // Check if more rolls needed
-                if (currentRollIndex < eventCard.rollStats.length - 1) {
-                    // Move to next roll
-                    const nextStat = eventCard.rollStats[currentRollIndex + 1];
-                    eventDiceModal.currentRollIndex++;
-                    eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, nextStat);
-                    eventDiceModal.inputValue = '';
-                    eventDiceModal.result = null;
+                // Save current result (including pass/fail status)
+                eventDiceModal.allResults.push({ stat: currentStat, result: result, passed: passed });
+
+                // Function to proceed to next roll or finish
+                const proceedToNextRollOrFinish = () => {
+                    // Check if more rolls needed
+                    if (currentRollIndex < eventCard.rollStats.length - 1) {
+                        // Move to next roll
+                        const nextStat = eventCard.rollStats[currentRollIndex + 1];
+                        eventDiceModal.currentRollIndex++;
+                        eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, nextStat);
+                        eventDiceModal.inputValue = '';
+                        eventDiceModal.result = null;
+                        skipMapCentering = true;
+                        updateGameUI(mountEl, currentGameState, mySocketId);
+                        return;
+                    }
+
+                    // All rolls done - check bonus condition
+                    console.log('[EventDice] Multi-roll complete:', eventDiceModal.allResults);
+                    const allRollResults = [...eventDiceModal.allResults];
+                    const eventName = eventCard?.name?.vi || 'Event';
+
+                    // Check bonus condition (e.g., nguoi_treo_co - all rolls pass)
+                    let hasBonus = false;
+                    let bonusText = null;
+                    let bonusReward = null;
+                    const bonusCondition = eventCard.bonusCondition;
+                    if (bonusCondition && bonusCondition.condition === 'allRollsPass') {
+                        const threshold = bonusCondition.threshold || 0;
+                        const allPassedThreshold = allRollResults.every(r => r.result >= threshold);
+
+                        if (allPassedThreshold && bonusCondition.reward) {
+                            const reward = bonusCondition.reward;
+                            console.log('[EventDice] Bonus condition met! All rolls >= ' + threshold + '. Reward:', reward);
+                            hasBonus = true;
+                            bonusText = `BONUS: +${reward.amount} cho chi so tu chon!`;
+                            bonusReward = reward;
+
+                            if (!reward.choice && reward.stat) {
+                                // Fixed stat reward - apply immediately
+                                applyStatChange(mySocketId, reward.stat, reward.amount);
+                            }
+                        } else {
+                            console.log('[EventDice] Bonus condition NOT met. Not all rolls >= ' + threshold);
+                        }
+                    }
+
+                    // Show summary popup
+                    multiRollSummary = {
+                        isOpen: true,
+                        results: allRollResults,
+                        eventName: eventName,
+                        hasBonus: hasBonus,
+                        bonusText: bonusText,
+                        bonusReward: bonusReward
+                    };
+
+                    // Close dice modal
+                    eventDiceModal = null;
+                    skipMapCentering = true;
+
+                    // Sync state with server in multiplayer mode
+                    syncGameStateToServer();
+
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                };
+
+                // Apply damage IMMEDIATELY for current roll if failed
+                if (outcome && outcome.effect === 'loseStat') {
+                    const changeAmount = -(outcome.amount || 1);
+                    const oldValue = getPlayerStatForDice(mySocketId, currentStat);
+                    console.log('[EventDice] Multi-roll - failed roll for', currentStat, 'applying', changeAmount);
+                    applyStatChange(mySocketId, currentStat, changeAmount);
+                    const newValue = getPlayerStatForDice(mySocketId, currentStat);
+
+                    // Show notification popup
+                    statChangeNotification = {
+                        isOpen: true,
+                        stat: currentStat,
+                        oldValue: oldValue,
+                        newValue: newValue,
+                        change: changeAmount,
+                        onClose: proceedToNextRollOrFinish
+                    };
                     skipMapCentering = true;
                     updateGameUI(mountEl, currentGameState, mySocketId);
                     return;
                 }
 
-                // All rolls done - apply multi-roll results
-                console.log('[EventDice] Multi-roll complete:', eventDiceModal.allResults);
-                const allRollResults = [...eventDiceModal.allResults, { stat: currentStat, result: result }];
-
-                // Apply results for each stat
-                allRollResults.forEach(r => {
-                    const outcome = findMatchingOutcome(eventCard.rollResults, r.result);
-                    if (outcome && outcome.effect === 'loseStat') {
-                        applyStatChange(mySocketId, r.stat, -(outcome.amount || 1));
-                    }
-                });
-
-                // Close modal
-                eventDiceModal = null;
-                skipMapCentering = true;
-
-                // Sync state with server in multiplayer mode
-                syncGameStateToServer();
-
-                updateGameUI(mountEl, currentGameState, mySocketId);
+                // No damage - proceed directly
+                proceedToNextRollOrFinish();
                 return;
             }
 
@@ -4885,6 +5176,56 @@ function attachEventListeners(mountEl, roomId) {
                 skipMapCentering = true;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
+            return;
+        }
+
+        // Event dice back (for multi-roll events like nguoi_treo_co)
+        if (action === 'event-dice-back') {
+            if (!eventDiceModal) return;
+            const { eventCard, allResults, currentRollIndex, result } = eventDiceModal;
+            const isMultiRoll = eventCard?.rollStats && Array.isArray(eventCard.rollStats);
+
+            if (!isMultiRoll) return;
+
+            // Case 1: Has result for current roll → just clear it to re-enter
+            if (result !== null) {
+                console.log('[EventDice] Clearing current result to re-enter');
+                eventDiceModal.result = null;
+                eventDiceModal.inputValue = '';
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+                return;
+            }
+
+            // Case 2: No result yet, but have previous results → go back to previous roll
+            if (allResults.length === 0) return;
+
+            // Get the last result to undo
+            const lastResult = allResults[allResults.length - 1];
+            console.log('[EventDice] Going back, undoing:', lastResult);
+
+            // Undo damage if the last roll failed (loseStat was applied)
+            if (!lastResult.passed) {
+                const outcome = findMatchingOutcome(eventCard.rollResults, lastResult.result);
+                if (outcome && outcome.effect === 'loseStat') {
+                    console.log('[EventDice] Undoing stat loss for', lastResult.stat, '+', outcome.amount || 1);
+                    applyStatChange(mySocketId, lastResult.stat, outcome.amount || 1);
+                }
+            }
+
+            // Remove last result
+            allResults.pop();
+
+            // Go back to previous roll
+            const previousIndex = currentRollIndex - 1;
+            const previousStat = eventCard.rollStats[previousIndex];
+            eventDiceModal.currentRollIndex = previousIndex;
+            eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, previousStat);
+            eventDiceModal.inputValue = '';
+            eventDiceModal.result = null;
+
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
             return;
         }
 
@@ -5211,6 +5552,47 @@ function attachEventListeners(mountEl, roomId) {
             closeEventResultModal(mountEl);
             return;
         }
+
+        // ===== MULTI-ROLL SUMMARY HANDLER =====
+        if (action === 'multi-roll-summary-close') {
+            if (!multiRollSummary) return;
+            const bonusReward = multiRollSummary.bonusReward;
+            multiRollSummary = null;
+
+            // If there's a bonus reward with choice, open stat choice modal
+            if (bonusReward && bonusReward.choice) {
+                openStatChoiceModal(mountEl, bonusReward.effect, bonusReward.amount, 'BONUS! Chon chi so de tang ' + bonusReward.amount);
+                return;
+            }
+
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // ===== STAT CHANGE NOTIFICATION HANDLER =====
+        if (action === 'stat-change-ok') {
+            if (!statChangeNotification) return;
+            const onCloseCallback = statChangeNotification.onClose;
+            statChangeNotification = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            // Call callback after UI update
+            if (onCloseCallback) {
+                onCloseCallback();
+            }
+            return;
+        }
+
+        // ===== STAT CHOICE MODAL HANDLER =====
+        if (action === 'stat-choice-confirm') {
+            if (!statChoiceModal) return;
+            const chosenStat = statChoiceModal.selectedStat;
+            if (chosenStat) {
+                closeStatChoiceModal(mountEl, chosenStat);
+            }
+            return;
+        }
     });
 
     // Change event for select elements (dropdowns)
@@ -5225,6 +5607,19 @@ function attachEventListeners(mountEl, roomId) {
             eventDiceModal.tempSelectedStat = selectedStat;
             // Enable/disable confirm button based on selection
             const confirmBtn = mountEl.querySelector('[data-action="event-stat-confirm"]');
+            if (confirmBtn) {
+                /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
+            }
+            return;
+        }
+
+        // Stat choice modal - dropdown selection changed
+        if (target.matches('[data-input="stat-choice-select"]')) {
+            if (!statChoiceModal) return;
+            const selectedStat = target.value;
+            statChoiceModal.selectedStat = selectedStat || null;
+            // Enable/disable confirm button based on selection
+            const confirmBtn = mountEl.querySelector('[data-action="stat-choice-confirm"]');
             if (confirmBtn) {
                 /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
             }
