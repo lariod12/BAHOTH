@@ -1283,6 +1283,7 @@ export const EVENTS = [
         '2-4  Bạn chịu 1 xúc xắc sát thương tinh thần.\n' +
         '0-1  Bạn chịu 1 xúc xắc sát thương tinh thần và 1 xúc xắc sát thương vật lí.',
     },
+    immediateRoll: true,
     rollStat: 'speed',
     rollResults: [
       { range: '5+', effect: 'gainStat', stat: 'speed', amount: 1 },
