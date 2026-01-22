@@ -1803,6 +1803,55 @@ function applyStatChange(playerId, stat, amount) {
 }
 
 /**
+ * Destination name mapping from event data (snake_case) to room names
+ */
+const DESTINATION_TO_ROOM_NAME = {
+    'entrance_hall': 'Entrance Hall',
+    'foyer': 'Foyer',
+    'grand_staircase': 'Grand Staircase',
+    'chapel': 'Chapel',
+    'graveyard': 'Graveyard',
+    'patio': 'Patio',
+    'gardens': 'Gardens',
+    'tower': 'Tower',
+    'balcony': 'Balcony',
+    'basement_landing': 'Basement Landing',
+};
+
+/**
+ * Find room ID by destination name (from event card data)
+ * @param {string} destination - Destination name from event (e.g., 'entrance_hall')
+ * @returns {string|null} - Room ID if found, null otherwise
+ */
+function findRoomIdByDestination(destination) {
+    if (!currentGameState?.map?.revealedRooms) {
+        console.warn('[findRoomIdByDestination] No revealed rooms in game state');
+        return null;
+    }
+
+    const revealedRooms = currentGameState.map.revealedRooms;
+    const targetRoomName = DESTINATION_TO_ROOM_NAME[destination];
+
+    if (!targetRoomName) {
+        console.warn('[findRoomIdByDestination] Unknown destination:', destination);
+        return null;
+    }
+
+    // Search for room by name (supports both English name and Vietnamese name with English in parentheses)
+    for (const [roomId, room] of Object.entries(revealedRooms)) {
+        if (room.name === targetRoomName ||
+            room.name?.includes(`(${targetRoomName})`) ||
+            room.name?.en === targetRoomName) {
+            console.log(`[findRoomIdByDestination] Found ${destination} at room ID: ${roomId}`);
+            return roomId;
+        }
+    }
+
+    console.warn(`[findRoomIdByDestination] Room not found for destination: ${destination} (${targetRoomName})`);
+    return null;
+}
+
+/**
  * Apply multiple stat changes
  * @param {string} playerId - Player ID
  * @param {object} stats - Object with stat names as keys and amounts as values
@@ -1938,11 +1987,44 @@ function applyEventDiceResult(mountEl, result, stat) {
             openDamageDiceModal(mountEl, outcome.physicalDice || 0, outcome.mentalDice || 0);
             break;
 
-        case 'teleport':
+        case 'teleport': {
             console.log('[EventDice] Effect: teleport to', outcome.destination);
-            // TODO: Implement teleport
-            closeEventDiceModal(mountEl);
+            const destinationRoomId = findRoomIdByDestination(outcome.destination);
+            if (destinationRoomId) {
+                // Move player to destination
+                if (!currentGameState.playerState.playerPositions) {
+                    currentGameState.playerState.playerPositions = {};
+                }
+                currentGameState.playerState.playerPositions[playerId] = destinationRoomId;
+
+                // Get room name for display
+                const revealedRooms = currentGameState.map?.revealedRooms || {};
+                const destRoom = revealedRooms[destinationRoomId];
+                const roomName = destRoom?.name || outcome.destination;
+
+                // Sync state to server and re-render
+                syncGameStateToServer();
+                renderGameScreen(currentGameState, mySocketId);
+
+                eventDiceModal = null;
+                openEventResultModal(
+                    mountEl,
+                    'DỊCH CHUYỂN',
+                    `Bạn đã được dịch chuyển đến ${roomName}`,
+                    'neutral'
+                );
+            } else {
+                console.warn('[EventDice] Could not find destination room:', outcome.destination);
+                eventDiceModal = null;
+                openEventResultModal(
+                    mountEl,
+                    'LỖI',
+                    `Không tìm thấy phòng ${outcome.destination}. Phòng này chưa được khám phá.`,
+                    'danger'
+                );
+            }
             break;
+        }
 
         case 'drawItem':
             console.log('[EventDice] Effect: drawItem');
