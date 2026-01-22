@@ -129,6 +129,10 @@ let damageDistributionModal = null;
 // Pending mental damage (when both physical and mental damage need to be distributed)
 let pendingMentalDamage = null;
 
+// Event result notification modal (shows outcome of event rolls like stat gains or "nothing happens")
+/** @type {{ isOpen: boolean; title: string; message: string; type: 'success' | 'neutral' | 'danger' } | null} */
+let eventResultModal = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -1163,6 +1167,44 @@ function openDamageDistributionModal(mountEl, totalDamage, source, preselectedTy
 }
 
 /**
+ * Open event result notification modal
+ * @param {HTMLElement} mountEl
+ * @param {string} title - Modal title
+ * @param {string} message - Result message
+ * @param {'success' | 'neutral' | 'danger'} type - Type for styling
+ */
+function openEventResultModal(mountEl, title, message, type = 'neutral') {
+    eventResultModal = {
+        isOpen: true,
+        title: title,
+        message: message,
+        type: type
+    };
+    console.log('[EventResult] Opened modal -', title, message);
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close event result notification modal
+ * @param {HTMLElement} mountEl
+ */
+function closeEventResultModal(mountEl) {
+    eventResultModal = null;
+
+    const playerId = mySocketId;
+
+    // Check if turn ended (no more moves) - advance to next player
+    if (currentGameState && currentGameState.playerMoves[playerId] <= 0) {
+        console.log('[Turn] Player', playerId, 'moves depleted after event result, advancing turn');
+        advanceToNextTurn();
+    }
+
+    updateGameUI(mountEl, currentGameState, mySocketId);
+    syncGameStateToServer();
+}
+
+/**
  * Close damage distribution modal and apply damage
  * @param {HTMLElement} mountEl
  */
@@ -1818,28 +1860,63 @@ function applyEventDiceResult(mountEl, result, stat) {
 
     const playerId = mySocketId;
 
+    // Stat labels for display
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        knowledge: 'Kien thuc (Knowledge)',
+        sanity: 'Tam tri (Sanity)'
+    };
+
     // Handle different effect types
     switch (outcome.effect) {
         case 'nothing':
             console.log('[EventDice] Effect: nothing');
-            closeEventDiceModal(mountEl);
+            eventDiceModal = null; // Close event modal
+            openEventResultModal(mountEl, 'KHONG CO GI XAY RA', 'Ban da vuot qua thu thach!', 'neutral');
             break;
 
-        case 'gainStat':
-            const gainStat = outcome.stat === 'rolled' ? stat : outcome.stat;
-            applyStatChange(playerId, gainStat, outcome.amount || 1);
-            closeEventDiceModal(mountEl);
+        case 'gainStat': {
+            const gainStatName = outcome.stat === 'rolled' ? stat : outcome.stat;
+            const amount = outcome.amount || 1;
+            // Get current value before change
+            const oldValue = getPlayerStatForDice(playerId, gainStatName);
+            applyStatChange(playerId, gainStatName, amount);
+            const newValue = getPlayerStatForDice(playerId, gainStatName);
+            eventDiceModal = null; // Close event modal
+            openEventResultModal(
+                mountEl,
+                'TANG CHI SO',
+                `${statLabels[gainStatName]}: ${oldValue} → ${newValue} (+${amount})`,
+                'success'
+            );
             break;
+        }
 
-        case 'loseStat':
-            const loseStat = outcome.stat === 'rolled' ? stat : outcome.stat;
-            applyStatChange(playerId, loseStat, -(outcome.amount || 1));
-            closeEventDiceModal(mountEl);
+        case 'loseStat': {
+            const loseStatName = outcome.stat === 'rolled' ? stat : outcome.stat;
+            const amount = outcome.amount || 1;
+            const oldValue = getPlayerStatForDice(playerId, loseStatName);
+            applyStatChange(playerId, loseStatName, -amount);
+            const newValue = getPlayerStatForDice(playerId, loseStatName);
+            eventDiceModal = null; // Close event modal
+            openEventResultModal(
+                mountEl,
+                'GIAM CHI SO',
+                `${statLabels[loseStatName]}: ${oldValue} → ${newValue} (-${amount})`,
+                'danger'
+            );
             break;
+        }
 
         case 'loseStats':
             applyMultipleStatChanges(playerId, outcome.stats);
-            closeEventDiceModal(mountEl);
+            eventDiceModal = null; // Close event modal
+            // Build message for multiple stats
+            const loseStatsMsg = Object.entries(outcome.stats)
+                .map(([s, amt]) => `${statLabels[s]} -${amt}`)
+                .join(', ');
+            openEventResultModal(mountEl, 'GIAM CHI SO', loseStatsMsg, 'danger');
             break;
 
         case 'mentalDamage':
@@ -2601,6 +2678,36 @@ function renderDamageDiceModal() {
                 <div class="damage-dice-modal__body">
                     ${bodyContent}
                 </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render event result notification modal
+ * @returns {string} HTML string
+ */
+function renderEventResultModal() {
+    if (!eventResultModal?.isOpen) return '';
+
+    const { title, message, type } = eventResultModal;
+
+    // Type-based styling
+    const typeClass = type === 'success' ? 'event-result-modal--success'
+        : type === 'danger' ? 'event-result-modal--danger'
+        : 'event-result-modal--neutral';
+
+    const icon = type === 'success' ? '✓'
+        : type === 'danger' ? '✗'
+        : 'ℹ';
+
+    return `
+        <div class="event-result-overlay" data-action="close-event-result">
+            <div class="event-result-modal ${typeClass}" data-modal-content="true">
+                <div class="event-result-modal__icon">${icon}</div>
+                <h3 class="event-result-modal__title">${title}</h3>
+                <p class="event-result-modal__message">${message}</p>
+                <p class="event-result-modal__hint">Tap de dong</p>
             </div>
         </div>
     `;
@@ -3697,6 +3804,7 @@ function renderGameScreen(gameState, myId) {
             ${renderRoomEffectDiceModal()}
             ${renderCombatModal()}
             ${renderDamageDistributionModal()}
+            ${renderEventResultModal()}
             ${renderEndTurnModal()}
             ${renderResetGameModal()}
             ${renderTutorialModal()}
@@ -4800,6 +4908,13 @@ function attachEventListeners(mountEl, roomId) {
             if (remaining !== 0) return;
 
             closeDamageDistributionModal(mountEl);
+            return;
+        }
+
+        // ===== EVENT RESULT MODAL HANDLER =====
+        if (action === 'close-event-result') {
+            if (!eventResultModal) return;
+            closeEventResultModal(mountEl);
             return;
         }
     });
