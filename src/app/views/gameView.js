@@ -849,14 +849,21 @@ function matchesRollRange(range, result) {
  * @returns {object|null}
  */
 function findMatchingOutcome(rollResults, result) {
-    if (!rollResults || !Array.isArray(rollResults)) return null;
+    if (!rollResults || !Array.isArray(rollResults)) {
+        console.log('[findMatchingOutcome] No rollResults array');
+        return null;
+    }
 
+    console.log('[findMatchingOutcome] Checking result:', result, 'against', rollResults.length, 'outcomes');
     for (const outcome of rollResults) {
-        if (matchesRollRange(outcome.range, result)) {
+        const matches = matchesRollRange(outcome.range, result);
+        console.log('[findMatchingOutcome] Range:', outcome.range, 'matches:', matches);
+        if (matches) {
             return outcome;
         }
     }
 
+    console.log('[findMatchingOutcome] No match found');
     return null;
 }
 
@@ -2501,7 +2508,7 @@ function applyEventDiceResult(mountEl, result, stat) {
     const { eventCard } = eventDiceModal;
     const outcome = findMatchingOutcome(eventCard.rollResults, result);
 
-    console.log('[EventDice] Result:', result, 'Outcome:', outcome);
+    console.log('[EventDice] applyEventDiceResult - Result:', result, 'Stat:', stat, 'Outcome:', outcome);
 
     if (!outcome) {
         console.warn('[EventDice] No matching outcome found for result:', result);
@@ -2713,23 +2720,28 @@ function applyEventDiceResult(mountEl, result, stat) {
             const targetStatName = outcome.stat === 'rolled' ? stat : outcome.stat;
             console.log('[EventDice] Effect: setStatToLowest for', targetStatName);
 
-            // Get character data to find lowest stat value
-            const characterData = currentGameState.playerState?.characterData?.[playerId];
-            if (characterData && characterData.traits) {
-                const trait = characterData.traits[targetStatName];
+            // Get player and character data
+            const player = currentGameState.players?.find(p => p.id === playerId);
+            const charData = currentGameState.playerState?.characterData?.[playerId];
+            const charDef = player ? CHARACTER_BY_ID[player.characterId] : null;
+
+            if (charData && charData.stats && charDef && charDef.traits) {
+                const trait = charDef.traits[targetStatName];
                 if (trait && trait.track) {
+                    // Get current index from player's stats
+                    const currentIndex = charData.stats[targetStatName] ?? 0;
+                    const currentValue = trait.track[currentIndex];
                     // Lowest value is index 0 (above skull which would be death)
                     const lowestValue = trait.track[0];
-                    const currentIndex = trait.index;
-                    const currentValue = trait.track[currentIndex];
 
                     if (currentIndex > 0) {
                         // Set to index 0 (lowest above skull)
-                        trait.index = 0;
+                        charData.stats[targetStatName] = 0;
                         const newValue = trait.track[0];
                         console.log('[EventDice] Set', targetStatName, 'from index', currentIndex, 'to 0, value:', currentValue, '→', newValue);
 
                         eventDiceModal = null;
+                        syncGameStateToServer();
                         openEventResultModal(
                             mountEl,
                             'CHI SO GIAM TOI THIEU',
@@ -2737,22 +2749,22 @@ function applyEventDiceResult(mountEl, result, stat) {
                             'danger'
                         );
                     } else {
-                        // Already at lowest - TODO: prompt to choose different stat
-                        console.log('[EventDice] Stat already at lowest, need to choose another stat');
+                        // Already at lowest - should not happen since we filter options
+                        console.log('[EventDice] Stat already at lowest');
                         eventDiceModal = null;
                         openEventResultModal(
                             mountEl,
                             'CHI SO DA O MUC THAP NHAT',
-                            `${statLabels[targetStatName]} da o muc thap nhat. Chon chi so khac.`,
+                            `${statLabels[targetStatName]} da o muc thap nhat.`,
                             'warning'
                         );
                     }
                 } else {
-                    console.error('[EventDice] Trait not found:', targetStatName);
+                    console.error('[EventDice] Trait not found in character definition:', targetStatName);
                     closeEventDiceModal(mountEl);
                 }
             } else {
-                console.error('[EventDice] Character data not found for player:', playerId);
+                console.error('[EventDice] Character data or definition not found for player:', playerId);
                 closeEventDiceModal(mountEl);
             }
             break;
@@ -3183,8 +3195,22 @@ function renderEventDiceModal() {
     // Check if rollStat is an array (player choice, e.g., con_nhen) or 'choice' string (chiem_huu - any stat)
     const isStatChoice = (Array.isArray(rollStat) && !isMultiRoll) || rollStat === 'choice';
     const needsStatSelection = isStatChoice && !selectedStat;
-    // For 'choice' type, show all 4 stats
-    const statOptions = rollStat === 'choice' ? ['speed', 'might', 'sanity', 'knowledge'] : (Array.isArray(rollStat) ? rollStat : []);
+
+    // For 'choice' type, show all 4 stats BUT filter out stats already at lowest index
+    // This is for events like "chiem_huu" where failing sets stat to lowest
+    let statOptions = rollStat === 'choice' ? ['speed', 'might', 'sanity', 'knowledge'] : (Array.isArray(rollStat) ? rollStat : []);
+
+    // Filter out stats that are already at index 0 (lowest value above skull)
+    if (rollStat === 'choice' && eventCard?.rollResults?.some(r => r.effect === 'setStatToLowest')) {
+        const playerId = mySocketId;
+        const charData = currentGameState?.playerState?.characterData?.[playerId];
+        if (charData?.stats) {
+            statOptions = statOptions.filter(stat => {
+                const statIndex = charData.stats[stat];
+                return statIndex !== undefined && statIndex > 0;
+            });
+        }
+    }
 
     // Stat labels
     const statLabels = {
@@ -5955,6 +5981,7 @@ function attachEventListeners(mountEl, roomId) {
             const { eventCard, result, currentRollIndex, selectedStat } = eventDiceModal;
             const isMultiRoll = eventCard?.rollStats && Array.isArray(eventCard.rollStats);
             const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || eventCard.rollStat);
+            console.log('[EventDice] event-dice-continue - eventDiceModal.selectedStat:', eventDiceModal.selectedStat, 'destructured selectedStat:', selectedStat, 'currentStat:', currentStat, 'result:', result, 'rollStat:', eventCard.rollStat);
 
             if (isMultiRoll) {
                 // Check outcome for current roll
