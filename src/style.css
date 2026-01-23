@@ -6379,6 +6379,198 @@ select.field__input option {
     margin: 0;
 }
 
+/* Trapped Escape Modal */
+.trapped-escape-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2100;
+    padding: 16px;
+}
+
+.trapped-escape-modal {
+    background: linear-gradient(145deg, #3a2020 0%, #2a1515 100%);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 380px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(231, 76, 60, 0.5);
+}
+
+.trapped-escape-modal__header {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.trapped-escape-modal__title {
+    font-size: 1.3rem;
+    color: #e74c3c;
+    margin: 0 0 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.trapped-escape-modal__subtitle {
+    font-size: 0.85rem;
+    color: #c9a55c;
+}
+
+.trapped-escape-modal__body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.trapped-escape-modal__description {
+    color: #e0e0e0;
+    font-size: 0.95rem;
+    margin: 0;
+    text-align: center;
+}
+
+.trapped-escape-modal__turns {
+    color: #f59e0b;
+    font-size: 0.9rem;
+    margin: 0;
+    text-align: center;
+    font-weight: 500;
+}
+
+.trapped-escape-modal__ally-help {
+    color: #888;
+    font-size: 0.8rem;
+    margin: 0;
+    text-align: center;
+    font-style: italic;
+}
+
+.trapped-escape-modal__roll-info {
+    text-align: center;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.trapped-escape-modal__roll-info p {
+    margin: 0;
+    color: #c9a55c;
+}
+
+.trapped-escape-modal__input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.trapped-escape-modal__label {
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+.trapped-escape-modal__input {
+    padding: 12px;
+    font-size: 1.2rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+}
+
+.trapped-escape-modal__actions {
+    display: flex;
+    gap: 8px;
+}
+
+.trapped-escape-modal__btn {
+    flex: 1;
+    padding: 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.trapped-escape-modal__btn--confirm {
+    background: linear-gradient(135deg, #c9a55c 0%, #a88a45 100%);
+    color: #1a1a1a;
+}
+
+.trapped-escape-modal__btn--confirm:hover {
+    background: linear-gradient(135deg, #d9b56c 0%, #b89a55 100%);
+}
+
+.trapped-escape-modal__btn--random {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.trapped-escape-modal__btn--random:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.trapped-escape-modal__btn--continue {
+    width: 100%;
+    background: linear-gradient(135deg, #4a9c4a 0%, #3d8a3d 100%);
+    color: #fff;
+}
+
+.trapped-escape-modal__btn--continue:hover {
+    background: linear-gradient(135deg, #5ab55a 0%, #4a9c4a 100%);
+}
+
+.trapped-escape-modal__result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+}
+
+.trapped-escape-modal__result-label {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.trapped-escape-modal__result-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #c9a55c;
+}
+
+.trapped-escape-modal__result-status {
+    font-size: 1.2rem;
+    font-weight: bold;
+    padding: 8px 16px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.trapped-escape-modal__result-status--success {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+.trapped-escape-modal__result-status--fail {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+.trapped-escape-modal__message {
+    text-align: center;
+    color: #e0e0e0;
+    margin: 0;
+}
+
 .event-dice-modal__result {
     display: flex;
     flex-direction: column;
@@ -7793,6 +7985,11 @@ select.field__input option {
 .turn-indicator.is-disconnected .turn-indicator__room {
     color: #f59e0b;
     font-style: italic;
+}
+
+.turn-indicator.is-trapped {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: rgba(231, 76, 60, 0.5);
 }
 
 .player-slot.is-disconnected {

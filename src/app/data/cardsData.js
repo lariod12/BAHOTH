@@ -1032,6 +1032,7 @@ export const EVENTS = [
         '0  Bạn bị rất nhiều miếng vữa rơi trúng và đè trên người. Chịu 2 xúc xắc sát thương vật lí.\n' +
         'Nếu bạn bị miếng vữa đè lên người (kết quả 0-2), thì bạn không thể làm gì. Giữ lại lá bài này. Một lần ở mỗi lượt sau, bạn phải đổ xúc xắc Might được 4+ để tự giải thoát bản thân (người cùng phòng với bạn cũng có thể đổ xúc xắc Might được 4+ để giải cứu bạn). Nếu sau 3 lượt không thành công, bạn mặc định được thoát, di chuyển bình thường và hủy bỏ lá bài này.',
     },
+    immediateRoll: true,
     rollStat: 'speed',
     rollResults: [
       { range: '3+', effect: 'gainStat', stat: 'speed', amount: 1 },

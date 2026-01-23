@@ -129,6 +129,10 @@ let damageDistributionModal = null;
 // Pending mental damage (when both physical and mental damage need to be distributed)
 let pendingMentalDamage = null;
 
+// Pending trapped effect (when damage has a 'then: trapped' effect to apply after damage)
+/** @type {{ eventCard: object; outcome: object } | null} */
+let pendingTrappedEffect = null;
+
 // Event result notification modal (shows outcome of event rolls like stat gains or "nothing happens")
 /** @type {{ isOpen: boolean; title: string; message: string; type: 'success' | 'neutral' | 'danger' } | null} */
 let eventResultModal = null;
@@ -144,6 +148,10 @@ let statChangeNotification = null;
 // Multi-roll summary popup (shows all results at the end)
 /** @type {{ isOpen: boolean; results: Array<{stat: string; result: number; passed: boolean}>; eventName: string; hasBonus: boolean; bonusText: string | null; bonusReward: {effect: string; amount: number; choice: boolean} | null } | null} */
 let multiRollSummary = null;
+
+// Trapped escape modal (for players who are trapped and need to roll to escape)
+/** @type {{ isOpen: boolean; trappedInfo: object; inputValue: string; result: number | null } | null} */
+let trappedEscapeModal = null;
 
 // Dice results display state
 let showingDiceResults = false;
@@ -1221,6 +1229,23 @@ function closeEventResultModal(mountEl) {
 }
 
 /**
+ * Open trapped escape modal (for players who are trapped)
+ * @param {HTMLElement} mountEl
+ * @param {object} trappedInfo - Trapped info from playerState
+ */
+function openTrappedEscapeModal(mountEl, trappedInfo) {
+    trappedEscapeModal = {
+        isOpen: true,
+        trappedInfo: trappedInfo,
+        inputValue: '',
+        result: null
+    };
+    console.log('[TrappedEscape] Opened modal for', trappedInfo.eventName);
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
  * Open stat choice modal (for bonus rewards)
  * @param {HTMLElement} mountEl
  * @param {string} effect - 'gainStat' or 'loseStat'
@@ -1303,9 +1328,74 @@ function closeDamageDistributionModal(mountEl) {
 
     pendingMentalDamage = null; // Clear any pending
 
+    // Check if there's a pending trapped effect to apply
+    console.log('[DamageDistribution] Checking pendingTrappedEffect:', pendingTrappedEffect, 'died:', died);
+    if (!died && pendingTrappedEffect) {
+        const { eventCard } = pendingTrappedEffect;
+        console.log('[DamageDistribution] Applying trapped effect from:', eventCard.name?.vi);
+        applyTrappedEffect(mountEl, mySocketId, eventCard);
+        pendingTrappedEffect = null;
+        return; // applyTrappedEffect will handle UI update
+    }
+
+    pendingTrappedEffect = null; // Clear any pending
+
     if (!died) {
         updateGameUI(mountEl, currentGameState, mySocketId);
     }
+}
+
+/**
+ * Apply trapped effect to a player
+ * @param {HTMLElement} mountEl
+ * @param {string} playerId
+ * @param {object} eventCard - Event card with trappedEffect
+ */
+function applyTrappedEffect(mountEl, playerId, eventCard) {
+    if (!eventCard.trappedEffect) return;
+
+    const { escapeRoll, allyCanHelp, autoEscapeAfter } = eventCard.trappedEffect;
+
+    // Initialize trapped state in player data
+    if (!currentGameState.playerState.trappedPlayers) {
+        currentGameState.playerState.trappedPlayers = {};
+    }
+
+    currentGameState.playerState.trappedPlayers[playerId] = {
+        eventId: eventCard.id,
+        eventName: eventCard.name?.vi || 'Event',
+        escapeRoll: escapeRoll,
+        allyCanHelp: allyCanHelp,
+        autoEscapeAfter: autoEscapeAfter,
+        turnsTrapped: 1 // Start at 1 since this is the turn they got trapped
+    };
+
+    console.log('[Trapped] Player', playerId, 'is now trapped by', eventCard.name?.vi);
+
+    // Set moves to 0 immediately - trapped player can't move this turn
+    if (currentGameState.playerMoves) {
+        currentGameState.playerMoves[playerId] = 0;
+    }
+
+    // Sync state to server
+    syncGameStateToServer();
+
+    // Show notification - when closed, turn will end
+    openEventResultModal(
+        mountEl,
+        'BI MAC KET!',
+        `Ban bi mac ket va khong the di chuyen! Luot sau phai do ${escapeRoll.stat.toUpperCase()} dat ${escapeRoll.threshold}+ de thoat. Tu dong thoat sau ${autoEscapeAfter} luot.`,
+        'danger'
+    );
+}
+
+/**
+ * Check if a player is trapped
+ * @param {string} playerId
+ * @returns {object|null} - Trapped info or null
+ */
+function getPlayerTrappedInfo(playerId) {
+    return currentGameState?.playerState?.trappedPlayers?.[playerId] || null;
 }
 
 /**
@@ -2178,6 +2268,12 @@ function applyEventDiceResult(mountEl, result, stat) {
             break;
 
         case 'physicalDamage':
+            // Check if there's a 'then' effect (like trapped)
+            console.log('[EventDice] physicalDamage - outcome.then:', outcome.then, 'eventCard.trappedEffect:', eventCard.trappedEffect);
+            if (outcome.then === 'trapped' && eventCard.trappedEffect) {
+                pendingTrappedEffect = { eventCard, outcome };
+                console.log('[EventDice] Pending trapped effect SET after damage');
+            }
             eventDiceModal.pendingEffect = outcome;
             eventDiceModal = null;
             openDamageDiceModal(mountEl, outcome.dice, 0);
@@ -3172,6 +3268,111 @@ function renderMultiRollSummary() {
 }
 
 /**
+ * Render trapped escape modal - for players who need to roll to escape
+ * @returns {string} HTML string
+ */
+function renderTrappedEscapeModal() {
+    if (!trappedEscapeModal?.isOpen) return '';
+
+    const { trappedInfo, inputValue, result } = trappedEscapeModal;
+    const { eventName, escapeRoll, turnsTrapped, autoEscapeAfter, allyCanHelp } = trappedInfo;
+    const hasResult = result !== null;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    const statLabel = statLabels[escapeRoll.stat] || escapeRoll.stat;
+    const diceCount = getPlayerStatForDice(mySocketId, escapeRoll.stat);
+    // turnsTrapped starts at 1 (first trapped turn), increments after each failed escape
+    // autoEscapeAfter = 3 means after 3 failed escapes, auto escape
+    const escapeAttempts = turnsTrapped; // Number of escape attempts so far (including this one)
+    const attemptsRemaining = autoEscapeAfter - turnsTrapped + 1;
+
+    // Determine result status
+    let resultStatusHtml = '';
+    let resultMessage = '';
+    if (hasResult) {
+        const isSuccess = result >= escapeRoll.threshold;
+        resultStatusHtml = `
+            <div class="trapped-escape-modal__result-status trapped-escape-modal__result-status--${isSuccess ? 'success' : 'fail'}">
+                ${isSuccess ? 'THANH CONG!' : 'THAT BAI!'}
+            </div>
+        `;
+        resultMessage = isSuccess
+            ? 'Ban da thoat khoi bay!'
+            : `Ban van bi mac ket. Con ${attemptsRemaining - 1} lan thu truoc khi tu dong thoat.`;
+    }
+
+    return `
+        <div class="trapped-escape-overlay">
+            <div class="trapped-escape-modal" data-modal-content="true">
+                <header class="trapped-escape-modal__header">
+                    <h3 class="trapped-escape-modal__title">BI MAC KET!</h3>
+                    <span class="trapped-escape-modal__subtitle">${eventName}</span>
+                </header>
+                <div class="trapped-escape-modal__body">
+                    <p class="trapped-escape-modal__description">
+                        Ban dang bi mac ket! Do ${statLabel} dat ${escapeRoll.threshold}+ de thoat.
+                    </p>
+                    <p class="trapped-escape-modal__turns">
+                        Lan thu: ${escapeAttempts}/${autoEscapeAfter}
+                        ${attemptsRemaining > 0 ? `(Tu dong thoat sau ${attemptsRemaining} lan thu nua)` : ''}
+                    </p>
+                    ${allyCanHelp ? `
+                        <p class="trapped-escape-modal__ally-help">Dong doi cung phong co the do ${statLabel} ${escapeRoll.threshold}+ de giai cuu ban.</p>
+                    ` : ''}
+
+                    ${hasResult ? `
+                        <div class="trapped-escape-modal__result">
+                            <span class="trapped-escape-modal__result-label">Ket qua:</span>
+                            <span class="trapped-escape-modal__result-value">${result}</span>
+                        </div>
+                        ${resultStatusHtml}
+                        <p class="trapped-escape-modal__message">${resultMessage}</p>
+                        <button class="trapped-escape-modal__btn trapped-escape-modal__btn--continue"
+                                type="button"
+                                data-action="trapped-escape-continue">
+                            Tiep tuc
+                        </button>
+                    ` : `
+                        <div class="trapped-escape-modal__roll-info">
+                            <p>Do ${diceCount} vien xuc xac ${statLabel}</p>
+                        </div>
+                        <div class="trapped-escape-modal__input-group">
+                            <label class="trapped-escape-modal__label">Nhap ket qua xuc xac:</label>
+                            <input
+                                type="number"
+                                class="trapped-escape-modal__input"
+                                min="0"
+                                value="${inputValue}"
+                                data-input="trapped-escape-value"
+                                placeholder="Nhap so"
+                            />
+                        </div>
+                        <div class="trapped-escape-modal__actions">
+                            <button class="trapped-escape-modal__btn trapped-escape-modal__btn--confirm"
+                                    type="button"
+                                    data-action="trapped-escape-confirm">
+                                Xac nhan
+                            </button>
+                            <button class="trapped-escape-modal__btn trapped-escape-modal__btn--random"
+                                    type="button"
+                                    data-action="trapped-escape-random">
+                                Ngau nhien
+                            </button>
+                        </div>
+                    `}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render damage distribution modal - for distributing combat/event damage across stats
  * @returns {string} HTML string
  */
@@ -3822,11 +4023,16 @@ function renderTurnOrder(gameState, myId) {
         const relationClass = isMyEnemy ? 'is-enemy' : (isMyAlly ? 'is-ally' : '');
         const disconnectedClass = isDisconnected ? 'is-disconnected' : '';
 
+        // Check if player is trapped
+        const isTrapped = gameState?.playerState?.trappedPlayers?.[socketId] != null;
+        const trappedClass = isTrapped ? 'is-trapped' : '';
+        const trappedIcon = isTrapped ? ' 🔗' : '';
+
         return `
-            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass} ${factionClass} ${relationClass} ${disconnectedClass}" ${clickableAttr}>
+            <div class="turn-indicator ${isCurrent ? 'is-current' : ''} ${isMe ? 'is-me' : ''} ${clickableClass} ${factionClass} ${relationClass} ${disconnectedClass} ${trappedClass}" ${clickableAttr}>
                 <span class="turn-indicator__order">${idx + 1}</span>
                 <div class="turn-indicator__info">
-                    <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}${playerFaction === 'traitor' ? ' ☠' : ''}${isDisconnected ? ' ⚠' : ''}</span>
+                    <span class="turn-indicator__name">${charName}${isMe ? ' (You)' : ''}${playerFaction === 'traitor' ? ' ☠' : ''}${trappedIcon}${isDisconnected ? ' ⚠' : ''}</span>
                     <span class="turn-indicator__room">${isDisconnected ? 'Mat ket noi...' : position}</span>
                 </div>
             </div>
@@ -4288,6 +4494,7 @@ function renderGameScreen(gameState, myId) {
             ${renderStatChoiceModal()}
             ${renderStatChangeNotification()}
             ${renderMultiRollSummary()}
+            ${renderTrappedEscapeModal()}
             ${renderEventResultModal()}
             ${renderEndTurnModal()}
             ${renderResetGameModal()}
@@ -5570,6 +5777,82 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        // ===== TRAPPED ESCAPE MODAL HANDLERS =====
+        if (action === 'trapped-escape-confirm') {
+            if (!trappedEscapeModal) return;
+            const input = mountEl.querySelector('[data-input="trapped-escape-value"]');
+            const value = parseInt(input?.value, 10);
+            if (!isNaN(value) && value >= 0) {
+                trappedEscapeModal.result = value;
+                trappedEscapeModal.inputValue = value.toString();
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'trapped-escape-random') {
+            if (!trappedEscapeModal) return;
+            const diceCount = getPlayerStatForDice(mySocketId, trappedEscapeModal.trappedInfo.escapeRoll.stat);
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+            trappedEscapeModal.result = total;
+            trappedEscapeModal.inputValue = total.toString();
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        if (action === 'trapped-escape-continue') {
+            if (!trappedEscapeModal) return;
+            const { trappedInfo, result } = trappedEscapeModal;
+            const isSuccess = result >= trappedInfo.escapeRoll.threshold;
+
+            if (isSuccess) {
+                // Player escaped - remove trapped state
+                console.log('[TrappedEscape] Player escaped!');
+                delete currentGameState.playerState.trappedPlayers[mySocketId];
+                trappedEscapeModal = null;
+                syncGameStateToServer();
+
+                // Now initialize moves and continue turn
+                const me = currentGameState.players?.find(p => p.id === mySocketId);
+                if (me?.characterId) {
+                    const charData = currentGameState.playerState?.characterData?.[mySocketId];
+                    const speed = getCharacterSpeed(me.characterId, charData);
+                    socketClient.setMoves(speed);
+                }
+            } else {
+                // Player still trapped - increment turnsTrapped and end turn
+                console.log('[TrappedEscape] Player still trapped, ending turn');
+
+                // Increment turnsTrapped for next check
+                const trappedData = currentGameState.playerState.trappedPlayers[mySocketId];
+                if (trappedData) {
+                    trappedData.turnsTrapped = (trappedData.turnsTrapped || 1) + 1;
+                    console.log('[TrappedEscape] turnsTrapped now:', trappedData.turnsTrapped);
+                }
+
+                trappedEscapeModal = null;
+
+                // Advance turn first (this changes currentTurnIndex)
+                advanceToNextTurn();
+
+                // Mark this turn as initialized so we don't re-trigger escape modal
+                // when server syncs back (currentTurnIndex will be different now)
+                const newTurnIndex = currentGameState.currentTurnIndex;
+                movesInitializedForTurn = newTurnIndex;
+                console.log('[TrappedEscape] Set movesInitializedForTurn to:', newTurnIndex);
+
+                // Sync state to server and update UI
+                syncGameStateToServer();
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
         // ===== STAT CHANGE NOTIFICATION HANDLER =====
         if (action === 'stat-change-ok') {
             if (!statChangeNotification) return;
@@ -5789,14 +6072,51 @@ function centerMapOnPreview(mountEl, smooth = false) {
  * Update game UI
  */
 async function updateGameUI(mountEl, gameState, myId) {
-    // When it becomes my turn in 'playing' phase, set my moves based on speed
+    // When it becomes my turn in 'playing' phase, check for trapped status first
     if (gameState?.gamePhase === 'playing' && myId) {
         const currentTurnIndex = gameState.currentTurnIndex ?? 0;
         const currentPlayer = gameState.turnOrder?.[currentTurnIndex];
         const me = gameState.players?.find(p => p.id === myId);
         const myMoves = gameState.playerMoves?.[myId] ?? 0;
 
-        // If it's my turn and moves are 0 and we haven't initialized for this turn
+        // Check if player is trapped - this takes priority over normal turn
+        // Only check once per turn (when movesInitializedForTurn changes)
+        if (currentPlayer === myId && movesInitializedForTurn !== currentTurnIndex) {
+            const trappedInfo = gameState?.playerState?.trappedPlayers?.[myId];
+            if (trappedInfo && !trappedEscapeModal?.isOpen) {
+                movesInitializedForTurn = currentTurnIndex;
+                console.log('[Trapped] Player is trapped, checking escape...', trappedInfo);
+
+                // Check auto-escape first (after X escape attempts)
+                if (trappedInfo.turnsTrapped > trappedInfo.autoEscapeAfter) {
+                    // Auto escape - player has been trapped for too long
+                    console.log('[Trapped] Auto-escape after', trappedInfo.autoEscapeAfter, 'escape attempts');
+                    delete gameState.playerState.trappedPlayers[myId];
+                    syncGameStateToServer();
+
+                    // Initialize moves normally after escaping
+                    if (me?.characterId) {
+                        const charData = gameState.playerState?.characterData?.[myId] || gameState.characterData?.[myId];
+                        const speed = getCharacterSpeed(me.characterId, charData);
+                        socketClient.setMoves(speed);
+                    }
+
+                    openEventResultModal(
+                        mountEl,
+                        'TU DONG THOAT!',
+                        `Ban da tu dong thoat sau ${trappedInfo.autoEscapeAfter} luot that bai.`,
+                        'success'
+                    );
+                    return;
+                }
+
+                // Show escape roll modal
+                openTrappedEscapeModal(mountEl, trappedInfo);
+                return;
+            }
+        }
+
+        // Normal turn initialization - if it's my turn and moves are 0
         if (currentPlayer === myId && myMoves === 0 && movesInitializedForTurn !== currentTurnIndex) {
             if (me?.characterId) {
                 movesInitializedForTurn = currentTurnIndex;
@@ -6488,7 +6808,7 @@ function handleMove(mountEl, direction) {
 async function syncGameStateToServer() {
 
     try {
-        // Send updated state to server (including characterData for stat changes, combatState, gameOver, combatResult)
+        // Send updated state to server (including characterData for stat changes, combatState, gameOver, combatResult, trappedPlayers)
         const result = await socketClient.syncGameState({
             playerMoves: currentGameState.playerMoves,
             playerPositions: currentGameState.playerState?.playerPositions,
@@ -6496,7 +6816,8 @@ async function syncGameStateToServer() {
             drawnRooms: currentGameState.playerState?.drawnRooms,
             playerCards: currentGameState.playerState?.playerCards,
             playerState: {
-                characterData: currentGameState.playerState?.characterData
+                characterData: currentGameState.playerState?.characterData,
+                trappedPlayers: currentGameState.playerState?.trappedPlayers
             },
             currentTurnIndex: currentGameState.currentTurnIndex,
             combatState: currentGameState.combatState || null,
@@ -6532,14 +6853,26 @@ function advanceToNextTurn() {
     const nextPlayer = currentGameState.players.find(p => p.id === nextPlayerId);
 
     // Set moves for next player based on their speed
+    // BUT if player is trapped, set moves to 0 - they must escape first
     if (nextPlayer) {
+        const isTrapped = currentGameState.playerState?.trappedPlayers?.[nextPlayerId];
         const nextCharData = currentGameState.playerState?.characterData?.[nextPlayerId];
         const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
-        currentGameState.playerMoves[nextPlayerId] = speed;
+
+        if (isTrapped) {
+            // Player is trapped - set moves to 0, they will see escape modal
+            currentGameState.playerMoves[nextPlayerId] = 0;
+            // Note: turnsTrapped is incremented when player FAILS escape, not when turn advances
+            console.log('[Turn] === TURN ADVANCED (TRAPPED PLAYER) ===');
+            console.log('[Turn] Next player is trapped! turnsTrapped:', isTrapped.turnsTrapped);
+        } else {
+            // Normal player - set moves based on speed
+            currentGameState.playerMoves[nextPlayerId] = speed;
+        }
 
         console.log('[Turn] === TURN ADVANCED ===');
         console.log('[Turn] Previous: Player', prevPlayerId, 'Index:', prevIndex);
-        console.log('[Turn] Next: Player', nextPlayerId, 'Index:', nextIndex, 'Speed:', speed);
+        console.log('[Turn] Next: Player', nextPlayerId, 'Index:', nextIndex, 'Speed:', speed, 'Trapped:', !!isTrapped);
         console.log('[Turn] TurnOrder:', currentGameState.turnOrder);
         console.log('[Turn] PlayerMoves:', currentGameState.playerMoves);
     } else {
@@ -7351,7 +7684,8 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         console.log('[Turn] onGameState - oldTurnPlayer:', oldTurnPlayer, 'newTurnPlayer:', newTurnPlayer, 'hasAttackedThisTurn before:', hasAttackedThisTurn);
         if (oldTurnPlayer !== newTurnPlayer && oldTurnPlayer !== undefined) {
             hasAttackedThisTurn = false;
-            console.log('[Turn] Turn changed via server sync, RESET hasAttackedThisTurn to false');
+            movesInitializedForTurn = -1; // Reset so trapped check or moves init can run
+            console.log('[Turn] Turn changed via server sync, RESET hasAttackedThisTurn and movesInitializedForTurn');
         }
 
         currentGameState = state;

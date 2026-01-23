@@ -415,6 +415,11 @@ export function socketIOPlugin() {
                         }
                     }
 
+                    // Update trapped players FIRST (before playerMoves, so turn advance can check trapped status)
+                    if (stateUpdate.playerState?.trappedPlayers !== undefined) {
+                        playerManager.updateTrappedPlayers(room.id, stateUpdate.playerState.trappedPlayers);
+                    }
+
                     // Update player moves if provided (update room directly, not playerManager)
                     let turnAdvanced = false;
                     if (stateUpdate.playerMoves) {
@@ -423,35 +428,50 @@ export function socketIOPlugin() {
                         }
 
                         // Check if current player's turn should end (moves <= 0)
+                        // BUT only auto-advance if client hasn't already advanced (check currentTurnIndex)
                         const currentPlayerId = room.turnOrder[room.currentTurnIndex];
-                        if (currentPlayerId && room.playerMoves[currentPlayerId] <= 0) {
+                        const clientTurnIndex = stateUpdate.currentTurnIndex;
+                        const shouldAutoAdvance = currentPlayerId &&
+                                                  room.playerMoves[currentPlayerId] <= 0 &&
+                                                  (clientTurnIndex === undefined || clientTurnIndex === room.currentTurnIndex);
+
+                        if (shouldAutoAdvance) {
                             // Advance to next player
                             room.currentTurnIndex = (room.currentTurnIndex + 1) % room.turnOrder.length;
-                            turnAdvanced = true;
 
                             // Set moves for next player based on their speed stat
+                            // BUT if player is trapped, set moves to 0 - they must escape first
                             const nextPlayerId = room.turnOrder[room.currentTurnIndex];
-                            let nextPlayerSpeed = null;
+                            const playerState = playerManager.getFullPlayerState(room.id);
+                            const isTrapped = playerState?.trappedPlayers?.[nextPlayerId];
 
-                            // Try to get speed from playerManager stats
-                            const nextPlayerStats = playerManager.getAllStatValues(room.id, nextPlayerId);
-                            if (nextPlayerStats) {
-                                nextPlayerSpeed = nextPlayerStats.speed;
+                            if (isTrapped) {
+                                // Player is trapped - set moves to 0
+                                room.playerMoves[nextPlayerId] = 0;
+                                console.log(`[Socket.IO] Turn advanced to ${nextPlayerId} (TRAPPED), moves set to 0`);
                             } else {
-                                // Fallback: get speed from character's starting stats
-                                const nextPlayer = room.players.find(p => p.id === nextPlayerId);
-                                if (nextPlayer && nextPlayer.characterId) {
-                                    nextPlayerSpeed = playerManager.getStartingSpeed(nextPlayer.characterId);
+                                let nextPlayerSpeed = null;
+
+                                // Try to get speed from playerManager stats
+                                const nextPlayerStats = playerManager.getAllStatValues(room.id, nextPlayerId);
+                                if (nextPlayerStats) {
+                                    nextPlayerSpeed = nextPlayerStats.speed;
+                                } else {
+                                    // Fallback: get speed from character's starting stats
+                                    const nextPlayer = room.players.find(p => p.id === nextPlayerId);
+                                    if (nextPlayer && nextPlayer.characterId) {
+                                        nextPlayerSpeed = playerManager.getStartingSpeed(nextPlayer.characterId);
+                                    }
                                 }
-                            }
 
-                            if (nextPlayerSpeed !== null) {
-                                room.playerMoves[nextPlayerId] = nextPlayerSpeed;
-                                console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, moves set to ${nextPlayerSpeed}`);
-                            } else {
-                                // Last fallback: default to 4 moves
-                                room.playerMoves[nextPlayerId] = 4;
-                                console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, using default moves: 4`);
+                                if (nextPlayerSpeed !== null) {
+                                    room.playerMoves[nextPlayerId] = nextPlayerSpeed;
+                                    console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, moves set to ${nextPlayerSpeed}`);
+                                } else {
+                                    // Last fallback: default to 4 moves
+                                    room.playerMoves[nextPlayerId] = 4;
+                                    console.log(`[Socket.IO] Turn advanced to ${nextPlayerId}, using default moves: 4`);
+                                }
                             }
                         }
 
@@ -485,6 +505,8 @@ export function socketIOPlugin() {
                     if (stateUpdate.playerState?.characterData) {
                         playerManager.updateCharacterData(room.id, stateUpdate.playerState.characterData);
                     }
+
+                    // Note: trappedPlayers is updated earlier (before playerMoves processing)
 
                     // Update combat state if provided (for multiplayer combat sync)
                     if (stateUpdate.combatState !== undefined) {

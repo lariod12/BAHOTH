@@ -389,6 +389,7 @@ export function getFullPlayerState(roomId) {
         characterData: state.characterData ? { ...state.characterData } : {},
         playerCards: state.playerCards ? JSON.parse(JSON.stringify(state.playerCards)) : {},
         drawnRooms: state.drawnRooms ? [...state.drawnRooms] : [],
+        trappedPlayers: state.trappedPlayers ? { ...state.trappedPlayers } : {},
     };
 }
 
@@ -683,6 +684,25 @@ export function updateCharacterData(roomId, characterData) {
 
     savePlayers();
     console.log(`[PlayerManager] Updated character data for room ${roomId}`);
+
+    return state;
+}
+
+/**
+ * Update trapped players state for a room
+ * @param {string} roomId
+ * @param {Record<string, object> | null} trappedPlayers
+ * @returns {PlayerState | undefined}
+ */
+export function updateTrappedPlayers(roomId, trappedPlayers) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    // Replace entire trapped players state
+    state.trappedPlayers = trappedPlayers || {};
+
+    savePlayers();
+    console.log(`[PlayerManager] Updated trapped players for room ${roomId}:`, Object.keys(state.trappedPlayers));
 
     return state;
 }
