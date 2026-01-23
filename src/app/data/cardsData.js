@@ -912,6 +912,7 @@ export const EVENTS = [
         '0-3  Bạn bị kẹt cứng trong đó, giữ lại lá bài này.\n' +
         'Nếu bạn bị mắc kẹt trong mạng nhện, thì bạn không thể làm gì. Giữ lại lá bài này. Một lần ở mỗi lượt sau, bạn phải đổ xúc xắc Might được 4+ để tự giải thoát bản thân khỏi bị kẹt (người cùng phòng với bạn cũng có thể đổ xúc xắc Might được 4+ để giải cứu bạn) (không được tăng 1 Might). Nếu đồng đội giải cứu bạn thất bại thì họ cũng bị mắc kẹt. Sau 3 lần giải cứu bạn không thành công, tất cả người bị kẹt sẽ mặc định được thoát ra, di chuyển như bình thường và hủy bỏ lá bài này.',
     },
+    immediateRoll: true,
     rollStat: 'might',
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'might', amount: 1, discard: true },
@@ -1114,6 +1115,7 @@ export const EVENTS = [
         '4+  Bạn lắc mạnh quần áo và cơ thể để bụi rơi ra. Tăng 1 Might.\n' +
         '0-3  Có gì đó sai sai. Giữ lại lá bài này. Giảm 1 nấc chỉ số vật lí vào đầu mỗi lượt tới của bạn. Hủy bỏ lá bài này đi nếu bạn được một lá bài Item khác tăng 1 chỉ số bất kì hoặc bạn kết thúc lượt ở tại Ban công, Khu vườn, Nghĩa địa, Phòng Gym, Kho lương thực, Sân trong nhà, Tòa tháp (Balcony, Gardens, Graveyard, Gymnasium, Larder, Patio, Tower).',
     },
+    immediateRoll: true,
     rollStat: 'might',
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'might', amount: 1 },
@@ -1165,6 +1167,7 @@ export const EVENTS = [
         '4+  Bạn kháng cự lại cái bóng. Tăng 1 nấc của chỉ số mà bạn đã chọn dùng để đổ xúc xắc.\n' +
         '0-3  Cái bóng hút hết sinh lực của bạn. Chỉ số mà bạn đã chọn để đổ xúc xắc bị giảm xuống mức thấp nhất (trên mức đầu lâu). Nếu chỉ số đó đã ở mức thấp nhất từ trước, thì hãy chọn 1 chỉ số khác để thay thế.',
     },
+    immediateRoll: true,
     rollStat: 'choice',
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'rolled', amount: 1 },
@@ -1367,6 +1370,7 @@ export const EVENTS = [
         '2-3  Bạn hoảng sợ. Mất 1 Sanity.\n' +
         '0-1  Bạn thật sự đang ở trong quan tài. Mất 1 Sanity và 1 Might. Nếu Nghĩa địa hoặc Nhà mồ (Graveyard, Crypt) đã được tìm thấy thì đặt nhân vật của bạn vào 1 trong 2 căn phòng đó (bạn tự chọn).',
     },
+    immediateRoll: true,
     rollStat: 'sanity',
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'sanity', amount: 1 },

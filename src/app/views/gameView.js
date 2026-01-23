@@ -153,6 +153,14 @@ let multiRollSummary = null;
 /** @type {{ isOpen: boolean; trappedInfo: object; inputValue: string; result: number | null } | null} */
 let trappedEscapeModal = null;
 
+// Teleport choice modal (when player can choose between multiple rooms)
+/** @type {{ isOpen: boolean; rooms: Array<{roomId: string, name: string}>; preMessage: string | null } | null} */
+let teleportChoiceModal = null;
+
+// Rescue trapped ally modal (when player enters room with trapped ally)
+/** @type {{ isOpen: boolean; trappedPlayerId: string; trappedPlayerName: string; eventName: string; escapeRoll: object; phase: 'confirm' | 'roll' | 'result'; inputValue: string; result: number | null } | null} */
+let rescueTrappedModal = null;
+
 // Dice results display state
 let showingDiceResults = false;
 let diceResultsTimeout = null;
@@ -1244,6 +1252,58 @@ function closeEventResultModal(mountEl) {
 }
 
 /**
+ * Open teleport choice modal (when player can choose destination)
+ * @param {HTMLElement} mountEl
+ * @param {Array<{roomId: string, name: string}>} rooms - Available rooms to teleport to
+ * @param {string|null} preMessage - Message to show before choices (e.g., stat loss info)
+ */
+function openTeleportChoiceModal(mountEl, rooms, preMessage = null) {
+    teleportChoiceModal = {
+        isOpen: true,
+        rooms: rooms,
+        preMessage: preMessage
+    };
+    console.log('[TeleportChoice] Opened modal with', rooms.length, 'options');
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close teleport choice modal and teleport player
+ * @param {HTMLElement} mountEl
+ * @param {string} roomId - Room to teleport to
+ */
+function closeTeleportChoiceModal(mountEl, roomId) {
+    if (!teleportChoiceModal) return;
+
+    const playerId = mySocketId;
+
+    // Teleport player
+    if (roomId && currentGameState) {
+        if (!currentGameState.playerState.playerPositions) {
+            currentGameState.playerState.playerPositions = {};
+        }
+        currentGameState.playerState.playerPositions[playerId] = roomId;
+
+        // Get room name for display
+        const room = currentGameState.map?.revealedRooms?.[roomId];
+        const roomName = room?.name || roomId;
+        console.log('[TeleportChoice] Player teleported to', roomName);
+    }
+
+    teleportChoiceModal = null;
+
+    // Check if turn ended
+    if (currentGameState && currentGameState.playerMoves[playerId] <= 0) {
+        console.log('[Turn] Player moves depleted after teleport, advancing turn');
+        advanceToNextTurn();
+    }
+
+    updateGameUI(mountEl, currentGameState, mySocketId);
+    syncGameStateToServer();
+}
+
+/**
  * Open trapped escape modal (for players who are trapped)
  * @param {HTMLElement} mountEl
  * @param {object} trappedInfo - Trapped info from playerState
@@ -1369,7 +1429,7 @@ function closeDamageDistributionModal(mountEl) {
 function applyTrappedEffect(mountEl, playerId, eventCard) {
     if (!eventCard.trappedEffect) return;
 
-    const { escapeRoll, allyCanHelp, autoEscapeAfter } = eventCard.trappedEffect;
+    const { escapeRoll, allyCanHelp, allyFailure, autoEscapeAfter } = eventCard.trappedEffect;
 
     // Initialize trapped state in player data
     if (!currentGameState.playerState.trappedPlayers) {
@@ -1381,6 +1441,7 @@ function applyTrappedEffect(mountEl, playerId, eventCard) {
         eventName: eventCard.name?.vi || 'Event',
         escapeRoll: escapeRoll,
         allyCanHelp: allyCanHelp,
+        allyFailure: allyFailure || 'nothing', // 'alsoTrapped' or 'nothing'
         autoEscapeAfter: autoEscapeAfter,
         turnsTrapped: 1 // Start at 1 since this is the turn they got trapped
     };
@@ -1405,12 +1466,210 @@ function applyTrappedEffect(mountEl, playerId, eventCard) {
 }
 
 /**
+ * Apply persistent effect to a player
+ * @param {HTMLElement} mountEl
+ * @param {string} playerId
+ * @param {object} eventCard - Event card with persistentEffect
+ */
+function applyPersistentEffect(mountEl, playerId, eventCard) {
+    if (!eventCard.persistentEffect) return;
+
+    const { onTurnStart, removeConditions } = eventCard.persistentEffect;
+
+    // Initialize persistent effects in player data
+    if (!currentGameState.playerState.persistentEffects) {
+        currentGameState.playerState.persistentEffects = {};
+    }
+    if (!currentGameState.playerState.persistentEffects[playerId]) {
+        currentGameState.playerState.persistentEffects[playerId] = [];
+    }
+
+    // Add this persistent effect
+    currentGameState.playerState.persistentEffects[playerId].push({
+        eventId: eventCard.id,
+        eventName: eventCard.name?.vi || 'Event',
+        onTurnStart: onTurnStart,
+        removeConditions: removeConditions
+    });
+
+    console.log('[Persistent] Player', playerId, 'now has persistent effect from', eventCard.name?.vi);
+
+    // Sync state to server
+    syncGameStateToServer();
+
+    // Build description of the effect
+    let effectDesc = '';
+    if (onTurnStart) {
+        if (onTurnStart.effect === 'loseStat' && onTurnStart.statType === 'physical') {
+            effectDesc = 'Giam 1 chi so vat li (Speed/Might) moi luot.';
+        } else if (onTurnStart.effect === 'loseStat' && onTurnStart.statType === 'mental') {
+            effectDesc = 'Giam 1 chi so tinh than (Sanity/Knowledge) moi luot.';
+        }
+    }
+
+    // Show notification
+    openEventResultModal(
+        mountEl,
+        'HIEU UNG DAI HAN',
+        `${effectDesc} Huy bo khi ket thuc luot tai mot trong cac phong: Balcony, Gardens, Graveyard, Gymnasium, Larder, Patio, Tower.`,
+        'danger'
+    );
+}
+
+/**
+ * Apply persistent turn effect at turn start
+ * @param {HTMLElement} mountEl
+ * @param {string} playerId
+ * @param {object} effect - Persistent effect object
+ */
+function applyPersistentTurnEffect(mountEl, playerId, effect) {
+    const { onTurnStart, eventName } = effect;
+
+    if (onTurnStart.effect === 'loseStat') {
+        const { statType, amount } = onTurnStart;
+
+        // Open stat choice modal for player to choose which stat to lose
+        if (statType === 'physical') {
+            // Player chooses between Speed and Might
+            openPersistentDamageModal(mountEl, playerId, ['speed', 'might'], amount, eventName);
+        } else if (statType === 'mental') {
+            // Player chooses between Sanity and Knowledge
+            openPersistentDamageModal(mountEl, playerId, ['sanity', 'knowledge'], amount, eventName);
+        }
+    }
+}
+
+/** @type {{ isOpen: boolean; playerId: string; stats: string[]; amount: number; eventName: string; selectedStat: string | null } | null} */
+let persistentDamageModal = null;
+
+/**
+ * Open modal for choosing which stat to lose from persistent effect
+ * @param {HTMLElement} mountEl
+ * @param {string} playerId
+ * @param {string[]} stats - Stats to choose from
+ * @param {number} amount - Amount to lose
+ * @param {string} eventName - Event name
+ */
+function openPersistentDamageModal(mountEl, playerId, stats, amount, eventName) {
+    persistentDamageModal = {
+        isOpen: true,
+        playerId,
+        stats,
+        amount,
+        eventName,
+        selectedStat: null
+    };
+    console.log('[PersistentDamage] Opened modal for', eventName, 'stats:', stats);
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Close persistent damage modal and apply damage
+ * @param {HTMLElement} mountEl
+ * @param {string} chosenStat
+ */
+function closePersistentDamageModal(mountEl, chosenStat) {
+    if (!persistentDamageModal) return;
+
+    const { playerId, amount } = persistentDamageModal;
+
+    // Apply stat loss
+    applyStatChange(playerId, chosenStat, -amount);
+    console.log('[PersistentDamage] Applied -', amount, chosenStat);
+
+    persistentDamageModal = null;
+
+    // Check death after applying damage
+    checkPlayerDeath(mountEl, playerId);
+
+    // Now initialize moves for the turn
+    const me = currentGameState?.players?.find(p => p.id === playerId);
+    if (me?.characterId) {
+        const charData = currentGameState.playerState?.characterData?.[playerId];
+        const speed = getCharacterSpeed(me.characterId, charData);
+        socketClient.setMoves(speed);
+    }
+
+    syncGameStateToServer();
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
  * Check if a player is trapped
  * @param {string} playerId
  * @returns {object|null} - Trapped info or null
  */
 function getPlayerTrappedInfo(playerId) {
     return currentGameState?.playerState?.trappedPlayers?.[playerId] || null;
+}
+
+/**
+ * Find trapped ally in a room (for rescue mechanic)
+ * Only returns ally if:
+ * - The trapped event supports allyCanHelp
+ * - The trapped player is an ally (same faction)
+ * @param {string} roomId - Room to check
+ * @param {string} currentPlayerId - The player checking (rescuer)
+ * @returns {object|null} - { playerId, playerName, trappedInfo } or null
+ */
+function getTrappedAllyInRoom(roomId, currentPlayerId) {
+    if (!currentGameState) return null;
+
+    const playerPositions = currentGameState.playerState?.playerPositions || {};
+    const trappedPlayers = currentGameState.playerState?.trappedPlayers || {};
+
+    for (const [playerId, trappedInfo] of Object.entries(trappedPlayers)) {
+        // Skip self
+        if (playerId === currentPlayerId) continue;
+
+        // Check if trapped player is in this room
+        if (playerPositions[playerId] !== roomId) continue;
+
+        // Check if the trap supports ally rescue
+        if (!trappedInfo.allyCanHelp) continue;
+
+        // Check if players are allies (same faction - both survival)
+        if (!isAlly(currentGameState, currentPlayerId, playerId)) continue;
+
+        // Find player name
+        const player = currentGameState.players?.find(p => p.id === playerId);
+        const playerName = player?.name || playerId;
+
+        console.log('[Rescue] Found trapped ally in room:', playerId, 'trapped by:', trappedInfo.eventName);
+
+        return {
+            playerId,
+            playerName,
+            trappedInfo
+        };
+    }
+
+    return null;
+}
+
+/**
+ * Open rescue trapped ally modal
+ * @param {HTMLElement} mountEl
+ * @param {string} trappedPlayerId
+ * @param {string} trappedPlayerName
+ * @param {object} trappedInfo
+ */
+function openRescueTrappedModal(mountEl, trappedPlayerId, trappedPlayerName, trappedInfo) {
+    rescueTrappedModal = {
+        isOpen: true,
+        trappedPlayerId,
+        trappedPlayerName,
+        eventName: trappedInfo.eventName,
+        escapeRoll: trappedInfo.escapeRoll,
+        allyFailure: trappedInfo.allyFailure || 'nothing',
+        phase: 'confirm',
+        inputValue: '',
+        result: null
+    };
+    console.log('[Rescue] Opened rescue modal for', trappedPlayerName);
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
 /**
@@ -1976,6 +2235,7 @@ const DESTINATION_TO_ROOM_NAME = {
     'grand_staircase': 'Grand Staircase',
     'chapel': 'Chapel',
     'graveyard': 'Graveyard',
+    'crypt': 'Crypt',
     'patio': 'Patio',
     'gardens': 'Gardens',
     'tower': 'Tower',
@@ -2014,6 +2274,41 @@ function findRoomIdByDestination(destination) {
 
     console.warn(`[findRoomIdByDestination] Room not found for destination: ${destination} (${targetRoomName})`);
     return null;
+}
+
+/**
+ * Find all revealed rooms from a list of destinations
+ * @param {string[]} destinations - Array of destination keys (e.g., ['graveyard', 'crypt'])
+ * @returns {Array<{roomId: string, name: string, destination: string}>} Array of found rooms
+ */
+function findExistingRooms(destinations) {
+    if (!currentGameState?.map?.revealedRooms || !destinations?.length) {
+        return [];
+    }
+
+    const results = [];
+    const revealedRooms = currentGameState.map.revealedRooms;
+
+    for (const dest of destinations) {
+        const targetRoomName = DESTINATION_TO_ROOM_NAME[dest];
+        if (!targetRoomName) continue;
+
+        for (const [roomId, room] of Object.entries(revealedRooms)) {
+            if (room.name === targetRoomName ||
+                room.name?.includes(`(${targetRoomName})`) ||
+                room.name?.en === targetRoomName) {
+                results.push({
+                    roomId,
+                    name: room.name,
+                    destination: dest
+                });
+                break; // Found this destination, move to next
+            }
+        }
+    }
+
+    console.log('[findExistingRooms] Found rooms:', results);
+    return results;
 }
 
 /**
@@ -2265,15 +2560,53 @@ function applyEventDiceResult(mountEl, result, stat) {
             break;
         }
 
-        case 'loseStats':
+        case 'loseStats': {
             applyMultipleStatChanges(playerId, outcome.stats);
-            eventDiceModal = null; // Close event modal
             // Build message for multiple stats
             const loseStatsMsg = Object.entries(outcome.stats)
                 .map(([s, amt]) => `${statLabels[s]} -${amt}`)
                 .join(', ');
-            openEventResultModal(mountEl, 'GIAM CHI SO', loseStatsMsg, 'danger');
+
+            // Check if there's a 'then' effect (like teleportIfExists)
+            if (outcome.then && outcome.then.effect === 'teleportIfExists') {
+                // Try to teleport to one of the destinations
+                const destinations = outcome.then.destinations || [];
+                const existingRooms = findExistingRooms(destinations);
+
+                if (existingRooms.length > 0) {
+                    if (outcome.then.choice && existingRooms.length > 1) {
+                        // Player can choose destination - open teleport choice modal
+                        eventDiceModal = null;
+                        openTeleportChoiceModal(mountEl, existingRooms, loseStatsMsg);
+                    } else {
+                        // Auto teleport to first available room
+                        const destRoomId = existingRooms[0].roomId;
+                        if (!currentGameState.playerState.playerPositions) {
+                            currentGameState.playerState.playerPositions = {};
+                        }
+                        currentGameState.playerState.playerPositions[playerId] = destRoomId;
+                        syncGameStateToServer();
+                        renderGameScreen(currentGameState, mySocketId);
+
+                        eventDiceModal = null;
+                        openEventResultModal(
+                            mountEl,
+                            'DICH CHUYEN',
+                            `${loseStatsMsg}. Ban da bi dich chuyen den ${existingRooms[0].name}`,
+                            'danger'
+                        );
+                    }
+                } else {
+                    // No matching rooms found - just apply stat loss
+                    eventDiceModal = null;
+                    openEventResultModal(mountEl, 'GIAM CHI SO', loseStatsMsg, 'danger');
+                }
+            } else {
+                eventDiceModal = null;
+                openEventResultModal(mountEl, 'GIAM CHI SO', loseStatsMsg, 'danger');
+            }
             break;
+        }
 
         case 'mentalDamage':
             // Need to roll damage dice
@@ -2356,6 +2689,72 @@ function applyEventDiceResult(mountEl, result, stat) {
             eventDiceModal = null;
             // Execute forced attack - find target and initiate combat
             executeForcedAttack(mountEl, playerId, outcome.target);
+            break;
+        }
+
+        case 'trapped': {
+            // Player is trapped - cannot move, must escape roll each turn
+            console.log('[EventDice] Effect: trapped');
+            eventDiceModal = null;
+            applyTrappedEffect(mountEl, playerId, eventCard);
+            break;
+        }
+
+        case 'persistent': {
+            // Player has a persistent effect that lasts until conditions are met
+            console.log('[EventDice] Effect: persistent from', eventCard.name?.vi);
+            eventDiceModal = null;
+            applyPersistentEffect(mountEl, playerId, eventCard);
+            break;
+        }
+
+        case 'setStatToLowest': {
+            // Set the rolled stat to its lowest value (above skull)
+            const targetStatName = outcome.stat === 'rolled' ? stat : outcome.stat;
+            console.log('[EventDice] Effect: setStatToLowest for', targetStatName);
+
+            // Get character data to find lowest stat value
+            const characterData = currentGameState.playerState?.characterData?.[playerId];
+            if (characterData && characterData.traits) {
+                const trait = characterData.traits[targetStatName];
+                if (trait && trait.track) {
+                    // Lowest value is index 0 (above skull which would be death)
+                    const lowestValue = trait.track[0];
+                    const currentIndex = trait.index;
+                    const currentValue = trait.track[currentIndex];
+
+                    if (currentIndex > 0) {
+                        // Set to index 0 (lowest above skull)
+                        trait.index = 0;
+                        const newValue = trait.track[0];
+                        console.log('[EventDice] Set', targetStatName, 'from index', currentIndex, 'to 0, value:', currentValue, '→', newValue);
+
+                        eventDiceModal = null;
+                        openEventResultModal(
+                            mountEl,
+                            'CHI SO GIAM TOI THIEU',
+                            `${statLabels[targetStatName]}: ${currentValue} → ${newValue}`,
+                            'danger'
+                        );
+                    } else {
+                        // Already at lowest - TODO: prompt to choose different stat
+                        console.log('[EventDice] Stat already at lowest, need to choose another stat');
+                        eventDiceModal = null;
+                        openEventResultModal(
+                            mountEl,
+                            'CHI SO DA O MUC THAP NHAT',
+                            `${statLabels[targetStatName]} da o muc thap nhat. Chon chi so khac.`,
+                            'warning'
+                        );
+                    }
+                } else {
+                    console.error('[EventDice] Trait not found:', targetStatName);
+                    closeEventDiceModal(mountEl);
+                }
+            } else {
+                console.error('[EventDice] Character data not found for player:', playerId);
+                closeEventDiceModal(mountEl);
+            }
             break;
         }
 
@@ -2781,9 +3180,11 @@ function renderEventDiceModal() {
     const totalRolls = isMultiRoll ? eventCard.rollStats.length : 1;
     const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || rollStat);
 
-    // Check if rollStat is an array (player choice, e.g., con_nhen)
-    const isStatChoice = Array.isArray(rollStat) && !isMultiRoll;
+    // Check if rollStat is an array (player choice, e.g., con_nhen) or 'choice' string (chiem_huu - any stat)
+    const isStatChoice = (Array.isArray(rollStat) && !isMultiRoll) || rollStat === 'choice';
     const needsStatSelection = isStatChoice && !selectedStat;
+    // For 'choice' type, show all 4 stats
+    const statOptions = rollStat === 'choice' ? ['speed', 'might', 'sanity', 'knowledge'] : (Array.isArray(rollStat) ? rollStat : []);
 
     // Stat labels
     const statLabels = {
@@ -2826,7 +3227,7 @@ function renderEventDiceModal() {
                             <label class="event-dice-modal__label">Chon chi so de do:</label>
                             <select class="event-dice-modal__select" data-input="event-stat-select">
                                 <option value="">-- Chon --</option>
-                                ${rollStat.map(s => `<option value="${s}">${statLabels[s]}</option>`).join('')}
+                                ${statOptions.map(s => `<option value="${s}">${statLabels[s]}</option>`).join('')}
                             </select>
                             <button class="event-dice-modal__btn event-dice-modal__btn--confirm event-dice-modal__btn--stat-confirm"
                                     type="button"
@@ -3127,6 +3528,201 @@ function renderEventResultModal() {
                 <h3 class="event-result-modal__title">${title}</h3>
                 <p class="event-result-modal__message">${message}</p>
                 <p class="event-result-modal__hint">Tap de dong</p>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render rescue trapped ally modal
+ * @returns {string} HTML string
+ */
+function renderRescueTrappedModal() {
+    if (!rescueTrappedModal?.isOpen) return '';
+
+    const { trappedPlayerName, eventName, escapeRoll, phase, inputValue, result, allyFailure } = rescueTrappedModal;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    const statLabel = statLabels[escapeRoll.stat] || escapeRoll.stat;
+    const threshold = escapeRoll.threshold;
+
+    let bodyContent = '';
+
+    if (phase === 'confirm') {
+        bodyContent = `
+            <p class="rescue-trapped-modal__description">
+                <strong>${trappedPlayerName}</strong> dang bi mac ket boi <strong>${eventName}</strong>!
+            </p>
+            <p class="rescue-trapped-modal__info">
+                Ban co muon giai cuu dong doi khong?
+            </p>
+            <p class="rescue-trapped-modal__warning">
+                Do ${statLabel} dat ${threshold}+ de giai cuu.
+                ${allyFailure === 'alsoTrapped' ? '<br><strong>Canh bao:</strong> Neu that bai, ban cung se bi mac ket!' : ''}
+            </p>
+            <div class="rescue-trapped-modal__actions">
+                <button class="rescue-trapped-modal__btn rescue-trapped-modal__btn--rescue"
+                        type="button"
+                        data-action="rescue-trapped-yes">
+                    Giai cuu
+                </button>
+                <button class="rescue-trapped-modal__btn rescue-trapped-modal__btn--skip"
+                        type="button"
+                        data-action="rescue-trapped-no">
+                    Bo qua
+                </button>
+            </div>
+        `;
+    } else if (phase === 'roll') {
+        const playerId = mySocketId;
+        const diceCount = getPlayerStatForDice(playerId, escapeRoll.stat);
+
+        bodyContent = `
+            <p class="rescue-trapped-modal__description">Giai cuu ${trappedPlayerName}</p>
+            <div class="rescue-trapped-modal__roll-info">
+                <p>Do <strong>${diceCount}</strong> xuc xac ${statLabel}</p>
+                <p class="rescue-trapped-modal__target">Can dat: ${threshold}+</p>
+            </div>
+            <div class="rescue-trapped-modal__input-group">
+                <label class="rescue-trapped-modal__label">Nhap ket qua xuc xac:</label>
+                <input
+                    type="number"
+                    class="rescue-trapped-modal__input"
+                    min="0"
+                    value="${inputValue}"
+                    data-input="rescue-trapped-value"
+                    placeholder="Nhap so"
+                />
+            </div>
+            <div class="rescue-trapped-modal__actions">
+                <button class="rescue-trapped-modal__btn rescue-trapped-modal__btn--confirm"
+                        type="button"
+                        data-action="rescue-trapped-confirm">
+                    Xac nhan
+                </button>
+                <button class="rescue-trapped-modal__btn rescue-trapped-modal__btn--random"
+                        type="button"
+                        data-action="rescue-trapped-random">
+                    Ngau nhien
+                </button>
+            </div>
+        `;
+    } else if (phase === 'result') {
+        const isSuccess = result >= threshold;
+        bodyContent = `
+            <p class="rescue-trapped-modal__description">Giai cuu ${trappedPlayerName}</p>
+            <div class="rescue-trapped-modal__result">
+                <span class="rescue-trapped-modal__result-label">Ket qua:</span>
+                <span class="rescue-trapped-modal__result-value">${result}</span>
+            </div>
+            <div class="rescue-trapped-modal__status rescue-trapped-modal__status--${isSuccess ? 'success' : 'fail'}">
+                ${isSuccess ? 'GIAI CUU THANH CONG!' : 'THAT BAI!'}
+            </div>
+            ${!isSuccess && allyFailure === 'alsoTrapped' ? `
+                <p class="rescue-trapped-modal__fail-warning">Ban cung bi mac ket!</p>
+            ` : ''}
+            <button class="rescue-trapped-modal__btn rescue-trapped-modal__btn--continue"
+                    type="button"
+                    data-action="rescue-trapped-continue">
+                Tiep tuc
+            </button>
+        `;
+    }
+
+    return `
+        <div class="rescue-trapped-overlay">
+            <div class="rescue-trapped-modal" data-modal-content="true">
+                <header class="rescue-trapped-modal__header">
+                    <h3 class="rescue-trapped-modal__title">GIAI CUU DONG DOI</h3>
+                </header>
+                <div class="rescue-trapped-modal__body">
+                    ${bodyContent}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render persistent damage modal - when player must choose stat to lose
+ * @returns {string} HTML string
+ */
+function renderPersistentDamageModal() {
+    if (!persistentDamageModal?.isOpen) return '';
+
+    const { stats, amount, eventName } = persistentDamageModal;
+
+    const statLabels = {
+        speed: 'Toc do (Speed)',
+        might: 'Suc manh (Might)',
+        sanity: 'Tam tri (Sanity)',
+        knowledge: 'Kien thuc (Knowledge)'
+    };
+
+    const statButtons = stats.map(stat => `
+        <button class="persistent-damage-modal__btn"
+                type="button"
+                data-action="persistent-damage-select"
+                data-stat="${stat}">
+            ${statLabels[stat]} -${amount}
+        </button>
+    `).join('');
+
+    return `
+        <div class="persistent-damage-overlay">
+            <div class="persistent-damage-modal" data-modal-content="true">
+                <header class="persistent-damage-modal__header">
+                    <h3 class="persistent-damage-modal__title">HIEU UNG DAI HAN</h3>
+                </header>
+                <div class="persistent-damage-modal__body">
+                    <p class="persistent-damage-modal__event-name">${eventName}</p>
+                    <p class="persistent-damage-modal__description">Chon chi so de giam ${amount} nac:</p>
+                    <div class="persistent-damage-modal__options">
+                        ${statButtons}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render teleport choice modal - when player can choose teleport destination
+ * @returns {string} HTML string
+ */
+function renderTeleportChoiceModal() {
+    if (!teleportChoiceModal?.isOpen) return '';
+
+    const { rooms, preMessage } = teleportChoiceModal;
+
+    const roomButtons = rooms.map(room => `
+        <button class="teleport-choice-modal__btn"
+                type="button"
+                data-action="teleport-choice-select"
+                data-room-id="${room.roomId}">
+            ${room.name}
+        </button>
+    `).join('');
+
+    return `
+        <div class="teleport-choice-overlay">
+            <div class="teleport-choice-modal" data-modal-content="true">
+                <header class="teleport-choice-modal__header">
+                    <h3 class="teleport-choice-modal__title">CHON NOI DEN</h3>
+                </header>
+                <div class="teleport-choice-modal__body">
+                    ${preMessage ? `<p class="teleport-choice-modal__pre-message">${preMessage}</p>` : ''}
+                    <p class="teleport-choice-modal__description">Chon phong de dich chuyen den:</p>
+                    <div class="teleport-choice-modal__options">
+                        ${roomButtons}
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -4516,6 +5112,9 @@ function renderGameScreen(gameState, myId) {
             ${renderStatChangeNotification()}
             ${renderMultiRollSummary()}
             ${renderTrappedEscapeModal()}
+            ${renderRescueTrappedModal()}
+            ${renderPersistentDamageModal()}
+            ${renderTeleportChoiceModal()}
             ${renderEventResultModal()}
             ${renderEndTurnModal()}
             ${renderResetGameModal()}
@@ -5888,6 +6487,133 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        // ===== TELEPORT CHOICE MODAL HANDLER =====
+        if (action === 'teleport-choice-select') {
+            if (!teleportChoiceModal) return;
+            const roomId = target.dataset.roomId;
+            if (roomId) {
+                closeTeleportChoiceModal(mountEl, roomId);
+            }
+            return;
+        }
+
+        // ===== PERSISTENT DAMAGE MODAL HANDLER =====
+        if (action === 'persistent-damage-select') {
+            if (!persistentDamageModal) return;
+            const stat = target.dataset.stat;
+            if (stat) {
+                closePersistentDamageModal(mountEl, stat);
+            }
+            return;
+        }
+
+        // ===== RESCUE TRAPPED MODAL HANDLERS =====
+        if (action === 'rescue-trapped-yes') {
+            if (!rescueTrappedModal) return;
+            // Player chose to attempt rescue - go to roll phase
+            rescueTrappedModal.phase = 'roll';
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        if (action === 'rescue-trapped-no') {
+            if (!rescueTrappedModal) return;
+            // Player chose not to rescue - close modal and continue
+            rescueTrappedModal = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        if (action === 'rescue-trapped-confirm') {
+            if (!rescueTrappedModal) return;
+            const input = mountEl.querySelector('[data-input="rescue-trapped-value"]');
+            const value = parseInt(input?.value, 10);
+
+            if (!isNaN(value) && value >= 0) {
+                rescueTrappedModal.result = value;
+                rescueTrappedModal.phase = 'result';
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'rescue-trapped-random') {
+            if (!rescueTrappedModal) return;
+            const playerId = mySocketId;
+            const diceCount = getPlayerStatForDice(playerId, rescueTrappedModal.escapeRoll.stat);
+            const randomResult = rollDice(diceCount);
+
+            rescueTrappedModal.result = randomResult;
+            rescueTrappedModal.phase = 'result';
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        if (action === 'rescue-trapped-continue') {
+            if (!rescueTrappedModal) return;
+
+            const { trappedPlayerId, result, escapeRoll, allyFailure } = rescueTrappedModal;
+            const isSuccess = result >= escapeRoll.threshold;
+            const rescuerId = mySocketId;
+
+            if (isSuccess) {
+                // Rescue successful - free the trapped player
+                if (currentGameState.playerState?.trappedPlayers?.[trappedPlayerId]) {
+                    delete currentGameState.playerState.trappedPlayers[trappedPlayerId];
+                    console.log('[Rescue] Successfully rescued player:', trappedPlayerId);
+                }
+            } else {
+                // Rescue failed
+                if (allyFailure === 'alsoTrapped') {
+                    // Rescuer also gets trapped with same effect
+                    const trappedInfo = currentGameState.playerState?.trappedPlayers?.[trappedPlayerId];
+                    if (trappedInfo) {
+                        if (!currentGameState.playerState.trappedPlayers) {
+                            currentGameState.playerState.trappedPlayers = {};
+                        }
+                        currentGameState.playerState.trappedPlayers[rescuerId] = {
+                            eventId: trappedInfo.eventId,
+                            eventName: trappedInfo.eventName,
+                            escapeRoll: trappedInfo.escapeRoll,
+                            allyCanHelp: trappedInfo.allyCanHelp,
+                            allyFailure: trappedInfo.allyFailure,
+                            autoEscapeAfter: trappedInfo.autoEscapeAfter,
+                            turnsTrapped: 1
+                        };
+                        // Set moves to 0 - trapped player can't continue moving
+                        if (currentGameState.playerMoves) {
+                            currentGameState.playerMoves[rescuerId] = 0;
+                        }
+                        console.log('[Rescue] Rescuer also trapped:', rescuerId);
+                    }
+                }
+            }
+
+            rescueTrappedModal = null;
+
+            // Check if turn ended (rescuer is also trapped now or moves depleted)
+            if (currentGameState.playerMoves[rescuerId] <= 0) {
+                // Advance turn first (this changes currentTurnIndex)
+                advanceToNextTurn();
+
+                // Mark this turn as initialized so we don't re-trigger escape modal
+                // immediately after turn advances (rescuer will escape on their NEXT turn)
+                const newTurnIndex = currentGameState.currentTurnIndex;
+                movesInitializedForTurn = newTurnIndex;
+                console.log('[Rescue] Rescuer trapped - turn ended. Set movesInitializedForTurn to:', newTurnIndex);
+            }
+
+            // Sync state to server AFTER turn advance
+            syncGameStateToServer();
+
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
         // ===== MULTI-ROLL SUMMARY HANDLER =====
         if (action === 'multi-roll-summary-close') {
             if (!multiRollSummary) return;
@@ -6256,6 +6982,19 @@ async function updateGameUI(mountEl, gameState, myId) {
         if (currentPlayer === myId && myMoves === 0 && movesInitializedForTurn !== currentTurnIndex) {
             if (me?.characterId) {
                 movesInitializedForTurn = currentTurnIndex;
+
+                // Check and apply persistent effects at turn start
+                const persistentEffects = gameState.playerState?.persistentEffects?.[myId];
+                if (persistentEffects && persistentEffects.length > 0) {
+                    const effect = persistentEffects[0]; // For now, handle first effect
+                    if (effect.onTurnStart) {
+                        console.log('[Persistent] Applying turn start effect:', effect.eventName);
+                        applyPersistentTurnEffect(mountEl, myId, effect);
+                        // The modal will handle moves initialization after closing
+                        return;
+                    }
+                }
+
                 const charData = gameState.playerState?.characterData?.[myId] || gameState.characterData?.[myId];
                 const speed = getCharacterSpeed(me.characterId, charData);
                 await socketClient.setMoves(speed);
@@ -6801,6 +7540,15 @@ function handleMove(mountEl, direction) {
                         return; // Wait for combat resolution
                     }
 
+                    // === CHECK TRAPPED ALLY (for rescue mechanic - e.g., Mạng nhện) ===
+                    const trappedAlly = getTrappedAllyInRoom(existingRoomId, playerId);
+                    if (trappedAlly) {
+                        console.log('[Rescue] Trapped ally detected in room:', existingRoomId, 'ally:', trappedAlly.playerId);
+                        syncGameStateToServer();
+                        openRescueTrappedModal(mountEl, trappedAlly.playerId, trappedAlly.playerName, trappedAlly.trappedInfo);
+                        return; // Wait for rescue decision
+                    }
+
                     // Apply Vault spawn position if entering Vault room
                     applyVaultSpawnPosition(playerId, existingRoom, currentGameState);
 
@@ -6901,6 +7649,15 @@ function handleMove(mountEl, direction) {
         // Then open combat modal (player is already in the room)
         openCombatModal(mountEl, playerId, enemyInTargetRoom.id, null);
         return; // Wait for combat resolution
+    }
+
+    // === CHECK TRAPPED ALLY (for rescue mechanic - e.g., Mạng nhện) ===
+    const trappedAllyInTarget = getTrappedAllyInRoom(targetRoomId, playerId);
+    if (trappedAllyInTarget) {
+        console.log('[Rescue] Trapped ally detected in room:', targetRoomId, 'ally:', trappedAllyInTarget.playerId);
+        syncGameStateToServer();
+        openRescueTrappedModal(mountEl, trappedAllyInTarget.playerId, trappedAllyInTarget.playerName, trappedAllyInTarget.trappedInfo);
+        return; // Wait for rescue decision
     }
 
     // Apply Vault spawn position if entering Vault room
