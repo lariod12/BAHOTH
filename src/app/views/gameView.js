@@ -3229,12 +3229,21 @@ function renderEventDiceModal() {
                                 <option value="">-- Chon --</option>
                                 ${statOptions.map(s => `<option value="${s}">${statLabels[s]}</option>`).join('')}
                             </select>
-                            <button class="event-dice-modal__btn event-dice-modal__btn--confirm event-dice-modal__btn--stat-confirm"
-                                    type="button"
-                                    data-action="event-stat-confirm"
-                                    disabled>
-                                Xac nhan lua chon
-                            </button>
+                            <div class="event-dice-modal__stat-actions">
+                                ${eventDiceModal.tokenDrawingContext ? `
+                                <button class="event-dice-modal__btn event-dice-modal__btn--back"
+                                        type="button"
+                                        data-action="event-dice-back-to-select">
+                                    ← Chon lai bai
+                                </button>
+                                ` : ''}
+                                <button class="event-dice-modal__btn event-dice-modal__btn--confirm event-dice-modal__btn--stat-confirm"
+                                        type="button"
+                                        data-action="event-stat-confirm"
+                                        disabled>
+                                    Xac nhan lua chon
+                                </button>
+                            </div>
                         </div>
                     ` : hasResult ? `
                         <div class="event-dice-modal__result">

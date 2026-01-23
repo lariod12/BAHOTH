@@ -6066,6 +6066,21 @@ select.field__input option {
     padding: 8px;
 }
 
+.event-dice-modal__stat-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.event-dice-modal__stat-actions .event-dice-modal__btn--back {
+    flex: 1;
+}
+
+.event-dice-modal__stat-actions .event-dice-modal__btn--stat-confirm {
+    flex: 2;
+    margin-top: 0;
+}
+
 .event-dice-modal__btn--stat-confirm {
     margin-top: 16px;
     width: 100%;
