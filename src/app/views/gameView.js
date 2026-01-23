@@ -562,6 +562,20 @@ function ensureCharacterDataInitialized(gameState) {
 
 /**
  * Get character's current Speed value
+ * Remove Vietnamese diacritics from text for search
+ * @param {string} str - Text with diacritics
+ * @returns {string} - Text without diacritics
+ */
+function removeDiacritics(str) {
+    if (!str) return '';
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D');
+}
+
+/**
  * Uses current speed index from characterData if available, otherwise falls back to startIndex
  * @param {string} characterId
  * @param {Object} [characterData] - Player's character data with current stats indices
@@ -755,7 +769,7 @@ function getPlayerStatForDice(playerId, stat) {
  * @param {HTMLElement} mountEl
  * @param {string} cardId - Event card ID
  */
-function openEventDiceModal(mountEl, cardId) {
+function openEventDiceModal(mountEl, cardId, tokenDrawingContext = null) {
     const card = getEventCardById(cardId);
     if (!card) {
         console.error('[EventDice] Card not found:', cardId);
@@ -785,6 +799,7 @@ function openEventDiceModal(mountEl, cardId) {
         currentRollIndex: 0,
         allResults: [],
         pendingEffect: null,
+        tokenDrawingContext: tokenDrawingContext, // Store for "back to select" feature
     };
 
     console.log('[EventDice] Opened modal for:', card.name?.vi, 'rollStat:', rollStat, 'diceCount:', diceCount);
@@ -2846,6 +2861,12 @@ function renderEventDiceModal() {
                                     type="button"
                                     data-action="event-dice-back">
                                 ← Quay lai
+                            </button>
+                            ` : eventDiceModal.tokenDrawingContext ? `
+                            <button class="event-dice-modal__btn event-dice-modal__btn--back"
+                                    type="button"
+                                    data-action="event-dice-back-to-select">
+                                ← Chon lai
                             </button>
                             ` : ''}
                             <button class="event-dice-modal__btn event-dice-modal__btn--confirm"
@@ -5152,6 +5173,19 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        // Clear room selection
+        if (action === 'clear-room-selection') {
+            const searchInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-search-input'));
+            const hiddenInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#room-select-value'));
+            if (searchInput) searchInput.value = '';
+            if (hiddenInput) hiddenInput.value = '';
+            mountEl.querySelectorAll('#room-list .room-discovery__item').forEach(el => {
+                el.classList.remove('is-selected');
+                /** @type {HTMLElement} */ (el).style.display = '';
+            });
+            return;
+        }
+
         // Random room selection
         if (action === 'random-room') {
             handleRandomRoomDiscovery(mountEl);
@@ -5161,6 +5195,27 @@ function attachEventListeners(mountEl, roomId) {
         // Cancel room discovery
         if (action === 'cancel-room-discovery') {
             cancelRoomDiscovery(mountEl);
+            return;
+        }
+
+        // Clear card selection
+        if (action === 'clear-card-selection') {
+            const searchInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#token-card-search-input'));
+            if (searchInput) searchInput.value = '';
+            mountEl.querySelectorAll('#token-card-list .token-card__item').forEach(el => {
+                el.classList.remove('is-selected');
+                /** @type {HTMLElement} */ (el).style.display = '';
+            });
+            if (tokenDrawingModal) {
+                const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
+                if (current) {
+                    current.selectedCard = null;
+                    current.drawn = false;
+                    // Disable button
+                    const nextBtn = mountEl.querySelector('[data-action="token-draw-next"]');
+                    if (nextBtn) nextBtn.setAttribute('disabled', '');
+                }
+            }
             return;
         }
 
@@ -5176,16 +5231,41 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        if (action === 'token-draw-back') {
+            // Clear selection and allow re-selecting
+            if (tokenDrawingModal) {
+                const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
+                if (current) {
+                    current.selectedCard = null;
+                    current.drawn = false;
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+            }
+            return;
+        }
+
         // Select card from token list
         if (target.closest('.token-card__item') && target.closest('#token-card-list')) {
             const item = /** @type {HTMLElement} */ (target.closest('.token-card__item'));
             const cardId = item.dataset.cardId;
+            const searchInput = /** @type {HTMLInputElement} */ (mountEl.querySelector('#token-card-search-input'));
+
+            // Update search input to show selected card name
+            if (searchInput) searchInput.value = item.textContent || '';
+
+            // Mark item as selected visually
+            mountEl.querySelectorAll('#token-card-list .token-card__item').forEach(el => el.classList.remove('is-selected'));
+            item.classList.add('is-selected');
+
             if (cardId && tokenDrawingModal) {
                 const current = tokenDrawingModal.tokensToDrawn[tokenDrawingModal.currentIndex];
                 if (current) {
                     current.selectedCard = cardId;
                     current.drawn = true;
-                    updateGameUI(mountEl, currentGameState, mySocketId);
+                    // Don't call updateGameUI to preserve input value
+                    // Just enable the button
+                    const nextBtn = mountEl.querySelector('[data-action="token-draw-next"]');
+                    if (nextBtn) nextBtn.removeAttribute('disabled');
                 }
             }
             return;
@@ -5430,6 +5510,54 @@ function attachEventListeners(mountEl, roomId) {
             eventDiceModal.diceCount = getPlayerStatForDice(mySocketId, previousStat);
             eventDiceModal.inputValue = '';
             eventDiceModal.result = null;
+
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Event dice back to card selection (allows re-selecting a different card)
+        if (action === 'event-dice-back-to-select') {
+            if (!eventDiceModal) return;
+
+            const playerId = mySocketId;
+            const cardId = eventDiceModal.eventCard?.id;
+            const context = eventDiceModal.tokenDrawingContext;
+
+            // Remove the card from player inventory
+            if (cardId && currentGameState.playerState?.playerCards?.[playerId]) {
+                const playerCards = currentGameState.playerState.playerCards[playerId];
+                // Find and remove the card from events
+                const eventIndex = playerCards.events?.findIndex(c => c === cardId);
+                if (eventIndex !== -1) {
+                    playerCards.events.splice(eventIndex, 1);
+                    console.log('[EventDice] Removed card from inventory:', cardId);
+                }
+            }
+
+            // Close event dice modal
+            eventDiceModal = null;
+
+            // Reopen token drawing modal from saved context
+            if (context) {
+                // Reset the selected card in context
+                const current = context.tokensToDrawn[context.currentIndex];
+                if (current) {
+                    current.selectedCard = null;
+                    current.drawn = false;
+                }
+
+                tokenDrawingModal = {
+                    isOpen: true,
+                    tokensToDrawn: context.tokensToDrawn,
+                    currentIndex: context.currentIndex,
+                    roomId: context.roomId
+                };
+                console.log('[EventDice] Reopened token drawing modal for re-selection');
+            }
+
+            // Sync state to server (card removed from inventory)
+            syncGameStateToServer();
 
             skipMapCentering = true;
             updateGameUI(mountEl, currentGameState, mySocketId);
@@ -5947,12 +6075,16 @@ function attachEventListeners(mountEl, roomId) {
         const target = /** @type {HTMLInputElement} */ (e.target);
         if (target.id === 'room-search-input') {
             const searchText = target.value.toLowerCase().trim();
+            const searchTextNoDiacritics = removeDiacritics(searchText);
             const items = mountEl.querySelectorAll('.room-discovery__item');
 
             items.forEach(item => {
                 const itemEl = /** @type {HTMLElement} */ (item);
                 const searchData = itemEl.dataset.searchText || '';
-                const matches = searchText === '' || searchData.includes(searchText);
+                // Match both with and without diacritics
+                const matches = searchText === '' ||
+                               searchData.includes(searchText) ||
+                               searchData.includes(searchTextNoDiacritics);
                 itemEl.style.display = matches ? '' : 'none';
             });
         }
@@ -5960,12 +6092,16 @@ function attachEventListeners(mountEl, roomId) {
         // Token card search
         if (target.id === 'token-card-search-input') {
             const searchText = target.value.toLowerCase().trim();
+            const searchTextNoDiacritics = removeDiacritics(searchText);
             const items = mountEl.querySelectorAll('.token-card__item');
 
             items.forEach(item => {
                 const itemEl = /** @type {HTMLElement} */ (item);
                 const searchData = itemEl.dataset.searchText || '';
-                const matches = searchText === '' || searchData.includes(searchText);
+                // Match both with and without diacritics
+                const matches = searchText === '' ||
+                               searchData.includes(searchText) ||
+                               searchData.includes(searchTextNoDiacritics);
                 itemEl.style.display = matches ? '' : 'none';
             });
         }
@@ -6444,7 +6580,8 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
                 if (tokenCounts.omen) tokenLabels.push(tokenCounts.omen > 1 ? `Omenx${tokenCounts.omen}` : 'Omen');
                 tokenIndicator = ` (${tokenLabels.join(', ')})`;
             }
-            return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${nameVi.toLowerCase()} ${room.name.en.toLowerCase()}">${nameVi}${floorsLabel}${tokenIndicator}</div>`;
+            const searchText = `${nameVi.toLowerCase()} ${removeDiacritics(nameVi).toLowerCase()} ${room.name.en.toLowerCase()}`;
+            return `<div class="room-discovery__item" data-room-name="${room.name.en}" data-search-text="${searchText}">${nameVi}${floorsLabel}${tokenIndicator}</div>`;
         }).join('');
         
         const noRoomsMessage = validRooms.length === 0 
@@ -6464,11 +6601,12 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
                             <div class="room-discovery__option">
                                 <label class="room-discovery__label">Chon phong:</label>
                                 <div class="room-discovery__search-wrapper">
-                                    <input type="text" 
-                                           class="room-discovery__search" 
-                                           id="room-search-input" 
+                                    <input type="text"
+                                           class="room-discovery__search"
+                                           id="room-search-input"
                                            placeholder="Nhap ten phong de tim kiem..."
                                            autocomplete="off" />
+                                    <button class="room-discovery__clear-btn" type="button" data-action="clear-room-selection" title="Xoa lua chon">✕</button>
                                     <div class="room-discovery__list" id="room-list">
                                         ${roomListHtml}
                                     </div>
@@ -7398,6 +7536,13 @@ function confirmTokenDrawing(mountEl) {
         }
     });
 
+    // Store token drawing context before closing (for "back to select" feature)
+    const tokenDrawingContext = immediateRollEvent ? {
+        tokensToDrawn: JSON.parse(JSON.stringify(tokenDrawingModal.tokensToDrawn)),
+        currentIndex: tokenDrawingModal.currentIndex,
+        roomId: tokenDrawingModal.roomId
+    } : null;
+
     // Close token drawing modal
     tokenDrawingModal = null;
 
@@ -7406,7 +7551,7 @@ function confirmTokenDrawing(mountEl) {
         console.log('[TokenDrawing] Event requires immediate roll:', immediateRollEvent);
         // Sync state BEFORE opening event dice modal (so other players see cards update)
         syncGameStateToServer();
-        openEventDiceModal(mountEl, immediateRollEvent);
+        openEventDiceModal(mountEl, immediateRollEvent, tokenDrawingContext);
         return; // Don't proceed to next turn yet
     }
 
@@ -7445,7 +7590,8 @@ function renderTokenDrawingModal() {
     const cardListHtml = cards.map(card => {
         const cardName = card.name?.vi || card.id;
         const isSelected = current.selectedCard === card.id;
-        return `<div class="token-card__item ${isSelected ? 'is-selected' : ''}" data-card-id="${card.id}" data-search-text="${cardName.toLowerCase()}">${cardName}</div>`;
+        const searchText = `${cardName.toLowerCase()} ${removeDiacritics(cardName).toLowerCase()}`;
+        return `<div class="token-card__item ${isSelected ? 'is-selected' : ''}" data-card-id="${card.id}" data-search-text="${searchText}">${cardName}</div>`;
     }).join('');
     
     return `
@@ -7458,30 +7604,40 @@ function renderTokenDrawingModal() {
                     <div class="token-drawing__option">
                         <label class="token-drawing__label">Chon bai:</label>
                         <div class="token-card__search-wrapper">
-                            <input type="text" 
-                                   class="token-card__search" 
-                                   id="token-card-search-input" 
+                            <input type="text"
+                                   class="token-card__search"
+                                   id="token-card-search-input"
                                    placeholder="Nhap ten bai de tim kiem..."
                                    autocomplete="off" />
+                            <button class="token-card__clear-btn" type="button" data-action="clear-card-selection" title="Xoa lua chon">✕</button>
                             <div class="token-card__list" id="token-card-list">
                                 ${cardListHtml}
                             </div>
                         </div>
-                        <button class="action-button action-button--primary" 
-                                type="button" 
-                                data-action="token-draw-next"
-                                ${!current.selectedCard ? 'disabled' : ''}>
-                            ${currentNum < totalTokens ? 'Tiep theo' : 'Xac nhan'}
-                        </button>
+                        <div class="token-drawing__buttons">
+                            ${current.selectedCard ? `
+                                <button class="action-button action-button--secondary"
+                                        type="button"
+                                        data-action="token-draw-back">
+                                    Quay lai
+                                </button>
+                            ` : ''}
+                            <button class="action-button action-button--primary"
+                                    type="button"
+                                    data-action="token-draw-next"
+                                    ${!current.selectedCard ? 'disabled' : ''}>
+                                ${currentNum < totalTokens ? 'Tiep theo' : 'Xac nhan'}
+                            </button>
+                        </div>
                     </div>
-                    
+
                     <div class="token-drawing__divider">
                         <span>hoac</span>
                     </div>
-                    
+
                     <div class="token-drawing__option">
-                        <button class="action-button action-button--secondary token-drawing__random-btn" 
-                                type="button" 
+                        <button class="action-button action-button--secondary token-drawing__random-btn"
+                                type="button"
                                 data-action="token-draw-random">
                             Rut ngau nhien
                         </button>

@@ -4928,11 +4928,12 @@ select.field__input option {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    position: relative;
 }
 
 .room-discovery__search {
     width: 100%;
-    padding: 12px 14px;
+    padding: 12px 40px 12px 14px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
@@ -4947,6 +4948,29 @@ select.field__input option {
 
 .room-discovery__search::placeholder {
     color: rgba(255, 255, 255, 0.4);
+}
+
+.room-discovery__clear-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.room-discovery__clear-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .room-discovery__list {
@@ -5458,11 +5482,12 @@ select.field__input option {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    position: relative;
 }
 
 .token-card__search {
     width: 100%;
-    padding: 12px 14px;
+    padding: 12px 40px 12px 14px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 6px;
@@ -5477,6 +5502,29 @@ select.field__input option {
 
 .token-card__search::placeholder {
     color: rgba(255, 255, 255, 0.4);
+}
+
+.token-card__clear-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.token-card__clear-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .token-card__list {
@@ -5543,6 +5591,16 @@ select.field__input option {
 .token-drawing__random-btn {
     width: 100%;
     padding: 14px 20px;
+}
+
+.token-drawing__buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.token-drawing__buttons .action-button {
+    flex: 1;
 }
 
 @media (max-width: 480px) {
