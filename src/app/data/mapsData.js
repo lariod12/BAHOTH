@@ -100,7 +100,7 @@ export const ROOMS = [
 
   // ===== BASEMENT =====
   {
-    name: { en: 'Catacombs', vi: 'Hầm mộ (Catacombs)' },
+    name: { en: 'Catacombs', vi: 'Đường hầm (Catacombs)' },
     floorsAllowed: ['basement'],
     doors: [{ side: 'top', kind: 'door' }, { side: 'bottom', kind: 'door' }],
     tokens: ['omen'],

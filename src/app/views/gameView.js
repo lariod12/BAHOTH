@@ -186,6 +186,12 @@ let isDebugMode = false; // Flag to track if we're in debug mode
 let expandedPlayers = new Set();
 /** @type {Set<string>} Track active player IDs */
 let activePlayers = new Set();
+
+// Mystic Elevator reserved positions - positions on each floor that are reserved for the elevator
+// Format: "floor,x,y" -> elevatorRoomId
+/** @type {Map<string, string>} */
+const mysticElevatorPositions = new Map();
+
 /** @type {(() => void) | null} Unsubscribe from players active updates */
 let unsubscribePlayersActive = null;
 
@@ -2137,9 +2143,12 @@ function continueMovementAfterRoomEffect(mountEl, pendingMovement, rollSuccess, 
 
     console.log('[RoomEffect] Continuing movement after roll, success:', rollSuccess);
 
+    // Sync state to server after marking the roll
+    syncGameStateToServer();
+
     // Re-trigger movement in the same direction
     const { direction } = pendingMovement;
-    handleDebugMovement(mountEl, direction);
+    handleMove(mountEl, direction);
 }
 
 /**
@@ -2581,28 +2590,25 @@ function applyEventDiceResult(mountEl, result, stat) {
                 const existingRooms = findExistingRooms(destinations);
 
                 if (existingRooms.length > 0) {
-                    if (outcome.then.choice && existingRooms.length > 1) {
-                        // Player can choose destination - open teleport choice modal
-                        eventDiceModal = null;
-                        openTeleportChoiceModal(mountEl, existingRooms, loseStatsMsg);
-                    } else {
-                        // Auto teleport to first available room
-                        const destRoomId = existingRooms[0].roomId;
-                        if (!currentGameState.playerState.playerPositions) {
-                            currentGameState.playerState.playerPositions = {};
-                        }
-                        currentGameState.playerState.playerPositions[playerId] = destRoomId;
-                        syncGameStateToServer();
-                        renderGameScreen(currentGameState, mySocketId);
+                    // Random teleport to one of the available rooms
+                    const randomIndex = Math.floor(Math.random() * existingRooms.length);
+                    const selectedRoom = existingRooms[randomIndex];
+                    const destRoomId = selectedRoom.roomId;
 
-                        eventDiceModal = null;
-                        openEventResultModal(
-                            mountEl,
-                            'DICH CHUYEN',
-                            `${loseStatsMsg}. Ban da bi dich chuyen den ${existingRooms[0].name}`,
-                            'danger'
-                        );
+                    if (!currentGameState.playerState.playerPositions) {
+                        currentGameState.playerState.playerPositions = {};
                     }
+                    currentGameState.playerState.playerPositions[playerId] = destRoomId;
+                    syncGameStateToServer();
+                    renderGameScreen(currentGameState, mySocketId);
+
+                    eventDiceModal = null;
+                    openEventResultModal(
+                        mountEl,
+                        'DICH CHUYEN',
+                        `${loseStatsMsg}. Ban da bi dich chuyen den ${selectedRoom.name}`,
+                        'danger'
+                    );
                 } else {
                     // No matching rooms found - just apply stat loss
                     eventDiceModal = null;
@@ -5911,7 +5917,7 @@ function attachEventListeners(mountEl, roomId) {
             const stairsEl = target.closest('[data-action="use-stairs"]');
             const targetRoom = stairsEl?.dataset.target;
             if (targetRoom) {
-                handleDebugUseStairs(mountEl, targetRoom);
+                handleMoveAfterStairs(mountEl, targetRoom);
             }
             return;
         }
@@ -5920,7 +5926,7 @@ function attachEventListeners(mountEl, roomId) {
             const elevatorEl = target.closest('[data-action="use-elevator"]');
             const targetFloor = elevatorEl?.dataset.floor;
             if (targetFloor) {
-                handleDebugUseElevator(mountEl, targetFloor);
+                handleMoveAfterElevator(mountEl, targetFloor);
             }
             return;
         }
@@ -6196,6 +6202,127 @@ function attachEventListeners(mountEl, roomId) {
 
             skipMapCentering = true;
             updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // === Room Effect Dice Modal Actions ===
+
+        // Room effect dice confirm (manual input)
+        if (action === 'room-effect-dice-confirm') {
+            if (!roomEffectDiceModal) return;
+            const input = mountEl.querySelector('[data-input="room-effect-dice-value"]');
+            const value = parseInt(input?.value, 10);
+            if (!isNaN(value) && value >= 0) {
+                roomEffectDiceModal.result = value;
+                roomEffectDiceModal.inputValue = value.toString();
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        // Room effect dice random roll
+        if (action === 'room-effect-dice-random') {
+            if (!roomEffectDiceModal) return;
+            const diceCount = roomEffectDiceModal.diceCount || 1;
+            // Roll diceCount dice (each 0-2) and sum
+            let total = 0;
+            for (let i = 0; i < diceCount; i++) {
+                total += Math.floor(Math.random() * 3); // 0, 1, or 2
+            }
+            roomEffectDiceModal.result = total;
+            roomEffectDiceModal.inputValue = total.toString();
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Room effect dice continue (apply result)
+        if (action === 'room-effect-dice-continue') {
+            if (!roomEffectDiceModal) return;
+            const { roomEffect, result, pendingMovement } = roomEffectDiceModal;
+            const playerId = mySocketId;
+            const isSuccess = result >= roomEffect.target;
+            const roomName = roomEffectDiceModal.roomName || 'Room';
+
+            console.log('[RoomEffect] Result:', result, 'Target:', roomEffect.target, 'Success:', isSuccess);
+
+            if (isSuccess) {
+                // Success - continue movement
+                showToast(`Thanh cong! Ban tiep tuc di chuyen.`, 'success');
+                roomEffectDiceModal = null;
+                if (pendingMovement) {
+                    continueMovementAfterRoomEffect(mountEl, pendingMovement, true, roomName);
+                } else {
+                    updateGameUI(mountEl, currentGameState, mySocketId);
+                }
+            } else {
+                // Failed - apply fail effect
+                const failEffect = roomEffect.failEffect;
+                const failType = failEffect?.type || failEffect?.effect; // Support both 'type' and 'effect' keys
+                console.log('[RoomEffect] Failed, applying effect:', failEffect, 'type:', failType);
+
+                switch (failType) {
+                    case 'stopMovement':
+                        showToast(`That bai! Ban dung lai o ${roomName}.`, 'error');
+                        roomEffectDiceModal = null;
+                        console.log('[Turn] Player', playerId, 'failed room effect, advancing turn');
+                        advanceToNextTurn();
+                        syncGameStateToServer();
+                        updateGameUI(mountEl, currentGameState, mySocketId);
+                        break;
+
+                    case 'statLoss': {
+                        // Get old value before applying change
+                        const oldValue = getPlayerStatForDice(playerId, failEffect.stat);
+                        applyStatChange(playerId, failEffect.stat, -failEffect.amount);
+                        const newValue = getPlayerStatForDice(playerId, failEffect.stat);
+
+                        const statLabelsRoom = {
+                            speed: 'Toc do (Speed)',
+                            might: 'Suc manh (Might)',
+                            sanity: 'Tam tri (Sanity)',
+                            knowledge: 'Kien thuc (Knowledge)'
+                        };
+                        const statLabel = statLabelsRoom[failEffect.stat] || failEffect.stat;
+
+                        roomEffectDiceModal = null;
+                        syncGameStateToServer();
+
+                        // Show popup with stat change info, then continue movement
+                        const continueAfterPopup = () => {
+                            if (roomEffect.continueOnFail) {
+                                continueMovementAfterRoomEffect(mountEl, pendingMovement, false, roomName);
+                            } else {
+                                updateGameUI(mountEl, currentGameState, mySocketId);
+                            }
+                        };
+
+                        // Use stat change notification modal
+                        statChangeNotification = {
+                            isOpen: true,
+                            title: 'THAT BAI!',
+                            stat: failEffect.stat,
+                            oldValue: oldValue,
+                            newValue: newValue,
+                            change: -failEffect.amount,
+                            onClose: continueAfterPopup
+                        };
+                        skipMapCentering = true;
+                        updateGameUI(mountEl, currentGameState, mySocketId);
+                        break;
+                    }
+
+                    default:
+                        // Default: just stop movement
+                        showToast(`That bai!`, 'error');
+                        roomEffectDiceModal = null;
+                        advanceToNextTurn();
+                        syncGameStateToServer();
+                        updateGameUI(mountEl, currentGameState, mySocketId);
+                        break;
+                }
+            }
             return;
         }
 
@@ -7491,7 +7618,24 @@ function handleMove(mountEl, direction) {
 
     // Check if there's a connection in that direction
     const roomConnections = mapConnections[currentRoomId] || {};
-    const targetRoomId = roomConnections[doorDirection];
+    let targetRoomId = roomConnections[doorDirection];
+
+    // Debug logging when moving from a room adjacent to where elevator might have been
+    if (targetRoomId) {
+        const connectedRoom = revealedRooms[targetRoomId];
+        console.log('[Move] Found existing connection to', targetRoomId, 'room:', connectedRoom?.name, 'floor:', connectedRoom?.floor, 'current floor:', currentRoom.floor);
+        if (connectedRoom && connectedRoom.floor !== currentRoom.floor) {
+            console.log('[Move] WARNING: Connected room is on different floor! Connection should have been cleared. Clearing now.');
+            // Clear this invalid connection
+            delete mapConnections[currentRoomId][doorDirection];
+            targetRoomId = null;
+            // Continue with movement as if there was no connection
+        } else if (!connectedRoom) {
+            console.log('[Move] WARNING: Connected room not found in revealedRooms! Clearing invalid connection.');
+            delete mapConnections[currentRoomId][doorDirection];
+            targetRoomId = null;
+        }
+    }
 
     if (!targetRoomId) {
         // No connection - check if current room has a door in that direction
@@ -7512,18 +7656,50 @@ function handleMove(mountEl, direction) {
             const offset = dirOffsets[doorDirection];
             const targetX = currentRoom.x + offset.x;
             const targetY = currentRoom.y + offset.y;
-            
+
             // Find room at target position on same floor
             let existingRoom = null;
             let existingRoomId = null;
+
+            // Debug logging for Mystic Elevator
+            if (currentRoom.name === 'Mystic Elevator' || currentRoom.name?.vi?.includes('Thang máy huyền bí')) {
+                console.log('[Move] Exiting Mystic Elevator on floor:', currentRoom.floor, 'to direction:', doorDirection, 'target pos:', targetX, targetY);
+            }
+
             for (const [roomId, room] of Object.entries(revealedRooms)) {
                 if (room.floor === currentRoom.floor && room.x === targetX && room.y === targetY) {
-                    // Skip elevator shafts
-                    if (!room.isElevatorShaft) {
+                    // Skip elevator shafts AND Mystic Elevator (it gets special handling)
+                    if (!room.isElevatorShaft && room.name !== 'Mystic Elevator') {
                         existingRoom = room;
                         existingRoomId = roomId;
+                        if (currentRoom.name === 'Mystic Elevator' || currentRoom.name?.vi?.includes('Thang máy huyền bí')) {
+                            console.log('[Move] Found existing room on same floor:', room.name, 'floor:', room.floor);
+                        }
                         break;
                     }
+                }
+            }
+
+            // Debug: Check if Mystic Elevator is at this position on a different floor
+            if (!existingRoom) {
+                const elevatorAtPos = Object.entries(revealedRooms).find(([, room]) =>
+                    room.x === targetX && room.y === targetY && room.floor !== currentRoom.floor &&
+                    (room.name === 'Mystic Elevator' || room.name?.vi?.includes('Thang máy huyền bí'))
+                );
+                if (elevatorAtPos) {
+                    console.log('[Move] Mystic Elevator is at this position but on different floor:', elevatorAtPos[1].floor, 'current floor:', currentRoom.floor);
+                }
+            }
+
+            // IMPORTANT: Check if target position is reserved for Mystic Elevator on a different floor
+            const posKey = `${currentRoom.floor},${targetX},${targetY}`;
+            const reservedElevatorId = mysticElevatorPositions.get(posKey);
+            if (reservedElevatorId) {
+                const elevatorRoom = revealedRooms[reservedElevatorId];
+                // Only block if elevator is NOT on current floor (it's on a different floor)
+                if (elevatorRoom && elevatorRoom.floor !== currentRoom.floor) {
+                    console.log('[Move] Target position is reserved for Mystic Elevator on floor:', elevatorRoom.floor, 'current floor:', currentRoom.floor, '- BLOCKING movement');
+                    return; // Block movement - position is reserved for elevator
                 }
             }
             
@@ -7620,6 +7796,17 @@ function handleMove(mountEl, direction) {
             // No existing room - show room discovery modal
             const currentFloor = currentRoom.floor;
             const requiredDoorSide = doorDirToSide(getOppositeDoor(doorDirection));
+
+            // Debug logging - always log when opening discovery modal
+            console.log('[Move] No existing room found, opening discovery modal for floor:', currentFloor, 'direction:', doorDirection, 'target pos:', targetX, targetY);
+
+            // Check if elevator is at this position on different floor
+            const elevatorAtPos = Object.entries(revealedRooms).find(([, room]) =>
+                room.x === targetX && room.y === targetY && room.floor !== currentRoom.floor
+            );
+            if (elevatorAtPos) {
+                console.log('[Move] Found room at this position but on different floor:', elevatorAtPos[1].name, 'floor:', elevatorAtPos[1].floor);
+            }
             
             roomDiscoveryModal = {
                 isOpen: true,
@@ -7724,6 +7911,400 @@ function handleMove(mountEl, direction) {
     // Check if turn ended - auto advance to next player
     if (currentGameState.playerMoves[playerId] <= 0) {
         console.log('[Turn] Player', playerId, 'moves depleted after movement, advancing turn');
+        advanceToNextTurn();
+    }
+
+    // Sync state with server in multiplayer mode
+    syncGameStateToServer();
+
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle movement after using stairs (moves to specific room)
+ * @param {HTMLElement} mountEl
+ * @param {string} targetRoomId - Target room ID to move to
+ */
+function handleMoveAfterStairs(mountEl, targetRoomId) {
+    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
+
+    const playerId = mySocketId;
+    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+
+    // Only allow move if it's this player's turn
+    if (playerId !== currentTurnPlayer) {
+        console.log(`Not ${playerId}'s turn, current turn: ${currentTurnPlayer}`);
+        return;
+    }
+
+    const moves = currentGameState.playerMoves[playerId] || 0;
+    if (moves <= 0) {
+        console.log(`No moves left for ${playerId}`);
+        return;
+    }
+
+    // Get current position and map data
+    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
+    const mapConnections = currentGameState.map?.connections || {};
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[currentRoomId];
+    const targetRoom = revealedRooms[targetRoomId];
+
+    if (!targetRoom) {
+        console.log('[Stairs] Target room not found:', targetRoomId);
+        return;
+    }
+
+    // === CHECK EXIT ROOM EFFECT ===
+    // Check if current room has EXIT effect that needs dice roll
+    if (currentRoom && currentRoom.name) {
+        const currentRoomName = currentRoom.name;
+        if (needsRoomEffectRoll(currentRoomName, 'exit', playerId)) {
+            console.log('[RoomEffect] EXIT effect triggered for room:', currentRoomName);
+            openRoomEffectDiceModal(mountEl, currentRoomName, {
+                direction: 'stairs',
+                targetRoomId: targetRoomId,
+                targetRoomName: targetRoom.name
+            });
+            return; // Wait for dice roll
+        }
+    }
+
+    // === CHECK ENTER ROOM EFFECT ===
+    // Check if target room has ENTER effect that needs dice roll
+    if (targetRoom && targetRoom.name) {
+        const targetRoomName = targetRoom.name;
+        if (needsRoomEffectRoll(targetRoomName, 'enter', playerId)) {
+            console.log('[RoomEffect] ENTER effect triggered for room:', targetRoomName);
+            openRoomEffectDiceModal(mountEl, targetRoomName, {
+                direction: 'stairs',
+                targetRoomId: targetRoomId,
+                targetRoomName: targetRoomName
+            });
+            return; // Wait for dice roll
+        }
+    }
+
+    // Create connection FIRST
+    if (!mapConnections[currentRoomId]) mapConnections[currentRoomId] = {};
+    if (!mapConnections[targetRoomId]) mapConnections[targetRoomId] = {};
+
+    // Connect rooms via stairs
+    mapConnections[currentRoomId]['stairs'] = targetRoomId;
+    mapConnections[targetRoomId]['stairs'] = currentRoomId;
+
+    // Clear completed combat flag when leaving current room
+    clearCompletedCombatForPlayer(playerId, currentRoomId);
+
+    // Move player FIRST (before combat check)
+    currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+    currentGameState.playerMoves[playerId] = moves - 1;
+
+    // Track entry direction (stairs always enter from stairs)
+    if (!currentGameState.playerState.playerEntryDirections) {
+        currentGameState.playerState.playerEntryDirections = {};
+    }
+    currentGameState.playerState.playerEntryDirections[playerId] = 'stairs';
+
+    // === CHECK COMBAT TRIGGER (after player has moved into room) ===
+    // If haunt is triggered and enemy is in target room, open combat modal
+    const enemyInTargetRoom = getEnemyInRoom(targetRoomId, playerId);
+    if (enemyInTargetRoom) {
+        console.log('[Combat] Enemy detected in room:', targetRoomId, 'enemy:', enemyInTargetRoom.id);
+        // Sync position first so all players see both characters in the same room
+        syncGameStateToServer();
+        // Then open combat modal (player is already in the room)
+        openCombatModal(mountEl, playerId, enemyInTargetRoom.id, null);
+        return; // Wait for combat resolution
+    }
+
+    // === CHECK TRAPPED ALLY (for rescue mechanic - e.g., Mạng nhện) ===
+    const trappedAlly = getTrappedAllyInRoom(targetRoomId, playerId);
+    if (trappedAlly) {
+        console.log('[Rescue] Trapped ally detected in room:', targetRoomId, 'ally:', trappedAlly.playerId);
+        syncGameStateToServer();
+        openRescueTrappedModal(mountEl, trappedAlly.playerId, trappedAlly.playerName, trappedAlly.trappedInfo);
+        return; // Wait for rescue decision
+    }
+
+    // Apply Vault spawn position if entering Vault room
+    applyVaultSpawnPosition(playerId, targetRoom, currentGameState);
+
+    // Check if target room has tokens and hasn't been drawn yet
+    if (targetRoom.tokens && targetRoom.tokens.length > 0) {
+        if (!currentGameState.playerState.drawnRooms) {
+            currentGameState.playerState.drawnRooms = [];
+        }
+        if (!currentGameState.playerState.drawnRooms.includes(targetRoomId)) {
+            currentGameState.playerState.drawnRooms.push(targetRoomId);
+            // Sync state BEFORE token drawing (so other players see position update)
+            syncGameStateToServer();
+            initTokenDrawing(mountEl, targetRoom.tokens);
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return; // Don't end turn yet
+        }
+    }
+
+    // Check if turn ended - auto advance to next player
+    if (currentGameState.playerMoves[playerId] <= 0) {
+        console.log('[Turn] Player', playerId, 'moves depleted after stairs move, advancing turn');
+        advanceToNextTurn();
+    }
+
+    // Sync state with server in multiplayer mode
+    syncGameStateToServer();
+
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Handle movement after using elevator (moves to specific floor)
+ * @param {HTMLElement} mountEl
+ * @param {string} targetFloor - Target floor: 'upper', 'ground', or 'basement'
+ */
+function handleMoveAfterElevator(mountEl, targetFloor) {
+    if (!currentGameState || currentGameState.gamePhase !== 'playing') return;
+
+    const playerId = mySocketId;
+    const currentTurnPlayer = currentGameState.turnOrder[currentGameState.currentTurnIndex];
+
+    // Only allow move if it's this player's turn
+    if (playerId !== currentTurnPlayer) {
+        console.log(`Not ${playerId}'s turn, current turn: ${currentTurnPlayer}`);
+        return;
+    }
+
+    const moves = currentGameState.playerMoves[playerId] || 0;
+    if (moves <= 0) {
+        console.log(`No moves left for ${playerId}`);
+        return;
+    }
+
+    // Get current position and map data
+    const currentRoomId = currentGameState.playerState.playerPositions[playerId];
+    const mapConnections = currentGameState.map?.connections || {};
+    const revealedRooms = currentGameState.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[currentRoomId];
+
+    if (!currentRoom) {
+        console.log('[Elevator] Current room not found:', currentRoomId);
+        return;
+    }
+
+    // Check if player is in Mystic Elevator room
+    const isMysticElevator = currentRoom.name === 'Mystic Elevator' ||
+                             currentRoom.name?.vi?.includes('Thang máy huyền bí');
+
+    if (isMysticElevator) {
+        // === MYSTIC ELEVATOR: Move the entire room to target floor ===
+        // According to rules: Once per turn, roll 2 dice and move this room next to any open door on the determined floor
+        // Does NOT cost movement points - it's a room ability
+        console.log('[MysticElevator] Moving Mystic Elevator from', currentRoom.floor, 'to', targetFloor);
+
+        // === CHECK EXIT ROOM EFFECT ===
+        // Check if current room has EXIT effect that needs dice roll
+        const currentRoomName = currentRoom.name;
+        if (needsRoomEffectRoll(currentRoomName, 'exit', playerId)) {
+            console.log('[RoomEffect] EXIT effect triggered for room:', currentRoomName);
+            openRoomEffectDiceModal(mountEl, currentRoomName, {
+                direction: 'elevator',
+                targetFloor: targetFloor,
+                targetRoomId: null
+            });
+            return; // Wait for dice roll
+        }
+
+        // Store original floor
+        const originalFloor = currentRoom.floor;
+
+        // IMPORTANT: Clear all old connections when changing floors
+        // This prevents the elevator from being connected to rooms on the old floor
+        if (mapConnections[currentRoomId]) {
+            console.log('[MysticElevator] Clearing old connections for floor change:', mapConnections[currentRoomId]);
+            // Remove reverse connections from other rooms
+            Object.entries(mapConnections[currentRoomId]).forEach(([dir, connectedRoomId]) => {
+                console.log('[MysticElevator] Removing reverse connection from', connectedRoomId, 'direction:', getOppositeDoor(dir));
+                if (mapConnections[connectedRoomId]) {
+                    const oppositeDir = getOppositeDoor(dir);
+                    delete mapConnections[connectedRoomId][oppositeDir];
+                }
+            });
+            // Clear all connections from this room
+            mapConnections[currentRoomId] = {};
+            console.log('[MysticElevator] All connections cleared');
+        }
+
+        // Update room's floor (keep same x, y position - room stays at same coordinates, different floor)
+        currentRoom.floor = targetFloor;
+
+        // IMPORTANT: Update the room in revealedRooms to ensure consistency
+        if (!revealedRooms[currentRoomId]) {
+            revealedRooms[currentRoomId] = currentRoom;
+        }
+
+        // Update reserved position tracking
+        // Remove old floor position from reserved map
+        const oldPosKey = `${originalFloor},${currentRoom.x},${currentRoom.y}`;
+        mysticElevatorPositions.delete(oldPosKey);
+        console.log('[MysticElevator] Removed reservation for old position:', oldPosKey);
+
+        // Add new floor position to reserved map
+        const newPosKey = `${targetFloor},${currentRoom.x},${currentRoom.y}`;
+        mysticElevatorPositions.set(newPosKey, currentRoomId);
+        console.log('[MysticElevator] Reserved new position:', newPosKey, 'for room:', currentRoomId);
+
+        console.log('[MysticElevator] Moved from', originalFloor, 'to', targetFloor, 'at position', currentRoom.x, ',', currentRoom.y);
+        console.log('[MysticElevator] Room floor in revealedRooms:', revealedRooms[currentRoomId].floor);
+
+        // Clear completed combat flag when leaving current floor
+        clearCompletedCombatForPlayer(playerId, currentRoomId);
+
+        // NOTE: Do NOT deduct movement - Mystic Elevator is a room ability, not movement
+        // NOTE: Do NOT auto-advance turn - player can continue moving
+
+        // Sync state with server in multiplayer mode
+        syncGameStateToServer();
+
+        updateGameUI(mountEl, currentGameState, mySocketId);
+        return;
+    }
+
+    // === REGULAR ELEVATOR SHAFTS (not Mystic Elevator) ===
+    // This is for rooms that connect to elevator shafts
+
+    // === CHECK EXIT ROOM EFFECT ===
+    // Check if current room has EXIT effect that needs dice roll
+    if (currentRoom && currentRoom.name) {
+        const currentRoomName = currentRoom.name;
+        if (needsRoomEffectRoll(currentRoomName, 'exit', playerId)) {
+            console.log('[RoomEffect] EXIT effect triggered for room:', currentRoomName);
+            openRoomEffectDiceModal(mountEl, currentRoomName, {
+                direction: 'elevator',
+                targetFloor: targetFloor,
+                targetRoomId: null
+            });
+            return; // Wait for dice roll
+        }
+    }
+
+    // Find elevator shaft on current floor
+    const elevatorShafts = currentGameState.map?.elevatorShafts || {};
+    const currentShaftId = elevatorShafts[currentRoom.floor];
+
+    if (!currentShaftId) {
+        console.log('[Elevator] No elevator shaft found on current floor:', currentRoom.floor);
+        return;
+    }
+
+    // Get elevator shaft room
+    const elevatorShaftRoom = revealedRooms[currentShaftId];
+    if (!elevatorShaftRoom) {
+        console.log('[Elevator] Elevator shaft room not found:', currentShaftId);
+        return;
+    }
+
+    // Check if elevator is present in the shaft
+    if (!elevatorShaftRoom.elevatorPresent) {
+        console.log('[Elevator] No elevator present in shaft:', currentShaftId);
+        return;
+    }
+
+    // Find elevator shaft on target floor
+    const targetShaftId = elevatorShafts[targetFloor];
+    if (!targetShaftId) {
+        console.log('[Elevator] No elevator shaft found on target floor:', targetFloor);
+        return;
+    }
+
+    // Get target elevator shaft room
+    const targetShaftRoom = revealedRooms[targetShaftId];
+    if (!targetShaftRoom) {
+        console.log('[Elevator] Target elevator shaft room not found:', targetShaftId);
+        return;
+    }
+
+    // Check if elevator is present in target shaft
+    if (!targetShaftRoom.elevatorPresent) {
+        console.log('[Elevator] No elevator present in target shaft:', targetShaftId);
+        return;
+    }
+
+    // === CHECK ENTER ROOM EFFECT ===
+    // Check if target room has ENTER effect that needs dice roll
+    const targetRoomName = targetShaftRoom.name;
+    if (targetRoomName && needsRoomEffectRoll(targetRoomName, 'enter', playerId)) {
+        console.log('[RoomEffect] ENTER effect triggered for room:', targetRoomName);
+        openRoomEffectDiceModal(mountEl, targetRoomName, {
+            direction: 'elevator',
+            targetFloor: targetFloor,
+            targetRoomId: targetShaftId
+        });
+        return; // Wait for dice roll
+    }
+
+    // Create connection FIRST
+    if (!mapConnections[currentRoomId]) mapConnections[currentRoomId] = {};
+    if (!mapConnections[targetShaftId]) mapConnections[targetShaftId] = {};
+
+    // Connect to elevator shaft
+    mapConnections[currentRoomId]['elevator'] = targetShaftId;
+    mapConnections[targetShaftId]['elevator'] = currentRoomId;
+
+    // Clear completed combat flag when leaving current room
+    clearCompletedCombatForPlayer(playerId, currentRoomId);
+
+    // Move player FIRST (before combat check)
+    currentGameState.playerState.playerPositions[playerId] = targetShaftId;
+    currentGameState.playerMoves[playerId] = moves - 1;
+
+    // Track entry direction (elevator always enter from elevator)
+    if (!currentGameState.playerState.playerEntryDirections) {
+        currentGameState.playerState.playerEntryDirections = {};
+    }
+    currentGameState.playerState.playerEntryDirections[playerId] = 'elevator';
+
+    // === CHECK COMBAT TRIGGER (after player has moved into room) ===
+    // If haunt is triggered and enemy is in target room, open combat modal
+    const enemyInTargetRoom = getEnemyInRoom(targetShaftId, playerId);
+    if (enemyInTargetRoom) {
+        console.log('[Combat] Enemy detected in room:', targetShaftId, 'enemy:', enemyInTargetRoom.id);
+        // Sync position first so all players see both characters in the same room
+        syncGameStateToServer();
+        // Then open combat modal (player is already in the room)
+        openCombatModal(mountEl, playerId, enemyInTargetRoom.id, null);
+        return; // Wait for combat resolution
+    }
+
+    // === CHECK TRAPPED ALLY (for rescue mechanic - e.g., Mạng nhện) ===
+    const trappedAlly = getTrappedAllyInRoom(targetShaftId, playerId);
+    if (trappedAlly) {
+        console.log('[Rescue] Trapped ally detected in room:', targetShaftId, 'ally:', trappedAlly.playerId);
+        syncGameStateToServer();
+        openRescueTrappedModal(mountEl, trappedAlly.playerId, trappedAlly.playerName, trappedAlly.trappedInfo);
+        return; // Wait for rescue decision
+    }
+
+    // Apply Vault spawn position if entering Vault room
+    applyVaultSpawnPosition(playerId, targetShaftRoom, currentGameState);
+
+    // Check if target room has tokens and hasn't been drawn yet
+    if (targetShaftRoom.tokens && targetShaftRoom.tokens.length > 0) {
+        if (!currentGameState.playerState.drawnRooms) {
+            currentGameState.playerState.drawnRooms = [];
+        }
+        if (!currentGameState.playerState.drawnRooms.includes(targetShaftId)) {
+            currentGameState.playerState.drawnRooms.push(targetShaftId);
+            // Sync state BEFORE token drawing (so other players see position update)
+            syncGameStateToServer();
+            initTokenDrawing(mountEl, targetShaftRoom.tokens);
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return; // Don't end turn yet
+        }
+    }
+
+    // Check if turn ended - auto advance to next player
+    if (currentGameState.playerMoves[playerId] <= 0) {
+        console.log('[Turn] Player', playerId, 'moves depleted after elevator move, advancing turn');
         advanceToNextTurn();
     }
 
@@ -7969,6 +8550,11 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     
     // Always use current floor (room auto-placed on current floor)
     const targetFloor = currentRoom.floor;
+
+    // Debug logging for Mystic Elevator
+    if (currentRoom.name === 'Mystic Elevator' || currentRoom.name?.vi?.includes('Thang máy huyền bí')) {
+        console.log('[PlaceRoom] Placing room from Mystic Elevator, target floor:', targetFloor, 'current room floor:', currentRoom.floor);
+    }
     
     // Generate new room ID and position
     const newRoomId = generateRoomId(roomNameEn);
@@ -8004,7 +8590,14 @@ function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     
     // Add room to revealed rooms
     currentGameState.map.revealedRooms[newRoomId] = newRoom;
-    
+
+    // Track Mystic Elevator position
+    if (roomDef.name.en === 'Mystic Elevator') {
+        const posKey = `${targetFloor},${newRoom.x},${newRoom.y}`;
+        mysticElevatorPositions.set(posKey, newRoomId);
+        console.log('[MysticElevator] Reserved position:', posKey, 'for room:', newRoomId);
+    }
+
     // Add connections (bidirectional)
     const direction = roomDiscoveryModal.direction;
     

@@ -1368,7 +1368,7 @@ export const EVENTS = [
         'Bạn phải đổ xúc xắc Sanity:\n' +
         '4+  Bạn chớp mắt, thì ra chỉ là ảo ảnh. Tăng 1 Sanity.\n' +
         '2-3  Bạn hoảng sợ. Mất 1 Sanity.\n' +
-        '0-1  Bạn thật sự đang ở trong quan tài. Mất 1 Sanity và 1 Might. Nếu Nghĩa địa hoặc Nhà mồ (Graveyard, Crypt) đã được tìm thấy thì đặt nhân vật của bạn vào 1 trong 2 căn phòng đó (bạn tự chọn).',
+        '0-1  Bạn thật sự đang ở trong quan tài. Mất 1 Sanity và 1 Might. Nếu Nghĩa địa hoặc Hầm mộ (Graveyard, Crypt) đã được tìm thấy thì đặt nhân vật của bạn vào 1 trong 2 căn phòng đó (bạn tự chọn).',
     },
     immediateRoll: true,
     rollStat: 'sanity',
@@ -1379,7 +1379,7 @@ export const EVENTS = [
         range: '0-1',
         effect: 'loseStats',
         stats: { sanity: 1, might: 1 },
-        then: { effect: 'teleportIfExists', destinations: ['graveyard', 'crypt'], choice: true },
+        then: { effect: 'teleportIfExists', destinations: ['graveyard', 'crypt'] },
       },
     ],
   },
