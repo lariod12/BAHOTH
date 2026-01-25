@@ -122,15 +122,17 @@ http://localhost:5173/#/game/debug
 - Real-time multiplayer synchronization
 
 🚧 **Đang phát triển:**
+- **Event Cards Implementation (13/45 completed - 29%)** - [Chi tiết progress](./EVENT_CARDS_IMPLEMENTATION.md)
 - Haunt phase implementation
 - Combat system
-- Card effects system
+- Token placement system
 - Game save/load
 
 ## Tài liệu
 
 - 📘 **[boardgame_rules.md](./boardgame_rules.md)** - Luật chơi đầy đủ (Vietnamese)
 - 📖 **[src/app/README.md](./src/app/README.md)** - Chi tiết technical architecture
+- 📋 **[EVENT_CARDS_IMPLEMENTATION.md](./EVENT_CARDS_IMPLEMENTATION.md)** - Event cards implementation progress (13/45 done)
 
 ## Development
 
@@ -170,4 +172,4 @@ Dự án này được tạo cho mục đích giáo dục và giải trí.
 
 ---
 
-**Last Updated**: 2026-01-17 @ 19:45
+**Last Updated**: 2025-01-25 (Event Cards Implementation: 13/45 completed)
