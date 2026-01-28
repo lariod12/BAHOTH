@@ -6,6 +6,20 @@ import { ROOMS } from '../data/mapsData.js';
 import { ITEMS, EVENTS, OMENS } from '../data/cardsData.js';
 import { calculateVaultLayout, calculatePlayerSpawnPosition } from '../utils/vaultLayout.js';
 import { createDefaultHauntState, isHauntTriggered, getFaction, isAlly, isEnemy, getFactionLabel, getTraitorId, applyHauntState } from '../utils/factionUtils.js';
+import {
+    findMatchingOutcome,
+    getStatValue,
+    getPlayerStatForDice as getPlayerStatForDiceUtil,
+    applyStatChange as applyStatChangeUtil,
+    applyMultipleStatChanges as applyMultipleStatChangesUtil,
+    findRoomIdByDestination as findRoomIdByDestinationUtil,
+    findExistingRooms as findExistingRoomsUtil,
+    applyTrappedEffect as applyTrappedEffectUtil,
+    applyPersistentEffect as applyPersistentEffectUtil,
+    applyEventDiceResult as computeEventDiceResult,
+    DESTINATION_TO_ROOM_NAME,
+    STAT_LABELS
+} from '../utils/eventEffects.js';
 
 // Room discovery modal state
 /** @type {{ isOpen: boolean; direction: string; floor: string; doorSide: string; selectedRoom: string | null; currentRotation: number; selectedFloor: string | null; needsFloorSelection: boolean } | null} */
@@ -657,21 +671,7 @@ function applyVaultSpawnPosition(playerId, targetRoom, gameState) {
     console.log(`[Vault] Player ${playerId} spawn position set to ${vaultLayout.nearDoorZone}`, spawnPosition);
 }
 
-/**
- * Get stat value from character's trait track at given index
- * @param {string} characterId
- * @param {'speed' | 'might' | 'sanity' | 'knowledge'} trait
- * @param {number} currentIndex
- * @returns {number}
- */
-function getStatValue(characterId, trait, currentIndex) {
-    const char = CHARACTER_BY_ID[characterId];
-    if (!char) return 0;
-    const traitData = char.traits[trait];
-    if (!traitData) return 0;
-    const idx = Math.max(0, Math.min(7, currentIndex));
-    return traitData.track[idx];
-}
+// getStatValue is now imported from eventEffects.js
 
 /**
  * Get all stat values for a player from characterData
@@ -757,25 +757,13 @@ function getEventCardById(cardId) {
 
 /**
  * Get player's current stat value for dice count
+ * Thin wrapper that passes currentGameState to the utility function
  * @param {string} playerId - Player ID
  * @param {string} stat - Stat name (speed, might, sanity, knowledge)
  * @returns {number}
  */
 function getPlayerStatForDice(playerId, stat) {
-    if (!currentGameState || !playerId || !stat) return 4; // default
-
-    const player = currentGameState.players?.find(p => p.id === playerId);
-    if (!player) return 4;
-
-    const charData = currentGameState.playerState?.characterData?.[playerId];
-    if (!charData || !charData.stats) {
-        // Use starting index from character definition
-        const char = CHARACTER_BY_ID[player.characterId];
-        if (!char) return 4;
-        return char.traits[stat]?.track[char.traits[stat]?.startIndex] || 4;
-    }
-
-    return getStatValue(player.characterId, stat, charData.stats[stat]);
+    return getPlayerStatForDiceUtil(currentGameState, playerId, stat);
 }
 
 /**
@@ -820,58 +808,6 @@ function openEventDiceModal(mountEl, cardId, tokenDrawingContext = null) {
     updateGameUI(mountEl, currentGameState, mySocketId);
 }
 
-/**
- * Parse roll result range and check if result matches
- * @param {string} range - Range string like "4+", "1-3", "0"
- * @param {number} result - Dice result
- * @returns {boolean}
- */
-function matchesRollRange(range, result) {
-    if (!range) return false;
-
-    // Handle "X+" format (X or higher)
-    if (range.endsWith('+')) {
-        const min = parseInt(range.slice(0, -1), 10);
-        return result >= min;
-    }
-
-    // Handle "X-Y" format (range)
-    if (range.includes('-')) {
-        const [minStr, maxStr] = range.split('-');
-        const min = parseInt(minStr, 10);
-        const max = parseInt(maxStr, 10);
-        return result >= min && result <= max;
-    }
-
-    // Handle single number
-    const exact = parseInt(range, 10);
-    return result === exact;
-}
-
-/**
- * Find matching outcome for dice result
- * @param {Array} rollResults - Array of roll result outcomes
- * @param {number} result - Dice result
- * @returns {object|null}
- */
-function findMatchingOutcome(rollResults, result) {
-    if (!rollResults || !Array.isArray(rollResults)) {
-        console.log('[findMatchingOutcome] No rollResults array');
-        return null;
-    }
-
-    console.log('[findMatchingOutcome] Checking result:', result, 'against', rollResults.length, 'outcomes');
-    for (const outcome of rollResults) {
-        const matches = matchesRollRange(outcome.range, result);
-        console.log('[findMatchingOutcome] Range:', outcome.range, 'matches:', matches);
-        if (matches) {
-            return outcome;
-        }
-    }
-
-    console.log('[findMatchingOutcome] No match found');
-    return null;
-}
 
 /**
  * Open damage dice modal
@@ -1435,41 +1371,23 @@ function closeDamageDistributionModal(mountEl) {
 
 /**
  * Apply trapped effect to a player
+ * Thin wrapper that calls utility function then handles UI/sync
  * @param {HTMLElement} mountEl
  * @param {string} playerId
  * @param {object} eventCard - Event card with trappedEffect
  */
 function applyTrappedEffect(mountEl, playerId, eventCard) {
-    if (!eventCard.trappedEffect) return;
+    const trappedRecord = applyTrappedEffectUtil(currentGameState, playerId, eventCard);
 
-    const { escapeRoll, allyCanHelp, allyFailure, autoEscapeAfter } = eventCard.trappedEffect;
-
-    // Initialize trapped state in player data
-    if (!currentGameState.playerState.trappedPlayers) {
-        currentGameState.playerState.trappedPlayers = {};
-    }
-
-    currentGameState.playerState.trappedPlayers[playerId] = {
-        eventId: eventCard.id,
-        eventName: eventCard.name?.vi || 'Event',
-        escapeRoll: escapeRoll,
-        allyCanHelp: allyCanHelp,
-        allyFailure: allyFailure || 'nothing', // 'alsoTrapped' or 'nothing'
-        autoEscapeAfter: autoEscapeAfter,
-        turnsTrapped: 1 // Start at 1 since this is the turn they got trapped
-    };
+    if (!trappedRecord) return;
 
     console.log('[Trapped] Player', playerId, 'is now trapped by', eventCard.name?.vi);
-
-    // Set moves to 0 immediately - trapped player can't move this turn
-    if (currentGameState.playerMoves) {
-        currentGameState.playerMoves[playerId] = 0;
-    }
 
     // Sync state to server
     syncGameStateToServer();
 
     // Show notification - when closed, turn will end
+    const { escapeRoll, autoEscapeAfter } = trappedRecord;
     openEventResultModal(
         mountEl,
         'BI MAC KET!',
@@ -1480,30 +1398,15 @@ function applyTrappedEffect(mountEl, playerId, eventCard) {
 
 /**
  * Apply persistent effect to a player
+ * Thin wrapper that calls utility function then handles UI/sync
  * @param {HTMLElement} mountEl
  * @param {string} playerId
  * @param {object} eventCard - Event card with persistentEffect
  */
 function applyPersistentEffect(mountEl, playerId, eventCard) {
-    if (!eventCard.persistentEffect) return;
+    const persistentRecord = applyPersistentEffectUtil(currentGameState, playerId, eventCard);
 
-    const { onTurnStart, removeConditions } = eventCard.persistentEffect;
-
-    // Initialize persistent effects in player data
-    if (!currentGameState.playerState.persistentEffects) {
-        currentGameState.playerState.persistentEffects = {};
-    }
-    if (!currentGameState.playerState.persistentEffects[playerId]) {
-        currentGameState.playerState.persistentEffects[playerId] = [];
-    }
-
-    // Add this persistent effect
-    currentGameState.playerState.persistentEffects[playerId].push({
-        eventId: eventCard.id,
-        eventName: eventCard.name?.vi || 'Event',
-        onTurnStart: onTurnStart,
-        removeConditions: removeConditions
-    });
+    if (!persistentRecord) return;
 
     console.log('[Persistent] Player', playerId, 'now has persistent effect from', eventCard.name?.vi);
 
@@ -1512,6 +1415,7 @@ function applyPersistentEffect(mountEl, playerId, eventCard) {
 
     // Build description of the effect
     let effectDesc = '';
+    const { onTurnStart } = persistentRecord;
     if (onTurnStart) {
         if (onTurnStart.effect === 'loseStat' && onTurnStart.statType === 'physical') {
             effectDesc = 'Giam 1 chi so vat li (Speed/Might) moi luot.';
@@ -2184,147 +2088,38 @@ function needsRoomEffectRoll(roomName, trigger, playerId) {
 
 /**
  * Apply stat change to player
+ * Thin wrapper that passes currentGameState to the utility function
  * @param {string} playerId - Player ID
  * @param {string} stat - Stat name
  * @param {number} amount - Amount to change (positive to gain, negative to lose)
  */
 function applyStatChange(playerId, stat, amount) {
-    if (!currentGameState || !playerId || !stat) return;
-
-    const player = currentGameState.players?.find(p => p.id === playerId);
-    if (!player) {
-        console.warn(`[StatChange] Player not found: ${playerId}`);
-        return;
+    const result = applyStatChangeUtil(currentGameState, playerId, stat, amount);
+    if (result) {
+        console.log(`[StatChange] Player ${playerId} ${stat}: ${result.beforeIndex} -> ${result.afterIndex} (${amount > 0 ? '+' : ''}${amount})`);
     }
-
-    // Initialize playerState if needed
-    if (!currentGameState.playerState) {
-        currentGameState.playerState = {};
-    }
-
-    // Initialize characterData if needed
-    if (!currentGameState.playerState.characterData) {
-        currentGameState.playerState.characterData = {};
-    }
-
-    if (!currentGameState.playerState.characterData[playerId]) {
-        const char = CHARACTER_BY_ID[player.characterId];
-        if (!char || !char.traits) {
-            console.warn(`[StatChange] Character data not found for: ${player.characterId}`);
-            // Use default values if character not found
-            currentGameState.playerState.characterData[playerId] = {
-                characterId: player.characterId,
-                stats: { speed: 3, might: 3, sanity: 3, knowledge: 3 }
-            };
-        } else {
-            currentGameState.playerState.characterData[playerId] = {
-                characterId: player.characterId,
-                stats: {
-                    speed: char.traits.speed?.startIndex ?? 3,
-                    might: char.traits.might?.startIndex ?? 3,
-                    sanity: char.traits.sanity?.startIndex ?? 3,
-                    knowledge: char.traits.knowledge?.startIndex ?? 3,
-                }
-            };
-        }
-    }
-
-    const charData = currentGameState.playerState.characterData[playerId];
-    if (!charData || !charData.stats) {
-        console.warn(`[StatChange] Character data invalid for player: ${playerId}`);
-        return;
-    }
-
-    const currentIndex = charData.stats[stat] ?? 0;
-    const newIndex = Math.max(0, Math.min(7, currentIndex + amount));
-    charData.stats[stat] = newIndex;
-
-    console.log(`[StatChange] Player ${playerId} ${stat}: ${currentIndex} -> ${newIndex} (${amount > 0 ? '+' : ''}${amount})`);
 }
 
-/**
- * Destination name mapping from event data (snake_case) to room names
- */
-const DESTINATION_TO_ROOM_NAME = {
-    'entrance_hall': 'Entrance Hall',
-    'foyer': 'Foyer',
-    'grand_staircase': 'Grand Staircase',
-    'chapel': 'Chapel',
-    'graveyard': 'Graveyard',
-    'crypt': 'Crypt',
-    'patio': 'Patio',
-    'gardens': 'Gardens',
-    'tower': 'Tower',
-    'balcony': 'Balcony',
-    'basement_landing': 'Basement Landing',
-};
+// DESTINATION_TO_ROOM_NAME is now imported from eventEffects.js
 
 /**
  * Find room ID by destination name (from event card data)
+ * Thin wrapper that passes currentGameState to the utility function
  * @param {string} destination - Destination name from event (e.g., 'entrance_hall')
  * @returns {string|null} - Room ID if found, null otherwise
  */
 function findRoomIdByDestination(destination) {
-    if (!currentGameState?.map?.revealedRooms) {
-        console.warn('[findRoomIdByDestination] No revealed rooms in game state');
-        return null;
-    }
-
-    const revealedRooms = currentGameState.map.revealedRooms;
-    const targetRoomName = DESTINATION_TO_ROOM_NAME[destination];
-
-    if (!targetRoomName) {
-        console.warn('[findRoomIdByDestination] Unknown destination:', destination);
-        return null;
-    }
-
-    // Search for room by name (supports both English name and Vietnamese name with English in parentheses)
-    for (const [roomId, room] of Object.entries(revealedRooms)) {
-        if (room.name === targetRoomName ||
-            room.name?.includes(`(${targetRoomName})`) ||
-            room.name?.en === targetRoomName) {
-            console.log(`[findRoomIdByDestination] Found ${destination} at room ID: ${roomId}`);
-            return roomId;
-        }
-    }
-
-    console.warn(`[findRoomIdByDestination] Room not found for destination: ${destination} (${targetRoomName})`);
-    return null;
+    return findRoomIdByDestinationUtil(currentGameState, destination);
 }
 
 /**
  * Find all revealed rooms from a list of destinations
+ * Thin wrapper that passes currentGameState to the utility function
  * @param {string[]} destinations - Array of destination keys (e.g., ['graveyard', 'crypt'])
  * @returns {Array<{roomId: string, name: string, destination: string}>} Array of found rooms
  */
 function findExistingRooms(destinations) {
-    if (!currentGameState?.map?.revealedRooms || !destinations?.length) {
-        return [];
-    }
-
-    const results = [];
-    const revealedRooms = currentGameState.map.revealedRooms;
-
-    for (const dest of destinations) {
-        const targetRoomName = DESTINATION_TO_ROOM_NAME[dest];
-        if (!targetRoomName) continue;
-
-        for (const [roomId, room] of Object.entries(revealedRooms)) {
-            if (room.name === targetRoomName ||
-                room.name?.includes(`(${targetRoomName})`) ||
-                room.name?.en === targetRoomName) {
-                results.push({
-                    roomId,
-                    name: room.name,
-                    destination: dest
-                });
-                break; // Found this destination, move to next
-            }
-        }
-    }
-
-    console.log('[findExistingRooms] Found rooms:', results);
-    return results;
+    return findExistingRoomsUtil(currentGameState, destinations);
 }
 
 /**
@@ -2471,14 +2266,12 @@ function executeForcedAttack(mountEl, attackerId, targetType) {
 
 /**
  * Apply multiple stat changes
+ * Thin wrapper that passes currentGameState to the utility function
  * @param {string} playerId - Player ID
  * @param {object} stats - Object with stat names as keys and amounts as values
  */
 function applyMultipleStatChanges(playerId, stats) {
-    if (!stats) return;
-    for (const [stat, amount] of Object.entries(stats)) {
-        applyStatChange(playerId, stat, -amount); // negative because "lose" means subtract
-    }
+    applyMultipleStatChangesUtil(currentGameState, playerId, stats);
 }
 
 /**
@@ -2685,11 +2478,14 @@ function applyEventDiceResult(mountEl, result, stat) {
             break;
         }
 
-        case 'drawItem':
-            console.log('[EventDice] Effect: drawItem');
-            // TODO: Implement draw item
-            closeEventDiceModal(mountEl);
+        case 'drawItem': {
+            const drawCount = outcome.amount || 1;
+            const itemTokens = Array(drawCount).fill('item');
+            console.log('[EventDice] Effect: drawItem, count:', drawCount);
+            eventDiceModal = null;
+            initTokenDrawing(mountEl, itemTokens);
             break;
+        }
 
         case 'attack':
             console.log('[EventDice] Effect: attack with', outcome.attackerDice, 'dice');
@@ -8994,8 +8790,9 @@ function confirmTokenDrawing(mountEl) {
         };
     }
 
-    // Collect events that require immediate roll
+    // Collect events that require immediate roll or direct effect
     let immediateRollEvent = null;
+    let directEffectEvent = null;
 
     // Add drawn cards to player inventory
     tokenDrawingModal.tokensToDrawn.forEach(token => {
@@ -9003,9 +8800,17 @@ function confirmTokenDrawing(mountEl) {
             const cardType = token.type === 'omen' ? 'omens' : token.type === 'event' ? 'events' : 'items';
             currentGameState.playerState.playerCards[playerId][cardType].push(token.selectedCard);
 
-            // Check if this event requires immediate dice roll
-            if (token.type === 'event' && checkEventRequiresImmediateRoll(token.selectedCard)) {
-                immediateRollEvent = token.selectedCard;
+            if (token.type === 'event') {
+                // Check if this event requires immediate dice roll
+                if (checkEventRequiresImmediateRoll(token.selectedCard)) {
+                    immediateRollEvent = token.selectedCard;
+                } else {
+                    // Check if event has direct effect (no roll needed)
+                    const eventCard = EVENTS.find(e => e.id === token.selectedCard);
+                    if (eventCard && eventCard.effect === 'drawItem') {
+                        directEffectEvent = eventCard;
+                    }
+                }
             }
         }
     });
@@ -9027,6 +8832,16 @@ function confirmTokenDrawing(mountEl) {
         syncGameStateToServer();
         openEventDiceModal(mountEl, immediateRollEvent, tokenDrawingContext);
         return; // Don't proceed to next turn yet
+    }
+
+    // Handle direct effect events (drawItem without dice roll)
+    if (directEffectEvent) {
+        const drawCount = directEffectEvent.amount || 1;
+        const itemTokens = Array(drawCount).fill('item');
+        console.log('[TokenDrawing] Direct effect event:', directEffectEvent.id, 'drawItem count:', drawCount);
+        syncGameStateToServer();
+        initTokenDrawing(mountEl, itemTokens);
+        return;
     }
 
     // Check if turn ended (no more moves) - advance to next player

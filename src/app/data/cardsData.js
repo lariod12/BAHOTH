@@ -519,7 +519,7 @@ export const EVENTS = [
   {
     id: 'anh_phan_chieu',
     type: 'event',
-    name: { vi: 'Ảnh phản chiếu' },
+    name: { vi: 'Ảnh phản chiếu (1)' },
     text: {
       vi:
         'Có một chiếc gương cũ trong phòng. Hình ảnh phản chiếu của bạn xuất hiện trong gương. Bạn nhận ra đó chính là bản thân mình ở chiều không gian khác. Kẻ trong gương viết lên dòng chữ:\n' +
@@ -809,7 +809,7 @@ export const EVENTS = [
   {
     id: 'anh_phan_chieu_2',
     type: 'event',
-    name: { vi: 'Ảnh phản chiếu' },
+    name: { vi: 'Ảnh phản chiếu (2)' },
     text: {
       vi:
         'Nếu bạn không có lá bài Item nào thì lá event này sẽ dành cho người chơi ở bên trái của bạn (nếu người đó có lá Item). Hủy bỏ lá bài này nếu tất cả người chơi đều không có lá Item nào.\n' +

@@ -57,6 +57,8 @@ src/app/
 │   └── socketClient.js                          # 14KB  | 513 lines  | Socket.IO client wrapper
 │
 ├── utils/                                       # Utility functions and helpers
+│   ├── eventEffects.js                          # 24KB  | 650 lines  | Event card effect logic (testable)
+│   ├── eventEffects.test.js                     # 22KB  | 580 lines  | Property-based tests for events
 │   ├── factionUtils.js                          # 5KB   | 170 lines  | Faction/haunt system utilities
 │   ├── vaultLayout.js                           # 8KB   | 249 lines  | Vault room layout calculator
 │   └── vaultLayout.test.js                      # 4KB   | 112 lines  | Property-based tests
@@ -70,7 +72,7 @@ src/app/
     └── tutorialBooksView.js                     # 2KB   | 63 lines   | Tutorial menu
 ```
 
-**Total**: 18 files | ~455KB | ~13,200+ lines of code
+**Total**: 20 files | ~500KB | ~14,400+ lines of code
 
 ---
 
@@ -861,6 +863,65 @@ await socketClient.toggleReady();
 ---
 
 ### utils/
+
+#### `eventEffects.js` (~650 lines, 24KB)
+
+**Purpose**: Pure functions for processing event card effects. Extracted from gameView.js to enable unit testing without DOM or Socket.IO dependencies.
+
+**Key Concepts**:
+- **Stat Changes**: Functions modify stat indices (0-7) in game state
+- **Effect Dispatch**: Main function returns result descriptors for UI handling
+- **Testable Logic**: All functions receive `gameState` as parameter instead of using module-level state
+
+**Key Functions**:
+```javascript
+// Pure predicates (no dependencies)
+export function matchesRollRange(range, result)     // Checks if roll matches "4+", "2-3", "0"
+export function findMatchingOutcome(rollResults, result)  // Finds first matching outcome
+
+// State lookups (gameState in, value out)
+export function getStatValue(characterId, trait, index)   // Gets actual stat value from track
+export function getPlayerStatForDice(gameState, playerId, stat)  // Gets dice count for stat roll
+export function findRoomIdByDestination(gameState, destination)  // Finds room by event destination
+export function findExistingRooms(gameState, destinations)       // Finds multiple revealed rooms
+
+// State mutations (gameState in, mutated + result out)
+export function applyStatChange(gameState, playerId, stat, amount)
+// Returns: { playerId, stat, amount, beforeIndex, afterIndex }
+
+export function applyMultipleStatChanges(gameState, playerId, stats)
+// Returns: Array of change records
+
+export function applyTrappedEffect(gameState, playerId, eventCard)
+// Returns: trappedRecord written to gameState
+
+export function applyPersistentEffect(gameState, playerId, eventCard)
+// Returns: persistentRecord added to gameState
+
+// Main dispatcher (returns EventEffectResult for UI handling)
+export function applyEventDiceResult(gameState, playerId, eventCard, result, rolledStat)
+// Returns: { type, displayTitle, displayMessage, displaySeverity, ...effectSpecificData }
+```
+
+**Usage Example**:
+```javascript
+import { applyStatChange, matchesRollRange, findMatchingOutcome } from './utils/eventEffects.js';
+
+// Check roll outcome
+if (matchesRollRange('4+', diceResult)) {
+    // Success case
+}
+
+// Apply stat change (mutates gameState)
+const result = applyStatChange(gameState, playerId, 'speed', 2);
+console.log(`${result.stat}: ${result.beforeIndex} -> ${result.afterIndex}`);
+```
+
+**Testing**: Has comprehensive property-based tests in `eventEffects.test.js` using fast-check (49 tests, 100 runs each).
+
+**Pattern**: Pure functional utilities that receive gameState as parameter. Returns descriptive result objects instead of triggering side effects directly.
+
+---
 
 #### `factionUtils.js` (~170 lines, 5KB)
 
@@ -1863,7 +1924,7 @@ function renderComponent(props) {
 
 ---
 
-**Last Updated**: 2026-01-18 @ Faction system added (factionUtils.js)
+**Last Updated**: 2026-01-28 @ Event effects extracted to testable module (eventEffects.js)
 
 **Maintainers**: See [package.json](../../package.json) for contact info
 

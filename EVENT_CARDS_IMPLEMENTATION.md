@@ -4,7 +4,7 @@
 
 Dự án triển khai đầy đủ logic cho **45 event cards** trong game Betrayal at House on the Hill. Mỗi event được implement riêng biệt và cần được test + confirm trước khi chuyển sang event tiếp theo.
 
-**Trạng thái hiện tại**: 14/45 events đã hoàn thành (31% complete)
+**Trạng thái hiện tại**: 15/45 events đã hoàn thành (33% complete)
 
 ---
 
@@ -59,13 +59,13 @@ Những events có `immediateRoll: true` với stat rolls và outcomes đơn gi�
 
 ---
 
-### ⏳ Group 2: Draw Card Effects (0/2 completed)
+### 🔄 Group 2: Draw Card Effects (1/2 completed)
 
 Events yêu cầu draw Item/Event cards từ deck.
 
 | # | ID | Name (VI) | Status | Notes |
 |---|----|-----------|----|-------|
-| 15 | `anh_phan_chieu` | Ảnh phản chiếu | ⏳ Pending | Draw 1 Item |
+| 15 | `anh_phan_chieu` | Ảnh phản chiếu | ✅ Done | Draw 1 Item (direct effect + dice outcome) |
 | 16 | `anh_phan_chieu_2` | Ảnh phản chiếu (2) | ⏳ Pending | Return Item, conditional |
 
 **Implementation Requirements:**
@@ -387,7 +387,37 @@ openTeleportChoiceModal(mountEl, rooms, preMessage)
 
 ## Testing Guide
 
-### Debug Mode
+### Unit Testing (Recommended)
+
+Event logic đã được extract ra `src/app/utils/eventEffects.js` để có thể test bằng unit tests.
+
+**Chạy tests:**
+```bash
+yarn test
+```
+
+**Test coverage:**
+- 49 property-based tests với fast-check (100 iterations mỗi test)
+- Tests cho: matchesRollRange, findMatchingOutcome, applyStatChange, applyEventDiceResult, etc.
+- Không cần UI, không cần socket - test pure functions
+
+**Thêm test cho event mới:**
+```javascript
+// Trong src/app/utils/eventEffects.test.js
+it('my new event effect works correctly', () => {
+    const gs = makeGameState('p1', 'madame-zostra', 3);
+    const eventCard = {
+        id: 'my_event',
+        name: { vi: 'My Event' },
+        rollResults: [{ range: '4+', effect: 'gainStat', stat: 'speed', amount: 1 }]
+    };
+    const result = applyEventDiceResult(gs, 'p1', eventCard, 5, 'speed');
+    expect(result.type).toBe('gainStat');
+    expect(gs.playerState.characterData['p1'].stats.speed).toBe(4);
+});
+```
+
+### Debug Mode (Manual Testing)
 
 URL: `http://localhost:5173/#/game/debug`
 
@@ -397,7 +427,7 @@ URL: `http://localhost:5173/#/game/debug`
 - Không cần multiplayer setup
 - Instant testing
 
-### Test Workflow
+### Manual Test Workflow
 
 1. **Start debug mode**
 2. **Move to room** có Event token (màu vàng)
@@ -532,15 +562,15 @@ URL: `http://localhost:5173/#/game/debug`
 
 ## Next Steps
 
-### Immediate Next Task: Event #15 (anh_phan_chieu) - Group 2
+### Immediate Next Task: Event #16 (anh_phan_chieu_2) - Group 2
 
-**Event**: Ảnh phản chiếu
-**Type**: Draw Card Effect (Draw 1 Item)
-**Requires**: New `drawItem` effect handler
+**Event**: Ảnh phản chiếu (2)
+**Type**: Conditional — return Item to deck, gain Knowledge
+**Requires**: `returnItemToDeck` effect, conditional logic (`currentPlayerHas: 'anyItem'`, `passToLeft`)
 
 ### Priorities
 
-1. **Implement Draw Item** (Events #15-16) - Foundation for many events
+1. **Complete Group 2** (Event #16) - Conditional + returnItem
 2. **Fixed Dice Count** (Events #18-21) - Common pattern
 3. **Token Placement System** (Events #22-30) - Big feature
 4. **Multi-player Effects** (Events #31-34) - Complex sync
@@ -548,6 +578,24 @@ URL: `http://localhost:5173/#/game/debug`
 ---
 
 ## Change Log
+
+### 2026-01-28
+
+**Event Testing Architecture Refactor**
+- Extracted event logic to `src/app/utils/eventEffects.js` (pure functions)
+- Added 49 property-based tests in `eventEffects.test.js`
+- gameView.js now uses thin wrappers that call utility functions
+- Can now test event effects with `yarn test` without UI
+- Functions extracted: `matchesRollRange`, `findMatchingOutcome`, `applyStatChange`, `applyTrappedEffect`, `applyPersistentEffect`, `findRoomIdByDestination`, `findExistingRooms`, `applyEventDiceResult`
+
+**Files created:**
+- `src/app/utils/eventEffects.js` (650 lines)
+- `src/app/utils/eventEffects.test.js` (580 lines)
+
+**Files modified:**
+- `src/app/views/gameView.js` (imports + thin wrappers)
+
+---
 
 ### 2025-01-25
 
@@ -563,7 +611,7 @@ URL: `http://localhost:5173/#/game/debug`
 - `src/app/views/gameView.js` (logic change)
 - `src/app/data/cardsData.js` (data change)
 
-**Next**: Event #15 (anh_phan_chieu) - Group 2: Draw Card Effects
+**Next**: Event #16 (anh_phan_chieu_2) - Group 2: Draw Card Effects
 
 ---
 
@@ -581,6 +629,6 @@ URL: `http://localhost:5173/#/game/debug`
 
 ---
 
-**Progress: 14/45 Events Complete (31%)**
+**Progress: 15/45 Events Complete (33%)**
 **Last Updated: 2026-01-28**
-**Current Task: Event #15 - Group 2: Draw Card Effects**
+**Current Task: Event #16 - Group 2: Draw Card Effects**
