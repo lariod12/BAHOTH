@@ -4,7 +4,7 @@
 
 Dự án triển khai đầy đủ logic cho **45 event cards** trong game Betrayal at House on the Hill. Mỗi event được implement riêng biệt và cần được test + confirm trước khi chuyển sang event tiếp theo.
 
-**Trạng thái hiện tại**: 13/45 events đã hoàn thành (29% complete)
+**Trạng thái hiện tại**: 14/45 events đã hoàn thành (31% complete)
 
 ---
 
@@ -29,7 +29,7 @@ Dự án triển khai đầy đủ logic cho **45 event cards** trong game Betra
 
 ## Implementation Status
 
-### ✅ Group 1: Simple Immediate Roll Events (13/14 completed)
+### ✅ Group 1: Simple Immediate Roll Events (14/14 completed)
 
 Những events có `immediateRoll: true` với stat rolls và outcomes đơn giản.
 
@@ -48,7 +48,7 @@ Những events có `immediateRoll: true` với stat rolls và outcomes đơn gi�
 | 11 | `dat_mo` | Đất mộ | ✅ Done | Roll Might, persistent effect |
 | 12 | `chiem_huu` | Chiếm hữu | ✅ Done | Roll choice stat, set to lowest |
 | 13 | `tang_le` | Tang lễ | ✅ Done | Roll Sanity, **random** teleport to Graveyard/Crypt |
-| 14 | `sinh_vat_tuc_gian` | Sinh vật tức giận | ⏳ Next | Roll Speed, damage |
+| 14 | `sinh_vat_tuc_gian` | Sinh vật tức giận | ✅ Done | Roll Speed, damage |
 
 **Key Implementation Details (Event #13):**
 - Random teleport thay vì cho player chọn
@@ -532,38 +532,18 @@ URL: `http://localhost:5173/#/game/debug`
 
 ## Next Steps
 
-### Immediate Next Task: Event #14 (sinh_vat_tuc_gian)
+### Immediate Next Task: Event #15 (anh_phan_chieu) - Group 2
 
-**Event**: Sinh vật tức giận
-**Type**: Simple immediate roll (Roll Speed, damage)
-**Expected**: Should work with existing code, just need to verify
+**Event**: Ảnh phản chiếu
+**Type**: Draw Card Effect (Draw 1 Item)
+**Requires**: New `drawItem` effect handler
 
-**Data structure:**
-```javascript
-{
-  id: 'sinh_vat_tuc_gian',
-  immediateRoll: true,
-  rollStat: 'speed',
-  rollResults: [
-    { range: 'X+', effect: 'nothing' },
-    { range: '0-Y', effect: 'physicalDamage', dice: Z }
-  ]
-}
-```
+### Priorities
 
-**Implementation steps:**
-1. Verify event data in `cardsData.js`
-2. Test in debug mode
-3. Confirm all outcomes work
-4. Mark done if pass
-
-### Future Priorities
-
-1. **Complete Group 1** (Event #14) - 1 event remaining
-2. **Implement Draw Item** (Events #15-16) - Foundation for many events
-3. **Fixed Dice Count** (Events #18-21) - Common pattern
-4. **Token Placement System** (Events #22-30) - Big feature
-5. **Multi-player Effects** (Events #31-34) - Complex sync
+1. **Implement Draw Item** (Events #15-16) - Foundation for many events
+2. **Fixed Dice Count** (Events #18-21) - Common pattern
+3. **Token Placement System** (Events #22-30) - Big feature
+4. **Multi-player Effects** (Events #31-34) - Complex sync
 
 ---
 
@@ -583,7 +563,7 @@ URL: `http://localhost:5173/#/game/debug`
 - `src/app/views/gameView.js` (logic change)
 - `src/app/data/cardsData.js` (data change)
 
-**Next**: Event #14 (sinh_vat_tuc_gian)
+**Next**: Event #15 (anh_phan_chieu) - Group 2: Draw Card Effects
 
 ---
 
@@ -601,6 +581,6 @@ URL: `http://localhost:5173/#/game/debug`
 
 ---
 
-**Progress: 13/45 Events Complete (29%)**
-**Last Updated: 2025-01-25**
-**Current Task: Event #14**
+**Progress: 14/45 Events Complete (31%)**
+**Last Updated: 2026-01-28**
+**Current Task: Event #15 - Group 2: Draw Card Effects**

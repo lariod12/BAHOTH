@@ -8114,47 +8114,69 @@ function handleMoveAfterElevator(mountEl, targetFloor) {
             return; // Wait for dice roll
         }
 
-        // Store original floor
+        // Store original floor and position before any modifications
         const originalFloor = currentRoom.floor;
+        const originalX = currentRoom.x;
+        const originalY = currentRoom.y;
 
         // IMPORTANT: Clear all old connections when changing floors
-        // This prevents the elevator from being connected to rooms on the old floor
         if (mapConnections[currentRoomId]) {
             console.log('[MysticElevator] Clearing old connections for floor change:', mapConnections[currentRoomId]);
-            // Remove reverse connections from other rooms
             Object.entries(mapConnections[currentRoomId]).forEach(([dir, connectedRoomId]) => {
-                console.log('[MysticElevator] Removing reverse connection from', connectedRoomId, 'direction:', getOppositeDoor(dir));
                 if (mapConnections[connectedRoomId]) {
                     const oppositeDir = getOppositeDoor(dir);
                     delete mapConnections[connectedRoomId][oppositeDir];
                 }
             });
-            // Clear all connections from this room
             mapConnections[currentRoomId] = {};
             console.log('[MysticElevator] All connections cleared');
         }
 
-        // Update room's floor (keep same x, y position - room stays at same coordinates, different floor)
-        currentRoom.floor = targetFloor;
+        // Find placement on target floor (door-to-door or fallback)
+        const placement = findElevatorPlacement(targetFloor, revealedRooms, mapConnections);
 
-        // IMPORTANT: Update the room in revealedRooms to ensure consistency
+        if (placement) {
+            // Update elevator position and floor
+            currentRoom.x = placement.x;
+            currentRoom.y = placement.y;
+            currentRoom.floor = targetFloor;
+            currentRoom.rotation = placement.rotation;
+            currentRoom.doors = rotateRoomDoors(['north'], placement.rotation);
+
+            if (placement.connectedRoomId && placement.connectedDirection) {
+                // Door-to-door: create bidirectional connection
+                if (!mapConnections[currentRoomId]) mapConnections[currentRoomId] = {};
+                if (!mapConnections[placement.connectedRoomId]) mapConnections[placement.connectedRoomId] = {};
+
+                mapConnections[currentRoomId][placement.connectedDirection] = placement.connectedRoomId;
+                const targetDoorDir = getOppositeDoor(placement.connectedDirection);
+                mapConnections[placement.connectedRoomId][targetDoorDir] = currentRoomId;
+
+                console.log('[MysticElevator] Connected to', placement.connectedRoomId,
+                    'elevator door:', placement.connectedDirection, 'room door:', targetDoorDir);
+            } else {
+                console.log('[MysticElevator] Fallback placement at', placement.x, ',', placement.y, '(no door connection)');
+            }
+        } else {
+            // Absolute fallback: keep same x,y, just change floor
+            console.log('[MysticElevator] WARNING: No placement found, keeping same position');
+            currentRoom.floor = targetFloor;
+        }
+
+        // Ensure room is in revealedRooms
         if (!revealedRooms[currentRoomId]) {
             revealedRooms[currentRoomId] = currentRoom;
         }
 
-        // Update reserved position tracking
-        // Remove old floor position from reserved map
-        const oldPosKey = `${originalFloor},${currentRoom.x},${currentRoom.y}`;
+        // Update reserved position tracking using original coordinates for delete
+        const oldPosKey = `${originalFloor},${originalX},${originalY}`;
         mysticElevatorPositions.delete(oldPosKey);
-        console.log('[MysticElevator] Removed reservation for old position:', oldPosKey);
 
-        // Add new floor position to reserved map
         const newPosKey = `${targetFloor},${currentRoom.x},${currentRoom.y}`;
         mysticElevatorPositions.set(newPosKey, currentRoomId);
-        console.log('[MysticElevator] Reserved new position:', newPosKey, 'for room:', currentRoomId);
 
-        console.log('[MysticElevator] Moved from', originalFloor, 'to', targetFloor, 'at position', currentRoom.x, ',', currentRoom.y);
-        console.log('[MysticElevator] Room floor in revealedRooms:', revealedRooms[currentRoomId].floor);
+        console.log('[MysticElevator] Moved from', originalFloor, '(', originalX, ',', originalY, ')',
+            'to', targetFloor, '(', currentRoom.x, ',', currentRoom.y, ')');
 
         // Clear completed combat flag when leaving current floor
         clearCompletedCombatForPlayer(playerId, currentRoomId);
@@ -8471,6 +8493,72 @@ function findRoomAtPosition(revealedRooms, x, y, floor) {
             return room;
         }
     }
+    return null;
+}
+
+/**
+ * Find optimal placement for Mystic Elevator on a target floor.
+ * Pass 1: Door-to-door matching - find a room with an unconnected door, place elevator adjacent.
+ * Pass 2: Fallback - find any empty position adjacent to existing rooms.
+ * @param {string} targetFloor - 'ground', 'upper', or 'basement'
+ * @param {Object} revealedRooms - Map of roomId -> room object
+ * @param {Object} mapConnections - Map of roomId -> { direction: connectedRoomId }
+ * @returns {{ x: number, y: number, rotation: number, connectedRoomId: string|null, connectedDirection: string|null }|null}
+ */
+function findElevatorPlacement(targetFloor, revealedRooms, mapConnections) {
+    const allDirections = ['north', 'east', 'south', 'west'];
+    const rotationMap = { 'north': 0, 'east': 90, 'south': 180, 'west': 270 };
+
+    // PASS 1: Door-to-door matching
+    for (const roomId in revealedRooms) {
+        const room = revealedRooms[roomId];
+        if (room.floor !== targetFloor) continue;
+        if (!room.doors || room.doors.length === 0) continue;
+
+        const roomConnections = mapConnections[roomId] || {};
+
+        for (const doorDir of room.doors) {
+            if (roomConnections[doorDir]) continue; // door already connected
+
+            const adjacentPos = calculateNewRoomPosition(room, doorDir);
+            const occupant = findRoomAtPosition(revealedRooms, adjacentPos.x, adjacentPos.y, targetFloor);
+            if (occupant) continue; // position occupied
+
+            // Elevator door faces back toward the room (opposite of room's door direction)
+            const elevatorFacingDir = getOppositeDoor(doorDir);
+            const rotation = rotationMap[elevatorFacingDir];
+
+            return {
+                x: adjacentPos.x,
+                y: adjacentPos.y,
+                rotation: rotation,
+                connectedRoomId: roomId,
+                connectedDirection: elevatorFacingDir
+            };
+        }
+    }
+
+    // PASS 2: Fallback - any empty position adjacent to existing rooms
+    const occupiedPositions = new Set();
+    for (const roomId in revealedRooms) {
+        const room = revealedRooms[roomId];
+        if (room.floor === targetFloor) {
+            occupiedPositions.add(`${room.x},${room.y}`);
+        }
+    }
+
+    for (const roomId in revealedRooms) {
+        const room = revealedRooms[roomId];
+        if (room.floor !== targetFloor) continue;
+        for (const dir of allDirections) {
+            const pos = calculateNewRoomPosition(room, dir);
+            const key = `${pos.x},${pos.y}`;
+            if (!occupiedPositions.has(key)) {
+                return { x: pos.x, y: pos.y, rotation: 0, connectedRoomId: null, connectedDirection: null };
+            }
+        }
+    }
+
     return null;
 }
 
