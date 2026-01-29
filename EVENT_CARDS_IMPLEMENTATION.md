@@ -4,7 +4,7 @@
 
 Dự án triển khai đầy đủ logic cho **45 event cards** trong game Betrayal at House on the Hill. Mỗi event được implement riêng biệt và cần được test + confirm trước khi chuyển sang event tiếp theo.
 
-**Trạng thái hiện tại**: 16/45 events đã hoàn thành (36% complete)
+**Trạng thái hiện tại**: 17/45 events đã hoàn thành (38% complete)
 
 ---
 
@@ -75,13 +75,13 @@ Events yêu cầu draw Item/Event cards từ deck.
 
 ---
 
-### ⏳ Group 3: Multi-Roll Events (0/1 completed)
+### ✅ Group 3: Multi-Roll Events (1/1 completed)
 
 Events với nhiều dice rolls và bonus conditions.
 
 | # | ID | Name (VI) | Status | Notes |
 |---|----|-----------|----|-------|
-| 17 | `nguoi_treo_co` | Người treo cổ | ⏳ Pending | Roll 4 stats, bonus condition |
+| 17 | `nguoi_treo_co` | Người treo cổ | ✅ Done | Roll 4 stats, bonus condition |
 
 **Implementation Requirements:**
 - Multi-roll system already exists
@@ -562,24 +562,28 @@ URL: `http://localhost:5173/#/game/debug`
 
 ## Next Steps
 
-### Immediate Next Task: Event #17 (nguoi_treo_co) - Group 3
+### Immediate Next Task: Event #18 (duong_bi_mat) - Group 4
 
-**Event**: Người treo cổ
-**Type**: Multi-roll (4 stats), bonus condition
-**Requires**: multi-roll summary handling, per-roll effects
+**Event**: Đường bí mật
+**Type**: Fixed dice (3), place tokens
+**Requires**: fixed dice support, token placement system
 
 ### Priorities
 
-1. **Complete Group 3** (Event #17) - Multi-roll system
-2. **Fixed Dice Count** (Events #18-21) - Common pattern
-3. **Token Placement System** (Events #22-30) - Big feature
-4. **Multi-player Effects** (Events #31-34) - Complex sync
+1. **Fixed Dice Count** (Events #18-21) - Common pattern
+2. **Token Placement System** (Events #22-30) - Big feature
+3. **Multi-player Effects** (Events #31-34) - Complex sync
 
 ---
 
 ## Change Log
 
 ### 2026-01-30
+
+**Event #17 (nguoi_treo_co) - COMPLETED**
+- Multi-roll (4 stats) works with per-roll stat loss on fail
+- Bonus condition grants +2 to a chosen stat when all rolls >= 2
+- Uses existing multi-roll summary + stat choice modal
 
 **Event #16 (anh_phan_chieu_2) - COMPLETED**
 - Conditional event now checks current player items
@@ -637,6 +641,6 @@ URL: `http://localhost:5173/#/game/debug`
 
 ---
 
-**Progress: 16/45 Events Complete (36%)**
+**Progress: 17/45 Events Complete (38%)**
 **Last Updated: 2026-01-30**
-**Current Task: Event #17 - Group 3: Multi-Roll Events**
+**Current Task: Event #18 - Group 4: Fixed Dice Roll Events**
