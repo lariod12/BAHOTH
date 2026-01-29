@@ -33,6 +33,10 @@ let tokenDrawingModal = null;
 /** @type {{ isOpen: boolean; cardType: 'omen'|'event'|'item'; cardIds: string[]; expandedCards: Set<string> } | null} */
 let cardsViewModal = null;
 
+// Return item modal state (for event: anh_phan_chieu_2)
+/** @type {{ isOpen: boolean; playerId: string; eventId: string; itemIds: string[]; selectedItemId: string | null } | null} */
+let returnItemModal = null;
+
 // Dice event modal state
 /** @type {{ isOpen: boolean; inputValue: string; result: number | null } | null} */
 let diceEventModal = null;
@@ -1198,6 +1202,116 @@ function closeEventResultModal(mountEl) {
 
     updateGameUI(mountEl, currentGameState, mySocketId);
     syncGameStateToServer();
+}
+
+/**
+ * Open return item modal for Anh Phan Chieu (2)
+ * @param {HTMLElement} mountEl
+ * @param {string} playerId
+ * @param {object} eventCard
+ * @returns {boolean}
+ */
+function openReturnItemModal(mountEl, playerId, eventCard) {
+    const itemIds = getPlayerItemIds(playerId);
+    if (itemIds.length === 0) return false;
+
+    returnItemModal = {
+        isOpen: true,
+        playerId,
+        eventId: eventCard.id,
+        itemIds: [...itemIds],
+        selectedItemId: null
+    };
+
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+    return true;
+}
+
+/**
+ * Confirm return item selection and apply Knowledge gain
+ * @param {HTMLElement} mountEl
+ */
+function confirmReturnItemSelection(mountEl) {
+    if (!returnItemModal || !currentGameState) return;
+
+    const { playerId, selectedItemId, eventId } = returnItemModal;
+    if (!selectedItemId) return;
+
+    const playerCards = currentGameState.playerState?.playerCards?.[playerId];
+    if (!playerCards || !playerCards.items) return;
+
+    const itemIndex = playerCards.items.indexOf(selectedItemId);
+    if (itemIndex === -1) return;
+
+    playerCards.items.splice(itemIndex, 1);
+    applyStatChange(playerId, 'knowledge', 1);
+    removePendingEvent(playerId, eventId);
+
+    const itemCard = getCardData('item', selectedItemId);
+    const itemName = itemCard?.name?.vi || selectedItemId;
+
+    returnItemModal = null;
+    syncGameStateToServer();
+    openEventResultModal(
+        mountEl,
+        'ANH PHAN CHIEU (2)',
+        `Ban da tra ve ${itemName} va +1 Kien thuc.`,
+        'success'
+    );
+}
+
+/**
+ * Handle conditional event: anh_phan_chieu_2
+ * @param {HTMLElement} mountEl
+ * @param {object} eventCard
+ * @param {string} triggeringPlayerId
+ * @returns {boolean}
+ */
+function handleReflectionEvent(mountEl, eventCard, triggeringPlayerId) {
+    if (!currentGameState || !eventCard) return false;
+
+    // Current player has item -> resolve immediately
+    if (playerHasAnyItem(triggeringPlayerId)) {
+        if (triggeringPlayerId !== mySocketId) return false;
+        return openReturnItemModal(mountEl, triggeringPlayerId, eventCard);
+    }
+
+    // No item: find a random player who has items
+    const eligiblePlayers = getPlayersWithItems();
+    if (eligiblePlayers.length === 0) {
+        if (triggeringPlayerId === mySocketId) {
+            openEventResultModal(
+                mountEl,
+                'ANH PHAN CHIEU (2)',
+                'Khong ai co Item. La event nay bi huy bo.',
+                'neutral'
+            );
+        }
+        return true;
+    }
+
+    const randomIndex = Math.floor(Math.random() * eligiblePlayers.length);
+    const selectedPlayer = eligiblePlayers[randomIndex];
+
+    if (selectedPlayer.id === triggeringPlayerId && triggeringPlayerId === mySocketId) {
+        return openReturnItemModal(mountEl, triggeringPlayerId, eventCard);
+    }
+
+    queuePendingEvent(selectedPlayer.id, eventCard.id, triggeringPlayerId);
+    syncGameStateToServer();
+
+    if (triggeringPlayerId === mySocketId) {
+        const selectedName = getCharacterName(selectedPlayer.characterId);
+        openEventResultModal(
+            mountEl,
+            'ANH PHAN CHIEU (2)',
+            `Su kien se xay ra voi ${selectedName} khi den luot cua ho.`,
+            'neutral'
+        );
+    }
+
+    return true;
 }
 
 /**
@@ -3371,6 +3485,56 @@ function renderEventResultModal() {
 }
 
 /**
+ * Render return item modal (Anh Phan Chieu 2)
+ * @returns {string} HTML string
+ */
+function renderReturnItemModal() {
+    if (!returnItemModal?.isOpen) return '';
+
+    const eventCard = EVENTS.find(card => card.id === returnItemModal.eventId);
+    const eventTitle = eventCard?.name?.vi || 'Anh phan chieu (2)';
+    const eventText = eventCard?.text?.vi || 'Chon 1 Item de tra ve chong bai.';
+
+    const itemsHtml = returnItemModal.itemIds.map(itemId => {
+        const itemCard = getCardData('item', itemId);
+        const itemName = itemCard?.name?.vi || itemId;
+        const isSelected = returnItemModal.selectedItemId === itemId;
+        return `
+            <div class="token-card__item ${isSelected ? 'is-selected' : ''}"
+                 data-action="return-item-select"
+                 data-item-id="${itemId}">
+                ${itemName}
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="token-drawing-overlay">
+            <div class="token-drawing-modal">
+                <h2 class="token-drawing__title">${eventTitle}</h2>
+                <p class="token-drawing__subtitle">${eventText}</p>
+                <div class="token-drawing__options">
+                    <div class="token-drawing__option">
+                        <label class="token-drawing__label">Chon 1 Item de tra ve chong bai:</label>
+                        <div class="token-card__list">
+                            ${itemsHtml}
+                        </div>
+                        <div class="token-drawing__buttons">
+                            <button class="action-button action-button--primary"
+                                    type="button"
+                                    data-action="return-item-confirm"
+                                    ${!returnItemModal.selectedItemId ? 'disabled' : ''}>
+                                Xac nhan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render rescue trapped ally modal
  * @returns {string} HTML string
  */
@@ -4952,6 +5116,7 @@ function renderGameScreen(gameState, myId) {
             ${renderRescueTrappedModal()}
             ${renderPersistentDamageModal()}
             ${renderTeleportChoiceModal()}
+            ${renderReturnItemModal()}
             ${renderEventResultModal()}
             ${renderEndTurnModal()}
             ${renderResetGameModal()}
@@ -6354,6 +6519,23 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        // ===== RETURN ITEM MODAL HANDLERS =====
+        if (action === 'return-item-select') {
+            if (!returnItemModal) return;
+            const itemId = actionEl?.dataset?.itemId;
+            if (itemId) {
+                returnItemModal.selectedItemId = itemId;
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'return-item-confirm') {
+            confirmReturnItemSelection(mountEl);
+            return;
+        }
+
         // ===== DAMAGE DISTRIBUTION MODAL HANDLERS (multiplayer mode) =====
 
         // Damage distribution: Type selection
@@ -6934,6 +7116,21 @@ async function updateGameUI(mountEl, gameState, myId) {
                 // Show escape roll modal
                 openTrappedEscapeModal(mountEl, trappedInfo);
                 return;
+            }
+        }
+
+        // Pending event check (Anh Phan Chieu 2) before normal turn init
+        if (currentPlayer === myId && movesInitializedForTurn !== currentTurnIndex && !returnItemModal?.isOpen) {
+            const pendingEvents = gameState?.playerState?.pendingEvents?.[myId] || [];
+            const pendingReflection = pendingEvents.find(entry => entry.id === 'anh_phan_chieu_2');
+            if (pendingReflection) {
+                removePendingEvent(myId, pendingReflection.id);
+                syncGameStateToServer();
+                const eventCard = EVENTS.find(card => card.id === pendingReflection.id);
+                if (eventCard) {
+                    handleReflectionEvent(mountEl, eventCard, myId);
+                    return;
+                }
             }
         }
 
@@ -8147,7 +8344,8 @@ async function syncGameStateToServer() {
             playerCards: currentGameState.playerState?.playerCards,
             playerState: {
                 characterData: currentGameState.playerState?.characterData,
-                trappedPlayers: currentGameState.playerState?.trappedPlayers
+                trappedPlayers: currentGameState.playerState?.trappedPlayers,
+                pendingEvents: currentGameState.playerState?.pendingEvents
             },
             currentTurnIndex: currentGameState.currentTurnIndex,
             combatState: currentGameState.combatState || null,
@@ -8614,6 +8812,80 @@ function getCardsByType(type) {
 }
 
 /**
+ * Get item card IDs for a player
+ * @param {string} playerId
+ * @returns {string[]}
+ */
+function getPlayerItemIds(playerId) {
+    return currentGameState?.playerState?.playerCards?.[playerId]?.items || [];
+}
+
+/**
+ * Check if player has any item
+ * @param {string} playerId
+ * @returns {boolean}
+ */
+function playerHasAnyItem(playerId) {
+    return getPlayerItemIds(playerId).length > 0;
+}
+
+/**
+ * Get players who have at least one item
+ * @param {string[]} [excludeIds]
+ * @returns {Array<{id: string, characterId: string}>}
+ */
+function getPlayersWithItems(excludeIds = []) {
+    const exclude = new Set(excludeIds);
+    const players = currentGameState?.players || [];
+    return players.filter(player => !exclude.has(player.id) && playerHasAnyItem(player.id));
+}
+
+/**
+ * Ensure pending events state exists
+ */
+function ensurePendingEventsState() {
+    if (!currentGameState.playerState) {
+        currentGameState.playerState = {};
+    }
+    if (!currentGameState.playerState.pendingEvents) {
+        currentGameState.playerState.pendingEvents = {};
+    }
+}
+
+/**
+ * Queue a pending event for a player
+ * @param {string} playerId
+ * @param {string} eventId
+ * @param {string} sourcePlayerId
+ */
+function queuePendingEvent(playerId, eventId, sourcePlayerId) {
+    ensurePendingEventsState();
+    const pending = currentGameState.playerState.pendingEvents;
+    if (!pending[playerId]) {
+        pending[playerId] = [];
+    }
+    pending[playerId].push({ id: eventId, sourcePlayerId });
+}
+
+/**
+ * Remove one pending event instance from a player
+ * @param {string} playerId
+ * @param {string} eventId
+ * @returns {{ id: string; sourcePlayerId?: string } | null}
+ */
+function removePendingEvent(playerId, eventId) {
+    const pending = currentGameState?.playerState?.pendingEvents?.[playerId];
+    if (!pending || pending.length === 0) return null;
+    const index = pending.findIndex(entry => entry.id === eventId);
+    if (index === -1) return null;
+    const [removed] = pending.splice(index, 1);
+    if (pending.length === 0) {
+        delete currentGameState.playerState.pendingEvents[playerId];
+    }
+    return removed;
+}
+
+/**
  * Get all card IDs that have been drawn/used in the game
  * Includes cards in player inventories and cards drawn in current token drawing session
  * @returns {{ omens: string[]; events: string[]; items: string[] }}
@@ -8793,6 +9065,7 @@ function confirmTokenDrawing(mountEl) {
     // Collect events that require immediate roll or direct effect
     let immediateRollEvent = null;
     let directEffectEvent = null;
+    let conditionalEvent = null;
 
     // Add drawn cards to player inventory
     tokenDrawingModal.tokensToDrawn.forEach(token => {
@@ -8807,8 +9080,13 @@ function confirmTokenDrawing(mountEl) {
                 } else {
                     // Check if event has direct effect (no roll needed)
                     const eventCard = EVENTS.find(e => e.id === token.selectedCard);
-                    if (eventCard && eventCard.effect === 'drawItem') {
-                        directEffectEvent = eventCard;
+                    if (eventCard) {
+                        if (eventCard.effect === 'drawItem') {
+                            directEffectEvent = eventCard;
+                        }
+                        if (eventCard.effect === 'conditional' && eventCard.id === 'anh_phan_chieu_2') {
+                            conditionalEvent = eventCard;
+                        }
                     }
                 }
             }
@@ -8842,6 +9120,15 @@ function confirmTokenDrawing(mountEl) {
         syncGameStateToServer();
         initTokenDrawing(mountEl, itemTokens);
         return;
+    }
+
+    // Handle conditional event: Anh Phan Chieu (2)
+    if (conditionalEvent) {
+        syncGameStateToServer();
+        const handled = handleReflectionEvent(mountEl, conditionalEvent, playerId);
+        if (handled) {
+            return;
+        }
     }
 
     // Check if turn ended (no more moves) - advance to next player

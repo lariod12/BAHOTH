@@ -40,6 +40,7 @@ const PLAYERS_FILE = join(DATA_DIR, 'players.json');
  *   characterData: Record<string, PlayerCharacterData>;
  *   playerCards: Record<string, PlayerCards>;
  *   drawnRooms: string[];
+ *   pendingEvents?: Record<string, Array<{ id: string; sourcePlayerId?: string }>>;
  * }} PlayerState
  *
  * @typedef {{
@@ -124,6 +125,7 @@ export function initializeGame(roomId, players, startingRoom = 'entrance-hall') 
         characterData: {},
         playerCards: {},
         drawnRooms: [],
+        pendingEvents: {},
     };
 
     // Set all players to starting position and initialize character stats
@@ -366,6 +368,12 @@ export function updatePlayerId(roomId, oldId, newId) {
         delete state.playerCards[oldId];
     }
 
+    // Update pendingEvents
+    if (state.pendingEvents && state.pendingEvents[oldId]) {
+        state.pendingEvents[newId] = state.pendingEvents[oldId];
+        delete state.pendingEvents[oldId];
+    }
+
     savePlayers();
     console.log(`[PlayerManager] Updated player ID: ${oldId} -> ${newId}`);
 
@@ -390,6 +398,7 @@ export function getFullPlayerState(roomId) {
         playerCards: state.playerCards ? JSON.parse(JSON.stringify(state.playerCards)) : {},
         drawnRooms: state.drawnRooms ? [...state.drawnRooms] : [],
         trappedPlayers: state.trappedPlayers ? { ...state.trappedPlayers } : {},
+        pendingEvents: state.pendingEvents ? JSON.parse(JSON.stringify(state.pendingEvents)) : {},
     };
 }
 
@@ -703,6 +712,23 @@ export function updateTrappedPlayers(roomId, trappedPlayers) {
 
     savePlayers();
     console.log(`[PlayerManager] Updated trapped players for room ${roomId}:`, Object.keys(state.trappedPlayers));
+
+    return state;
+}
+
+/**
+ * Update pending events for a room
+ * @param {string} roomId
+ * @param {Record<string, Array<{ id: string; sourcePlayerId?: string }>> | null} pendingEvents
+ * @returns {PlayerState | undefined}
+ */
+export function updatePendingEvents(roomId, pendingEvents) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.pendingEvents = pendingEvents || {};
+    savePlayers();
+    console.log(`[PlayerManager] Updated pending events for room ${roomId}:`, Object.keys(state.pendingEvents));
 
     return state;
 }

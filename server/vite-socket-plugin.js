@@ -420,6 +420,11 @@ export function socketIOPlugin() {
                         playerManager.updateTrappedPlayers(room.id, stateUpdate.playerState.trappedPlayers);
                     }
 
+                    // Update pending events if provided
+                    if (stateUpdate.playerState?.pendingEvents !== undefined) {
+                        playerManager.updatePendingEvents(room.id, stateUpdate.playerState.pendingEvents);
+                    }
+
                     // Update player moves if provided (update room directly, not playerManager)
                     let turnAdvanced = false;
                     if (stateUpdate.playerMoves) {

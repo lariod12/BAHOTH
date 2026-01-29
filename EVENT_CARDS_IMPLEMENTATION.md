@@ -4,7 +4,7 @@
 
 Dự án triển khai đầy đủ logic cho **45 event cards** trong game Betrayal at House on the Hill. Mỗi event được implement riêng biệt và cần được test + confirm trước khi chuyển sang event tiếp theo.
 
-**Trạng thái hiện tại**: 15/45 events đã hoàn thành (33% complete)
+**Trạng thái hiện tại**: 16/45 events đã hoàn thành (36% complete)
 
 ---
 
@@ -59,14 +59,14 @@ Những events có `immediateRoll: true` với stat rolls và outcomes đơn gi�
 
 ---
 
-### 🔄 Group 2: Draw Card Effects (1/2 completed)
+### ✅ Group 2: Draw Card Effects (2/2 completed)
 
 Events yêu cầu draw Item/Event cards từ deck.
 
 | # | ID | Name (VI) | Status | Notes |
 |---|----|-----------|----|-------|
 | 15 | `anh_phan_chieu` | Ảnh phản chiếu | ✅ Done | Draw 1 Item (direct effect + dice outcome) |
-| 16 | `anh_phan_chieu_2` | Ảnh phản chiếu (2) | ⏳ Pending | Return Item, conditional |
+| 16 | `anh_phan_chieu_2` | Ảnh phản chiếu (2) | ✅ Done | Return Item, conditional + pending turn |
 
 **Implementation Requirements:**
 - Need `drawItem` effect handler
@@ -562,15 +562,15 @@ URL: `http://localhost:5173/#/game/debug`
 
 ## Next Steps
 
-### Immediate Next Task: Event #16 (anh_phan_chieu_2) - Group 2
+### Immediate Next Task: Event #17 (nguoi_treo_co) - Group 3
 
-**Event**: Ảnh phản chiếu (2)
-**Type**: Conditional — return Item to deck, gain Knowledge
-**Requires**: `returnItemToDeck` effect, conditional logic (`currentPlayerHas: 'anyItem'`, `passToLeft`)
+**Event**: Người treo cổ
+**Type**: Multi-roll (4 stats), bonus condition
+**Requires**: multi-roll summary handling, per-roll effects
 
 ### Priorities
 
-1. **Complete Group 2** (Event #16) - Conditional + returnItem
+1. **Complete Group 3** (Event #17) - Multi-roll system
 2. **Fixed Dice Count** (Events #18-21) - Common pattern
 3. **Token Placement System** (Events #22-30) - Big feature
 4. **Multi-player Effects** (Events #31-34) - Complex sync
@@ -578,6 +578,14 @@ URL: `http://localhost:5173/#/game/debug`
 ---
 
 ## Change Log
+
+### 2026-01-30
+
+**Event #16 (anh_phan_chieu_2) - COMPLETED**
+- Conditional event now checks current player items
+- If none, assigns random player with item and triggers on their turn
+- Added return-item modal and pending event queue
+- Syncs pending events via server state
 
 ### 2026-01-28
 
@@ -629,6 +637,6 @@ URL: `http://localhost:5173/#/game/debug`
 
 ---
 
-**Progress: 15/45 Events Complete (33%)**
-**Last Updated: 2026-01-28**
-**Current Task: Event #16 - Group 2: Draw Card Effects**
+**Progress: 16/45 Events Complete (36%)**
+**Last Updated: 2026-01-30**
+**Current Task: Event #17 - Group 3: Multi-Roll Events**
