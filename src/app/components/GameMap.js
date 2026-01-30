@@ -12,6 +12,7 @@ import { calculateVaultLayout, getDividerOrientation } from '../utils/vaultLayou
  *   doors: ('north' | 'south' | 'east' | 'west')[];
  *   floor: 'ground' | 'upper' | 'basement';
  *   tokens?: ('omen' | 'event' | 'item')[];
+ *   specialTokens?: string[];
  *   rotation?: number;
  *   vaultLayout?: import('../utils/vaultLayout.js').VaultLayout;
  * }} Room
@@ -205,6 +206,40 @@ function renderTokens(tokens, vaultLayout = null) {
     });
     
     return `<div class="map-tokens">${tokenHtml.join('')}</div>`;
+}
+
+/**
+ * Render special tokens for a room (e.g., Secret Passage)
+ * @param {string[]} specialTokens
+ * @returns {string}
+ */
+function renderSpecialTokens(specialTokens) {
+    if (!specialTokens || specialTokens.length === 0) return '';
+
+    const tokenHtml = [];
+
+    specialTokens.forEach((tokenType, i) => {
+        const leftOffset = 4 + i * 12;
+        if (tokenType === 'secretPassage') {
+            tokenHtml.push(`
+                <div class="map-token map-token--special map-token--secret-passage"
+                     style="top: 4px; left: ${leftOffset}px;"
+                     title="Secret Passage">
+                    <span class="map-token__label">SP</span>
+                </div>
+            `);
+        } else {
+            tokenHtml.push(`
+                <div class="map-token map-token--special"
+                     style="top: 4px; left: ${leftOffset}px;"
+                     title="${tokenType}">
+                    <span class="map-token__label">?</span>
+                </div>
+            `);
+        }
+    });
+
+    return `<div class="map-tokens map-tokens--special">${tokenHtml.join('')}</div>`;
 }
 
 /**
@@ -432,6 +467,7 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
                 <span class="map-room__name">${room.name}</span>
                 ${vaultDivider}
                 ${renderTokens(room.tokens, vaultLayout)}
+                ${renderSpecialTokens(room.specialTokens)}
                 ${renderDoors(room.doors, connections, room, allRooms)}
                 ${renderPawnMarkers(room.id, playerPositions, playerNames, playerColors, myId, activePlayerId, vaultLayout, playerEntryDirections)}
             </div>
@@ -450,9 +486,21 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
  * @param {Object | null} roomPreview - Preview room data { name, doors, rotation, x, y, isValid }
  * @param {Record<string, string>} [playerEntryDirections] - socketId -> entry direction
  * @param {string | null} [activePlayerId] - ID of the active player (current turn)
+ * @param {'basement'|'ground'|'upper'|null} [floorOverride] - Force map to show a floor
  * @returns {string}
  */
-export function renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview = null, playerEntryDirections = {}, activePlayerId = null) {
+export function renderGameMap(
+    mapState,
+    playerPositions,
+    playerNames,
+    playerColors,
+    myId,
+    myPosition,
+    roomPreview = null,
+    playerEntryDirections = {},
+    activePlayerId = null,
+    floorOverride = null
+) {
     if (!mapState || !mapState.revealedRooms) {
         return `
             <div class="game-map game-map--empty">
@@ -466,7 +514,7 @@ export function renderGameMap(mapState, playerPositions, playerNames, playerColo
 
     // Get current room to determine floor
     const currentRoom = myPosition ? rooms[myPosition] : null;
-    const currentFloor = currentRoom?.floor || 'ground';
+    const currentFloor = floorOverride || currentRoom?.floor || 'ground';
 
     // Get player position for focus feature
     const playerCoords = getPlayerCoords(rooms, myPosition);

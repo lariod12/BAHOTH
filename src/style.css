@@ -1853,6 +1853,36 @@ select.field__input option {
     position: relative;
 }
 
+.secret-passage-btn {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, rgba(45, 35, 15, 0.95), rgba(25, 18, 10, 0.98));
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    color: #fbbf24;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.secret-passage-btn:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 6px 14px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.secret-passage-btn__label {
+    font-size: 0.85rem;
+}
+
 .dice-event-btn::before {
     content: '';
     position: absolute;
@@ -2646,6 +2676,30 @@ select.field__input option {
     border-radius: 50%;
     position: absolute;
     pointer-events: auto;
+}
+
+/* Special tokens (badge corner) */
+.map-token--special {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6px;
+    font-weight: 700;
+    color: #1f2937;
+    background: #f59e0b;
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.6);
+}
+
+.map-token--secret-passage {
+    background: #fbbf24;
+    box-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+}
+
+.map-token__label {
+    line-height: 1;
 }
 
 /* Omen token - Top right corner */
@@ -8642,6 +8696,23 @@ select.field__input option {
     padding: 20px;
 }
 
+.teleport-choice-overlay--room-select {
+    background: rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+.teleport-choice-overlay--room-select .teleport-choice-modal {
+    pointer-events: auto;
+}
+
+.teleport-choice-overlay--room-select-confirm {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.teleport-choice-modal--confirm {
+    max-width: 320px;
+}
+
 .teleport-choice-modal {
     background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
     border-radius: 16px;
@@ -8671,6 +8742,85 @@ select.field__input option {
     display: flex;
     flex-direction: column;
     gap: 16px;
+}
+
+.teleport-choice-modal__actions {
+    display: flex;
+    justify-content: center;
+}
+
+.teleport-choice-modal__selected {
+    text-align: center;
+    font-size: 0.85rem;
+    color: rgba(226, 232, 240, 0.9);
+    padding: 6px 8px;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 8px;
+}
+
+.teleport-choice-modal__btn.is-selected {
+    border-color: #c4b5fd;
+    background: linear-gradient(145deg, #7c3aed, #6d28d9);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.45);
+}
+
+.teleport-choice-modal__floors {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.teleport-choice-modal__mode {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.floor-filter-btn {
+    border: 1px solid rgba(139, 92, 246, 0.6);
+    background: rgba(15, 23, 42, 0.6);
+    color: #e2e8f0;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.floor-filter-btn.is-active {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: #8b5cf6;
+}
+
+.selection-mode-btn {
+    border: 1px solid rgba(139, 92, 246, 0.6);
+    background: rgba(15, 23, 42, 0.6);
+    color: #e2e8f0;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.selection-mode-btn.is-active {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: #8b5cf6;
+}
+
+.teleport-choice-modal__hint {
+    margin: 0;
+    font-size: 0.85rem;
+    color: rgba(226, 232, 240, 0.8);
+    text-align: center;
+}
+
+.teleport-choice-modal__empty {
+    text-align: center;
+    color: rgba(226, 232, 240, 0.7);
+    font-size: 0.9rem;
+    padding: 8px 0;
 }
 
 .teleport-choice-modal__pre-message {
@@ -8713,6 +8863,15 @@ select.field__input option {
     background: linear-gradient(145deg, #8b5cf6, #7c3aed);
     color: #fff;
     transform: scale(1.02);
+}
+
+.teleport-choice-modal__btn:focus,
+.teleport-choice-modal__btn:focus-visible {
+    outline: 2px solid rgba(196, 181, 253, 0.7);
+    outline-offset: 2px;
+    background: linear-gradient(145deg, #4c1d95, #5b21b6);
+    color: #c4b5fd;
+    transform: none;
 }
 
 /* Persistent Damage Modal */

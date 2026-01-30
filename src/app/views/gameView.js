@@ -159,6 +159,10 @@ let eventResultModal = null;
 /** @type {{ isOpen: boolean; effect: string; amount: number; title: string } | null} */
 let statChoiceModal = null;
 
+// Room selection modal (for placing special tokens like secret passage)
+/** @type {{ isOpen: boolean; title: string; description: string; rooms: Array<{roomId: string; name: string; floor?: string}>; tokenType: string; originRoomName?: string; allowedFloors: string[]; selectedFloor: string; mode: 'placeToken' | 'teleport'; pendingRoomId?: string | null; selectionMode: 'menu' | 'map'; showConfirmModal?: boolean; allowSkip?: boolean } | null} */
+let roomSelectModal = null;
+
 // Stat change notification popup (for multi-roll events to show damage applied)
 /** @type {{ isOpen: boolean; stat: string; oldValue: number; newValue: number; change: number; onClose: Function | null } | null} */
 let statChangeNotification = null;
@@ -212,6 +216,13 @@ const mysticElevatorPositions = new Map();
 
 /** @type {(() => void) | null} Unsubscribe from players active updates */
 let unsubscribePlayersActive = null;
+
+/** @type {HTMLElement | null} */
+let mountElRef = null;
+
+// Track if Secret Passage prompt already shown for current turn
+let secretPassagePromptedTurnIndex = null;
+let secretPassagePromptedPlayerId = null;
 
 
 
@@ -3730,6 +3741,138 @@ function renderTeleportChoiceModal() {
 }
 
 /**
+ * Render room selection modal - for placing special tokens
+ * @returns {string} HTML string
+ */
+function renderRoomSelectModal() {
+    if (!roomSelectModal?.isOpen || roomSelectModal.selectionMode === 'map') return '';
+
+    const { title, description, rooms, allowedFloors, selectedFloor, pendingRoomId, selectionMode, allowSkip } = roomSelectModal;
+    const floorLabels = {
+        basement: 'Tang ham',
+        ground: 'Tang tret',
+        upper: 'Tang tren'
+    };
+
+    const floorButtons = allowedFloors.map(floor => `
+        <button class="floor-filter-btn ${selectedFloor === floor ? 'is-active' : ''}"
+                type="button"
+                data-action="room-select-floor"
+                data-floor="${floor}">
+            ${floorLabels[floor] || floor}
+        </button>
+    `).join('');
+
+    const filteredRooms = selectedFloor
+        ? rooms.filter(room => room.floor === selectedFloor)
+        : rooms;
+
+    const roomButtons = filteredRooms.length > 0
+        ? filteredRooms.map(room => `
+            <button class="teleport-choice-modal__btn ${pendingRoomId === room.roomId ? 'is-selected' : ''}"
+                    type="button"
+                    data-action="room-select-choice"
+                    data-room-id="${room.roomId}">
+                ${room.name}
+            </button>
+        `).join('')
+        : `<div class="teleport-choice-modal__empty">Khong co phong tren tang nay.</div>`;
+
+    const pendingRoomName = pendingRoomId
+        ? rooms.find(room => room.roomId === pendingRoomId)?.name || pendingRoomId
+        : '';
+
+    return `
+        <div class="teleport-choice-overlay teleport-choice-overlay--room-select">
+            <div class="teleport-choice-modal ${selectionMode === 'map' ? 'teleport-choice-modal--map' : ''}" data-modal-content="true">
+                <header class="teleport-choice-modal__header">
+                    <h3 class="teleport-choice-modal__title">${title}</h3>
+                </header>
+                <div class="teleport-choice-modal__body">
+                    <p class="teleport-choice-modal__description">${description}</p>
+                    <div class="teleport-choice-modal__floors">
+                        ${floorButtons}
+                    </div>
+                    <div class="teleport-choice-modal__mode">
+                        <button class="selection-mode-btn ${selectionMode === 'menu' ? 'is-active' : ''}"
+                                type="button"
+                                data-action="room-select-mode"
+                                data-mode="menu">
+                            Chon tu menu
+                        </button>
+                        <button class="selection-mode-btn ${selectionMode === 'map' ? 'is-active' : ''}"
+                                type="button"
+                                data-action="room-select-mode"
+                                data-mode="map">
+                            Chon tren map
+                        </button>
+                    </div>
+                    <p class="teleport-choice-modal__hint">Chon tren map se dong popup, sau do click phong va xac nhan.</p>
+                    ${pendingRoomId ? `<div class="teleport-choice-modal__selected">Da chon: ${pendingRoomName}</div>` : ''}
+                    ${selectionMode === 'menu' ? `
+                        <div class="teleport-choice-modal__options">
+                            ${roomButtons}
+                        </div>
+                    ` : ''}
+                    <div class="teleport-choice-modal__actions">
+                        ${allowSkip ? `
+                            <button class="action-button action-button--secondary"
+                                    type="button"
+                                    data-action="room-select-skip">
+                                Bo qua
+                            </button>
+                        ` : ''}
+                        <button class="action-button action-button--secondary"
+                                type="button"
+                                data-action="room-select-confirm"
+                                ${!pendingRoomId ? 'disabled' : ''}>
+                            Xac nhan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Render confirm modal for map selection
+ * @returns {string}
+ */
+function renderRoomSelectConfirmModal() {
+    if (!roomSelectModal?.showConfirmModal || !roomSelectModal.pendingRoomId) return '';
+
+    const roomName = currentGameState?.map?.revealedRooms?.[roomSelectModal.pendingRoomId]?.name
+        || roomSelectModal.pendingRoomId;
+
+    return `
+        <div class="teleport-choice-overlay teleport-choice-overlay--room-select-confirm">
+            <div class="teleport-choice-modal teleport-choice-modal--confirm" data-modal-content="true">
+                <header class="teleport-choice-modal__header">
+                    <h3 class="teleport-choice-modal__title">XAC NHAN PHONG</h3>
+                </header>
+                <div class="teleport-choice-modal__body">
+                    <p class="teleport-choice-modal__description">Ban muon chon phong:</p>
+                    <div class="teleport-choice-modal__selected">${roomName}</div>
+                    <div class="teleport-choice-modal__actions">
+                        <button class="action-button action-button--secondary"
+                                type="button"
+                                data-action="room-select-confirm-map">
+                            Xac nhan
+                        </button>
+                        <button class="action-button action-button--secondary"
+                                type="button"
+                                data-action="room-select-cancel-map">
+                            Huy
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render stat choice modal - for bonus rewards where player chooses a stat
  * @returns {string} HTML string
  */
@@ -4906,6 +5049,17 @@ function renderGameControls(gameState, myId) {
     // Check if current room requires dice roll
     const diceEventActive = roomRequiresDiceRoll(gameState, myId);
 
+    // Secret Passage usage (only when no moves left)
+    const currentRoomId = gameState?.playerState?.playerPositions?.[myId];
+    const currentRoom = currentRoomId ? gameState?.map?.revealedRooms?.[currentRoomId] : null;
+    const secretPassageRooms = getRoomsWithSpecialToken(gameState, 'secretPassage')
+        .filter(room => room.roomId !== currentRoomId);
+    const canUseSecretPassage = myTurn
+        && movesLeft === 0
+        && !isBlocked
+        && currentRoom?.specialTokens?.includes('secretPassage')
+        && secretPassageRooms.length > 0;
+
     return `
         <div class="game-controls">
             <div class="movement-controls">
@@ -4937,6 +5091,11 @@ function renderGameControls(gameState, myId) {
                     <circle cx="34" cy="34" r="3.5" fill="currentColor"/>
                 </svg>
             </button>
+            ${canUseSecretPassage ? `
+                <button class="secret-passage-btn" type="button" data-action="use-secret-passage" title="Su dung Secret Passage (het buoc di)">
+                    <span class="secret-passage-btn__label">SP</span>
+                </button>
+            ` : ''}
             <div class="stairs-controls">
                 ${showUpBtn ? `
                     <button class="stairs-btn stairs-btn--up" type="button" data-action="use-stairs" data-target="${stairs.targetRoomUp || stairs.targetRoom}" title="Leo len tang tren">
@@ -5086,6 +5245,8 @@ function renderGameScreen(gameState, myId) {
             );
         }
         
+        const floorOverride = roomSelectModal ? roomSelectModal.selectedFloor : null;
+
         content = `
             ${renderGameIntro()}
             ${renderSidebarToggle(gameState, myId)}
@@ -5094,7 +5255,7 @@ function renderGameScreen(gameState, myId) {
                 <div class="game-main">
                     ${renderTurnOrder(gameState, myId)}
                     <div class="game-area">
-                        ${renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview, playerEntryDirections, activePlayerId)}
+                        ${renderGameMap(mapState, playerPositions, playerNames, playerColors, myId, myPosition, roomPreview, playerEntryDirections, activePlayerId, floorOverride)}
                     </div>
                 </div>
             </div>
@@ -5116,6 +5277,8 @@ function renderGameScreen(gameState, myId) {
             ${renderRescueTrappedModal()}
             ${renderPersistentDamageModal()}
             ${renderTeleportChoiceModal()}
+            ${renderRoomSelectModal()}
+            ${renderRoomSelectConfirmModal()}
             ${renderReturnItemModal()}
             ${renderEventResultModal()}
             ${renderEndTurnModal()}
@@ -5244,6 +5407,12 @@ function attachEventListeners(mountEl, roomId) {
         const actionEl = target.closest('[data-action]');
         const action = target.dataset.action || actionEl?.dataset.action;
         console.log('[EventListeners] Click - action:', action, 'target:', target.tagName, target.className);
+
+        const roomSelectActive = roomSelectModal
+            && (roomSelectModal.isOpen || roomSelectModal.selectionMode === 'map' || roomSelectModal.showConfirmModal);
+        if (roomSelectActive && action && !['room-select-floor', 'room-select-choice', 'room-select-confirm', 'room-select-mode', 'room-select-confirm-map', 'room-select-cancel-map', 'room-select-skip'].includes(action)) {
+            return;
+        }
 
         // Check if click is inside any modal overlay
         const isInsideModal = target.closest('.combat-overlay') ||
@@ -5689,6 +5858,43 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        if (action === 'use-secret-passage') {
+            const playerId = mySocketId;
+            const movesLeft = currentGameState?.playerMoves?.[playerId] ?? 0;
+            const currentRoomId = currentGameState?.playerState?.playerPositions?.[playerId];
+            const currentRoom = currentRoomId ? currentGameState?.map?.revealedRooms?.[currentRoomId] : null;
+
+            if (!currentRoom?.specialTokens?.includes('secretPassage') || movesLeft > 0) {
+                return;
+            }
+
+            const roomsWithToken = getRoomsWithSpecialToken(currentGameState, 'secretPassage')
+                .filter(room => room.roomId !== currentRoomId);
+
+            if (roomsWithToken.length === 0) {
+                openEventResultModal(
+                    mountEl,
+                    'SECRET PASSAGE',
+                    'Khong co phong nao khac de su dung Secret Passage.',
+                    'neutral'
+                );
+                return;
+            }
+
+            const allowedFloors = [...new Set(roomsWithToken.map(room => room.floor))];
+            const selectedFloor = allowedFloors.includes(currentRoom?.floor) ? currentRoom.floor : allowedFloors[0];
+            const title = 'CHON SECRET PASSAGE';
+            const description = 'Chon phong co Secret Passage de dich chuyen.';
+            const originRoomName = currentRoom?.name || currentRoomId || 'phong hien tai';
+
+            openRoomSelectModal(mountEl, title, description, roomsWithToken, 'secretPassage', originRoomName, {
+                allowedFloors,
+                selectedFloor,
+                mode: 'teleport'
+            });
+            return;
+        }
+
         // === Room Discovery Modal Actions (same as debug mode) ===
 
         // Select room and go to rotation step (matches button action)
@@ -5949,6 +6155,54 @@ function attachEventListeners(mountEl, roomId) {
             const isMultiRoll = eventCard?.rollStats && Array.isArray(eventCard.rollStats);
             const currentStat = isMultiRoll ? eventCard.rollStats[currentRollIndex] : (selectedStat || eventCard.rollStat);
             console.log('[EventDice] event-dice-continue - eventDiceModal.selectedStat:', eventDiceModal.selectedStat, 'destructured selectedStat:', selectedStat, 'currentStat:', currentStat, 'result:', result, 'rollStat:', eventCard.rollStat);
+
+            // Special handling: secret passage placement (duong_bi_mat)
+            if (eventCard?.effect === 'placeToken' && eventCard?.tokenType === 'secretPassage') {
+                const outcome = findMatchingOutcome(eventCard.rollResults, result);
+                const floor = outcome?.floor || 'any';
+                const playerId = mySocketId;
+                const currentRoomId = currentGameState?.playerState?.playerPositions?.[playerId];
+                const currentRoomName = currentGameState?.map?.revealedRooms?.[currentRoomId]?.name || currentRoomId || 'phong hien tai';
+
+                eventDiceModal = null;
+
+                if (!currentRoomId || !placeSpecialToken(currentRoomId, 'secretPassage')) {
+                    openEventResultModal(
+                        mountEl,
+                        'DAT TOKEN THAT BAI',
+                        'Khong the dat token Secret Passage tai phong hien tai.',
+                        'danger'
+                    );
+                    return;
+                }
+
+                const allowedFloors = floor === 'any' ? ['basement', 'ground', 'upper'] : [floor];
+                const eligibleRooms = floor === 'any'
+                    ? getRevealedRoomsByFloor('any')
+                    : getRevealedRoomsByFloor(floor);
+                if (eligibleRooms.length === 0) {
+                    syncGameStateToServer();
+                    openEventResultModal(
+                        mountEl,
+                        'KHONG CO PHONG PHU HOP',
+                        `Khong co phong nao o tang ${floor} de dat token Secret Passage thu hai.`,
+                        'neutral'
+                    );
+                    return;
+                }
+
+                const title = 'CHON PHONG DAT SECRET PASSAGE';
+                const description = `Token thu nhat da dat tai ${currentRoomName}. Hay chon phong de dat token thu hai.`;
+                const allRooms = getRevealedRoomsByFloor('any');
+                const currentFloor = currentGameState?.map?.revealedRooms?.[currentRoomId]?.floor || 'ground';
+                const defaultFloor = allowedFloors.includes(currentFloor) ? currentFloor : allowedFloors[0];
+                openRoomSelectModal(mountEl, title, description, allRooms, 'secretPassage', currentRoomName, {
+                    allowedFloors,
+                    selectedFloor: defaultFloor,
+                    mode: 'placeToken'
+                });
+                return;
+            }
 
             if (isMultiRoll) {
                 // Check outcome for current roll
@@ -6628,7 +6882,93 @@ function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        // ===== ROOM SELECT MODAL HANDLERS =====
+        if (action === 'room-select-floor') {
+            if (!roomSelectModal) return;
+            const selectedFloor = target.dataset.floor;
+            if (selectedFloor && roomSelectModal.allowedFloors.includes(selectedFloor)) {
+                roomSelectModal.selectedFloor = selectedFloor;
+                if (!isRoomSelectableForRoomSelect(roomSelectModal.pendingRoomId || '')) {
+                    roomSelectModal.pendingRoomId = null;
+                }
+                roomSelectModal.showConfirmModal = false;
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'room-select-mode') {
+            if (!roomSelectModal) return;
+            const mode = target.dataset.mode;
+            if (mode === 'menu' || mode === 'map') {
+                roomSelectModal.selectionMode = mode;
+                roomSelectModal.isOpen = mode === 'menu';
+                roomSelectModal.pendingRoomId = null;
+                roomSelectModal.showConfirmModal = false;
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'room-select-choice') {
+            if (!roomSelectModal) return;
+            const roomId = target.dataset.roomId;
+            if (roomId) {
+                roomSelectModal.pendingRoomId = roomId;
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'room-select-confirm') {
+            if (!roomSelectModal?.pendingRoomId) return;
+            handleRoomSelectChoice(mountEl, roomSelectModal.pendingRoomId);
+            return;
+        }
+
+        if (action === 'room-select-skip') {
+            if (!roomSelectModal) return;
+            roomSelectModal = null;
+            advanceToNextTurn();
+            syncGameStateToServer();
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        if (action === 'room-select-confirm-map') {
+            if (!roomSelectModal?.pendingRoomId) return;
+            handleRoomSelectChoice(mountEl, roomSelectModal.pendingRoomId);
+            return;
+        }
+
+        if (action === 'room-select-cancel-map') {
+            if (!roomSelectModal) return;
+            roomSelectModal.showConfirmModal = false;
+            roomSelectModal.pendingRoomId = null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        // Allow map click selection when room select modal is open
+        if (!action && roomSelectModal?.selectionMode === 'map' && !roomSelectModal?.showConfirmModal) {
+            const roomEl = target.closest('.map-room');
+            const roomId = roomEl?.dataset.roomId;
+            if (roomId) {
+                if (!isRoomSelectableForRoomSelect(roomId)) return;
+                roomSelectModal.pendingRoomId = roomId;
+                roomSelectModal.showConfirmModal = true;
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+                return;
+            }
+        }
+
         // ===== TELEPORT CHOICE MODAL HANDLER =====
+
         if (action === 'teleport-choice-select') {
             if (!teleportChoiceModal) return;
             const roomId = target.dataset.roomId;
@@ -8370,6 +8710,11 @@ function advanceToNextTurn() {
         return;
     }
 
+    if (tryPromptSecretPassageBeforeTurnEnd()) {
+        console.log('[Turn] Secret Passage prompt opened before turn advance');
+        return;
+    }
+
     const prevIndex = currentGameState.currentTurnIndex;
     const prevPlayerId = currentGameState.turnOrder[prevIndex];
 
@@ -8409,6 +8754,8 @@ function advanceToNextTurn() {
 
     // Reset attack flag for new turn (1 attack per turn rule)
     hasAttackedThisTurn = false;
+    secretPassagePromptedTurnIndex = null;
+    secretPassagePromptedPlayerId = null;
     console.log('[Turn] Reset hasAttackedThisTurn flag');
 }
 
@@ -8818,6 +9165,227 @@ function getCardsByType(type) {
  */
 function getPlayerItemIds(playerId) {
     return currentGameState?.playerState?.playerCards?.[playerId]?.items || [];
+}
+
+/**
+ * Get revealed rooms filtered by floor
+ * @param {'basement'|'ground'|'upper'|'any'} floor
+ * @returns {Array<{roomId: string; name: string; floor: string}>}
+ */
+function getRevealedRoomsByFloor(floor) {
+    const revealedRooms = currentGameState?.map?.revealedRooms || {};
+    const rooms = Object.entries(revealedRooms).map(([roomId, room]) => ({
+        roomId,
+        name: room?.name || roomId,
+        floor: room?.floor || 'ground'
+    }));
+    if (floor === 'any') return rooms;
+    return rooms.filter(room => room.floor === floor);
+}
+
+/**
+ * Get rooms that contain a specific special token
+ * @param {object} gameState
+ * @param {string} tokenType
+ * @returns {Array<{roomId: string; name: string; floor: string}>}
+ */
+function getRoomsWithSpecialToken(gameState, tokenType) {
+    const revealedRooms = gameState?.map?.revealedRooms || {};
+    return Object.entries(revealedRooms)
+        .filter(([, room]) => room?.specialTokens?.includes(tokenType))
+        .map(([roomId, room]) => ({
+            roomId,
+            name: room?.name || roomId,
+            floor: room?.floor || 'ground'
+        }));
+}
+
+/**
+ * Check and open Secret Passage prompt before ending turn
+ * @returns {boolean} True if prompt opened
+ */
+function tryPromptSecretPassageBeforeTurnEnd() {
+    if (!currentGameState || !mySocketId || !mountElRef) return false;
+
+    const currentTurnPlayer = currentGameState.turnOrder?.[currentGameState.currentTurnIndex];
+    if (currentTurnPlayer !== mySocketId) return false;
+
+    if (secretPassagePromptedTurnIndex === currentGameState.currentTurnIndex &&
+        secretPassagePromptedPlayerId === currentTurnPlayer) {
+        return false;
+    }
+
+    const movesLeft = currentGameState.playerMoves?.[currentTurnPlayer] ?? 0;
+    if (movesLeft > 0) return false;
+
+    const currentRoomId = currentGameState.playerState?.playerPositions?.[currentTurnPlayer];
+    const currentRoom = currentRoomId ? currentGameState.map?.revealedRooms?.[currentRoomId] : null;
+    if (!currentRoom?.specialTokens?.includes('secretPassage')) return false;
+
+    const roomsWithToken = getRoomsWithSpecialToken(currentGameState, 'secretPassage')
+        .filter(room => room.roomId !== currentRoomId);
+    if (roomsWithToken.length === 0) return false;
+
+    const allowedFloors = [...new Set(roomsWithToken.map(room => room.floor))];
+    const selectedFloor = allowedFloors.includes(currentRoom?.floor) ? currentRoom.floor : allowedFloors[0];
+    const title = 'SU DUNG SECRET PASSAGE';
+    const description = 'Ban dang dung tren Secret Passage. Muon dich chuyen truoc khi ket thuc luot?';
+    const originRoomName = currentRoom?.name || currentRoomId || 'phong hien tai';
+
+    secretPassagePromptedTurnIndex = currentGameState.currentTurnIndex;
+    secretPassagePromptedPlayerId = currentTurnPlayer;
+
+    if (roomsWithToken.length === 1) {
+        const targetRoomId = roomsWithToken[0].roomId;
+        currentGameState.playerState.playerPositions[currentTurnPlayer] = targetRoomId;
+        advanceToNextTurn();
+        syncGameStateToServer();
+        updateGameUI(mountElRef, currentGameState, mySocketId);
+        return true;
+    }
+
+    openRoomSelectModal(
+        mountElRef,
+        title,
+        description,
+        roomsWithToken,
+        'secretPassage',
+        originRoomName,
+        {
+            allowedFloors,
+            selectedFloor,
+            mode: 'teleport',
+            allowSkip: false
+        }
+    );
+    return true;
+}
+
+/**
+ * Place a special token in a room (stored in map state)
+ * @param {string} roomId
+ * @param {string} tokenType
+ * @returns {boolean}
+ */
+function placeSpecialToken(roomId, tokenType) {
+    if (!currentGameState?.map?.revealedRooms?.[roomId]) return false;
+
+    const room = currentGameState.map.revealedRooms[roomId];
+    if (!room.specialTokens) {
+        room.specialTokens = [];
+    }
+    if (room.specialTokens.includes(tokenType)) {
+        return false;
+    }
+    room.specialTokens.push(tokenType);
+
+    if (!currentGameState.map.specialTokens) {
+        currentGameState.map.specialTokens = [];
+    }
+    currentGameState.map.specialTokens.push({ roomId, tokenType });
+    return true;
+}
+
+/**
+ * Open room selection modal
+ * @param {HTMLElement} mountEl
+ * @param {string} title
+ * @param {string} description
+ * @param {Array<{roomId: string; name: string; floor?: string}>} rooms
+ * @param {string} tokenType
+ * @param {{ allowedFloors?: string[]; selectedFloor?: string; mode?: 'placeToken' | 'teleport' }} [options]
+ */
+function openRoomSelectModal(mountEl, title, description, rooms, tokenType, originRoomName = null, options = {}) {
+    const allowedFloors = options.allowedFloors && options.allowedFloors.length > 0
+        ? options.allowedFloors
+        : ['basement', 'ground', 'upper'];
+    const selectedFloor = allowedFloors.includes(options.selectedFloor) ? options.selectedFloor : allowedFloors[0];
+    const mode = options.mode || 'placeToken';
+    const allowSkip = !!options.allowSkip;
+
+    roomSelectModal = {
+        isOpen: true,
+        title,
+        description,
+        rooms,
+        tokenType,
+        originRoomName,
+        allowedFloors,
+        selectedFloor,
+        mode,
+        pendingRoomId: null,
+        selectionMode: 'menu',
+        showConfirmModal: false,
+        allowSkip
+    };
+    skipMapCentering = true;
+    updateGameUI(mountEl, currentGameState, mySocketId);
+}
+
+/**
+ * Check if room is selectable in room select modal
+ * @param {string} roomId
+ * @returns {boolean}
+ */
+function isRoomSelectableForRoomSelect(roomId) {
+    if (!roomSelectModal) return false;
+    const room = roomSelectModal.rooms.find(r => r.roomId === roomId);
+    if (!room) return false;
+    if (roomSelectModal.selectedFloor && room.floor && room.floor !== roomSelectModal.selectedFloor) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Handle room selection for special token placement or teleport
+ * @param {HTMLElement} mountEl
+ * @param {string} roomId
+ */
+function handleRoomSelectChoice(mountEl, roomId) {
+    if (!roomSelectModal) return;
+    if (!isRoomSelectableForRoomSelect(roomId)) return;
+
+    const { tokenType, originRoomName, mode, allowSkip } = roomSelectModal;
+    const roomName = currentGameState.map?.revealedRooms?.[roomId]?.name || roomId;
+
+    if (mode === 'teleport') {
+        const playerId = mySocketId;
+        if (currentGameState?.playerState?.playerPositions) {
+            currentGameState.playerState.playerPositions[playerId] = roomId;
+        }
+        roomSelectModal = null;
+        if (!allowSkip) {
+            advanceToNextTurn();
+        }
+        syncGameStateToServer();
+        openEventResultModal(
+            mountEl,
+            'DICH CHUYEN',
+            `Ban da dich chuyen den ${roomName}.`,
+            'success'
+        );
+        return;
+    }
+
+    if (!placeSpecialToken(roomId, tokenType)) {
+        openEventResultModal(
+            mountEl,
+            'DAT TOKEN THAT BAI',
+            'Khong the dat token tai phong duoc chon.',
+            'danger'
+        );
+        return;
+    }
+
+    roomSelectModal = null;
+    syncGameStateToServer();
+    openEventResultModal(
+        mountEl,
+        'DAT TOKEN',
+        `Da dat token ${tokenType} tai ${originRoomName || 'phong hien tai'} va ${roomName}.`,
+        'success'
+    );
 }
 
 /**
@@ -9334,6 +9902,7 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
     const newMountEl = mountEl.cloneNode(false);
     mountEl.parentNode?.replaceChild(newMountEl, mountEl);
     mountEl = /** @type {HTMLElement} */ (newMountEl);
+    mountElRef = mountEl;
 
     // Reset event listener flag since we have a fresh element
     eventListenersAttached = false;

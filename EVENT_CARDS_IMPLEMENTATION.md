@@ -4,7 +4,7 @@
 
 Dự án triển khai đầy đủ logic cho **45 event cards** trong game Betrayal at House on the Hill. Mỗi event được implement riêng biệt và cần được test + confirm trước khi chuyển sang event tiếp theo.
 
-**Trạng thái hiện tại**: 17/45 events đã hoàn thành (38% complete)
+**Trạng thái hiện tại**: 18/45 events đã hoàn thành (40% complete)
 
 ---
 
@@ -90,13 +90,13 @@ Events với nhiều dice rolls và bonus conditions.
 
 ---
 
-### ⏳ Group 4: Fixed Dice Roll Events (0/4 completed)
+### 🔄 Group 4: Fixed Dice Roll Events (1/4 completed)
 
 Events roll fixed số lượng dice (không theo stat value).
 
 | # | ID | Name (VI) | Status | Notes |
 |---|----|-----------|----|-------|
-| 18 | `duong_bi_mat` | Đường bí mật | ⏳ Pending | Roll 3 dice, place tokens |
+| 18 | `duong_bi_mat` | Đường bí mật | ✅ Done | Roll 3 dice, place tokens |
 | 19 | `cuoc_goi_den` | Cuộc gọi đến | ⏳ Pending | Roll 2 dice, stat changes |
 | 20 | `am_thanh_bat_an` | Âm thanh bất an | ⏳ Pending | Roll 6 dice, compare to omen count |
 | 21 | `tieng_buoc_chan` | Tiếng bước chân | ⏳ Pending | Roll 1 die, chapel bonus |
@@ -562,15 +562,15 @@ URL: `http://localhost:5173/#/game/debug`
 
 ## Next Steps
 
-### Immediate Next Task: Event #18 (duong_bi_mat) - Group 4
+### Immediate Next Task: Event #19 (cuoc_goi_den) - Group 4
 
-**Event**: Đường bí mật
-**Type**: Fixed dice (3), place tokens
-**Requires**: fixed dice support, token placement system
+**Event**: Cuộc gọi đến
+**Type**: Fixed dice (2), stat changes
+**Requires**: fixed dice flow, apply stat changes per outcome
 
 ### Priorities
 
-1. **Fixed Dice Count** (Events #18-21) - Common pattern
+1. **Fixed Dice Count** (Events #19-21) - Common pattern
 2. **Token Placement System** (Events #22-30) - Big feature
 3. **Multi-player Effects** (Events #31-34) - Complex sync
 
@@ -579,6 +579,13 @@ URL: `http://localhost:5173/#/game/debug`
 ## Change Log
 
 ### 2026-01-30
+
+**Event #18 (duong_bi_mat) - COMPLETED**
+- Fixed dice roll (3) handled via event dice modal
+- Places first Secret Passage token in current room
+- Prompts player to choose target room based on rolled floor
+- Added Secret Passage token badge (corner) + floor selector + map click for placement
+- Added Secret Passage travel button when movesLeft = 0 (manual test pending)
 
 **Event #17 (nguoi_treo_co) - COMPLETED**
 - Multi-roll (4 stats) works with per-roll stat loss on fail
@@ -641,6 +648,6 @@ URL: `http://localhost:5173/#/game/debug`
 
 ---
 
-**Progress: 17/45 Events Complete (38%)**
+**Progress: 18/45 Events Complete (40%)**
 **Last Updated: 2026-01-30**
-**Current Task: Event #18 - Group 4: Fixed Dice Roll Events**
+**Current Task: Event #19 - Group 4: Fixed Dice Roll Events**
