@@ -98,7 +98,7 @@ Events roll fixed số lượng dice (không theo stat value).
 |---|----|-----------|----|-------|
 | 18 | `duong_bi_mat` | Đường bí mật | ✅ Done | Roll 3 dice, place tokens |
 | 19 | `cuoc_goi_den` | Cuộc gọi đến | ✅ Done | Fixed dice (2), stat changes |
-| 20 | `am_thanh_bat_an` | Âm thanh bất an | ⏳ Pending | Roll 6 dice, compare to omen count |
+| 20 | `am_thanh_bat_an` | Âm thanh bất an | ✅ Done | Fixed dice (6), compare to omen count |
 | 21 | `tieng_buoc_chan` | Tiếng bước chân | ⏳ Pending | Roll 1 die, chapel bonus |
 
 **Implementation Requirements:**
@@ -562,11 +562,11 @@ URL: `http://localhost:5173/#/game/debug`
 
 ## Next Steps
 
-### Immediate Next Task: Event #20 (am_thanh_bat_an) - Group 4
+### Immediate Next Task: Event #21 (tieng_buoc_chan) - Group 4
 
-**Event**: Âm thanh bất an
-**Type**: Fixed dice (6), compare to omen count
-**Requires**: fixed dice flow, compare roll vs omen count
+**Event**: Tiếng bước chân
+**Type**: Fixed dice (1), chapel bonus
+**Requires**: fixed dice flow, room-specific bonus
 
 ### Priorities
 
@@ -579,6 +579,10 @@ URL: `http://localhost:5173/#/game/debug`
 ## Change Log
 
 ### 2026-01-30
+
+**Event #20 (am_thanh_bat_an) - COMPLETED**
+- Fixed dice roll (6) via immediate roll
+- Compares roll to total Omen count to decide outcome
 
 **Event #19 (cuoc_goi_den) - COMPLETED**
 - Fixed dice roll (2) via immediate roll

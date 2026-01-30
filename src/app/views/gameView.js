@@ -2433,9 +2433,20 @@ function applyEventDiceResult(mountEl, result, stat) {
     if (!eventDiceModal || !eventDiceModal.eventCard) return;
 
     const { eventCard } = eventDiceModal;
-    const outcome = findMatchingOutcome(eventCard.rollResults, result);
+    let outcome = null;
+    let omenCount = null;
 
-    console.log('[EventDice] applyEventDiceResult - Result:', result, 'Stat:', stat, 'Outcome:', outcome);
+    if (eventCard.compareToOmenCount) {
+        omenCount = getTotalOmenCount();
+        const isSuccess = result >= omenCount;
+        outcome = eventCard.rollResults?.find(r =>
+            isSuccess ? r.condition === 'rollGreaterOrEqualOmen' : r.condition === 'rollLessThanOmen'
+        ) || null;
+    } else {
+        outcome = findMatchingOutcome(eventCard.rollResults, result);
+    }
+
+    console.log('[EventDice] applyEventDiceResult - Result:', result, 'Stat:', stat, 'Outcome:', outcome, 'OmenCount:', omenCount);
 
     if (!outcome) {
         console.warn('[EventDice] No matching outcome found for result:', result);
@@ -3747,7 +3758,7 @@ function renderTeleportChoiceModal() {
 function renderRoomSelectModal() {
     if (!roomSelectModal?.isOpen || roomSelectModal.selectionMode === 'map') return '';
 
-    const { title, description, rooms, allowedFloors, selectedFloor, pendingRoomId, selectionMode, allowSkip } = roomSelectModal;
+    const { title, description, rooms, allowedFloors, selectedFloor, pendingRoomId, selectionMode, allowSkip, dropdownOpen } = roomSelectModal;
     const floorLabels = {
         basement: 'Tang ham',
         ground: 'Tang tret',
@@ -3767,15 +3778,24 @@ function renderRoomSelectModal() {
         ? rooms.filter(room => room.floor === selectedFloor)
         : rooms;
 
-    const roomButtons = filteredRooms.length > 0
-        ? filteredRooms.map(room => `
-            <button class="teleport-choice-modal__btn ${pendingRoomId === room.roomId ? 'is-selected' : ''}"
-                    type="button"
-                    data-action="room-select-choice"
-                    data-room-id="${room.roomId}">
-                ${room.name}
+    const roomDropdown = filteredRooms.length > 0
+        ? `
+            <button class="room-select-dropdown" type="button" data-action="room-select-toggle">
+                ${pendingRoomId ? (filteredRooms.find(r => r.roomId === pendingRoomId)?.name || pendingRoomId) : '-- Chon phong --'}
             </button>
-        `).join('')
+            ${dropdownOpen ? `
+                <div class="room-select-dropdown__menu">
+                    ${filteredRooms.map(room => `
+                        <button class="room-select-dropdown__item ${pendingRoomId === room.roomId ? 'is-selected' : ''}"
+                                type="button"
+                                data-action="room-select-item"
+                                data-room-id="${room.roomId}">
+                            ${room.name}
+                        </button>
+                    `).join('')}
+                </div>
+            ` : ''}
+        `
         : `<div class="teleport-choice-modal__empty">Khong co phong tren tang nay.</div>`;
 
     const pendingRoomName = pendingRoomId
@@ -3811,7 +3831,7 @@ function renderRoomSelectModal() {
                     ${pendingRoomId ? `<div class="teleport-choice-modal__selected">Da chon: ${pendingRoomName}</div>` : ''}
                     ${selectionMode === 'menu' ? `
                         <div class="teleport-choice-modal__options">
-                            ${roomButtons}
+                            ${roomDropdown}
                         </div>
                     ` : ''}
                     <div class="teleport-choice-modal__actions">
@@ -5410,7 +5430,7 @@ function attachEventListeners(mountEl, roomId) {
 
         const roomSelectActive = roomSelectModal
             && (roomSelectModal.isOpen || roomSelectModal.selectionMode === 'map' || roomSelectModal.showConfirmModal);
-        if (roomSelectActive && action && !['room-select-floor', 'room-select-choice', 'room-select-confirm', 'room-select-mode', 'room-select-confirm-map', 'room-select-cancel-map', 'room-select-skip'].includes(action)) {
+        if (roomSelectActive && action && !['room-select-floor', 'room-select-choice', 'room-select-confirm', 'room-select-mode', 'room-select-confirm-map', 'room-select-cancel-map', 'room-select-skip', 'room-select-toggle', 'room-select-item'].includes(action)) {
             return;
         }
 
@@ -6892,6 +6912,7 @@ function attachEventListeners(mountEl, roomId) {
                     roomSelectModal.pendingRoomId = null;
                 }
                 roomSelectModal.showConfirmModal = false;
+                roomSelectModal.dropdownOpen = false;
                 skipMapCentering = true;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
@@ -6906,6 +6927,7 @@ function attachEventListeners(mountEl, roomId) {
                 roomSelectModal.isOpen = mode === 'menu';
                 roomSelectModal.pendingRoomId = null;
                 roomSelectModal.showConfirmModal = false;
+                roomSelectModal.dropdownOpen = false;
                 skipMapCentering = true;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
@@ -6917,6 +6939,27 @@ function attachEventListeners(mountEl, roomId) {
             const roomId = target.dataset.roomId;
             if (roomId) {
                 roomSelectModal.pendingRoomId = roomId;
+                roomSelectModal.dropdownOpen = false;
+                skipMapCentering = true;
+                updateGameUI(mountEl, currentGameState, mySocketId);
+            }
+            return;
+        }
+
+        if (action === 'room-select-toggle') {
+            if (!roomSelectModal) return;
+            roomSelectModal.dropdownOpen = !roomSelectModal.dropdownOpen;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
+            return;
+        }
+
+        if (action === 'room-select-item') {
+            if (!roomSelectModal) return;
+            const roomId = target.dataset.roomId;
+            if (roomId) {
+                roomSelectModal.pendingRoomId = roomId;
+                roomSelectModal.dropdownOpen = false;
                 skipMapCentering = true;
                 updateGameUI(mountEl, currentGameState, mySocketId);
             }
@@ -7241,6 +7284,15 @@ function attachEventListeners(mountEl, roomId) {
             if (confirmBtn) {
                 /** @type {HTMLButtonElement} */ (confirmBtn).disabled = !selectedStat;
             }
+            return;
+        }
+
+        if (target.matches('[data-input="room-select-dropdown"]')) {
+            if (!roomSelectModal) return;
+            const roomId = target.value;
+            roomSelectModal.pendingRoomId = roomId || null;
+            skipMapCentering = true;
+            updateGameUI(mountEl, currentGameState, mySocketId);
             return;
         }
 
@@ -9316,7 +9368,8 @@ function openRoomSelectModal(mountEl, title, description, rooms, tokenType, orig
         pendingRoomId: null,
         selectionMode: 'menu',
         showConfirmModal: false,
-        allowSkip
+        allowSkip,
+        dropdownOpen: false
     };
     skipMapCentering = true;
     updateGameUI(mountEl, currentGameState, mySocketId);
@@ -9484,6 +9537,15 @@ function getUsedCardIds() {
     }
     
     return used;
+}
+
+/**
+ * Get total number of Omen cards drawn in game
+ * @returns {number}
+ */
+function getTotalOmenCount() {
+    const used = getUsedCardIds();
+    return used.omens.length;
 }
 
 /**

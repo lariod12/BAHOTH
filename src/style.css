@@ -8744,6 +8744,12 @@ select.field__input option {
     gap: 16px;
 }
 
+.teleport-choice-overlay--room-select .teleport-choice-modal__body {
+    max-height: 70vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .teleport-choice-modal__actions {
     display: flex;
     justify-content: center;
@@ -8844,6 +8850,48 @@ select.field__input option {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.room-select-dropdown {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 2px solid #8b5cf6;
+    background: rgba(15, 23, 42, 0.8);
+    color: #e2e8f0;
+    font-size: 0.95rem;
+    text-align: left;
+}
+
+.room-select-dropdown__menu {
+    max-height: 40vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 6px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(139, 92, 246, 0.6);
+}
+
+.room-select-dropdown__item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(139, 92, 246, 0.5);
+    background: rgba(76, 29, 149, 0.7);
+    color: #e2e8f0;
+    font-size: 0.95rem;
+    text-align: left;
+}
+
+.room-select-dropdown__item.is-selected {
+    border-color: #c4b5fd;
+    background: linear-gradient(145deg, #7c3aed, #6d28d9);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.35);
 }
 
 .teleport-choice-modal__btn {

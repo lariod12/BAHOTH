@@ -1013,7 +1013,8 @@ export const EVENTS = [
         'Tiếng khóc của một đứa bé, lạc lõng và bị bỏ rơi. Một tiếng la hét. Tiếng cửa kính vỡ. Sau đó mọi thứ im bặt.\n' +
         'Đổ 6 viên xúc xắc. Nếu bạn được số điểm lớn hơn hoặc bằng số lá Omen hiện có, bạn được tăng 1 Sanity. Nếu không, bạn chịu 1 xúc xắc sát thương tinh thần.',
     },
-    rollDice: 6,
+    immediateRoll: true,
+    fixedDice: 6,
     compareToOmenCount: true,
     rollResults: [
       { condition: 'rollGreaterOrEqualOmen', effect: 'gainStat', stat: 'sanity', amount: 1 },
