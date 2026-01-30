@@ -991,10 +991,11 @@ export const EVENTS = [
         'Đổ 2 viên xúc xắc. Giọng nói ngọt ngào của một bà lão cất lên:\n' +
         '4+  "Trà và bánh ngọt! Trà và bánh ngọt! Món yêu thích của taaaa". Tăng 1 Sanity.\n' +
         '3  "Ta luôn ở đây vì người, bánh ngọt ơi. Coi chừng đó...". Tăng 1 Knowledge.\n' +
-        '1-2  "Ta ở ngay đây, kẹo ngọt ơi! Hồn ta đi nàooooo!". Chịu 1 xúc xắc sát thương tinh thần.\n' +
+        '1-2  "Ta ở ngay đây, kẹo ngọt ơi! Hôn ta đi nàooooo!". Chịu 1 xúc xắc sát thương tinh thần.\n' +
         '0  "Trẻ hư thì phải bị phạt". Chịu 2 xúc xắc sát thương vật lí.',
     },
-    rollDice: 2,
+    immediateRoll: true,
+    fixedDice: 2,
     rollResults: [
       { range: '4+', effect: 'gainStat', stat: 'sanity', amount: 1 },
       { range: '3', effect: 'gainStat', stat: 'knowledge', amount: 1 },
