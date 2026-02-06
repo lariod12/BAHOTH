@@ -234,15 +234,3 @@ export function calculatePlayerSpawnPosition(layout, roomBounds) {
   return spawnOffsets[layout.playerSpawnZone] || { x: centerX, y: centerY };
 }
 
-export default {
-  validateRotation,
-  getDoorSideAfterRotation,
-  getDividerOrientation,
-  getNearDoorZone,
-  getFarDoorZone,
-  calculateVaultLayout,
-  getZoneCenter,
-  isPositionInZone,
-  calculateTokenPositions,
-  calculatePlayerSpawnPosition
-};

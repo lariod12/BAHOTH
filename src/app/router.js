@@ -1,6 +1,6 @@
 import { renderHomeView } from './views/homeView.js';
 import { renderRoomView } from './views/roomView.js';
-import { renderGameView } from './views/gameView.js';
+import { renderGameView } from './views/game/index.js';
 import { renderTutorialBooksView } from './views/tutorialBooksView.js';
 import { renderTraitorsTomeReferenceView } from './views/traitorsTomeReferenceView.js';
 import { renderRulesBookReferenceView } from './views/rulesBookReferenceView.js';

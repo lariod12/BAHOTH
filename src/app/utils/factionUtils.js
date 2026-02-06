@@ -17,21 +17,6 @@
  */
 
 /**
- * Create default haunt state (pre-haunt)
- * @returns {HauntState}
- */
-export function createDefaultHauntState() {
-    return {
-        hauntTriggered: false,
-        hauntNumber: null,
-        triggeredByPlayerId: null,
-        triggerOmen: null,
-        triggerRoom: null,
-        traitorId: null,
-    };
-}
-
-/**
  * Check if haunt has been triggered
  * @param {Object} gameState - Current game state
  * @returns {boolean}
@@ -109,57 +94,6 @@ export function isEnemy(gameState, playerId1, playerId2) {
 }
 
 /**
- * Get the traitor player ID (if haunt triggered)
- * @param {Object} gameState - Current game state
- * @returns {string | null}
- */
-export function getTraitorId(gameState) {
-    return gameState?.hauntState?.traitorId ?? null;
-}
-
-/**
- * Get all players of a specific faction
- * @param {Object} gameState - Current game state
- * @param {Faction} faction - Faction to filter by
- * @returns {Array<string>} Array of player IDs
- */
-export function getPlayersInFaction(gameState, faction) {
-    const players = gameState?.players || [];
-    return players
-        .filter(p => getFaction(gameState, p.id) === faction)
-        .map(p => p.id);
-}
-
-/**
- * Get all heroes (survivors)
- * @param {Object} gameState - Current game state
- * @returns {Array<string>} Array of hero player IDs
- */
-export function getHeroes(gameState) {
-    return getPlayersInFaction(gameState, 'survivor');
-}
-
-/**
- * Check if a player is the traitor
- * @param {Object} gameState - Current game state
- * @param {string} playerId - Player ID to check
- * @returns {boolean}
- */
-export function isTraitor(gameState, playerId) {
-    return getFaction(gameState, playerId) === 'traitor';
-}
-
-/**
- * Check if a player is a hero
- * @param {Object} gameState - Current game state
- * @param {string} playerId - Player ID to check
- * @returns {boolean}
- */
-export function isHero(gameState, playerId) {
-    return getFaction(gameState, playerId) === 'survivor';
-}
-
-/**
  * Get faction display label in Vietnamese
  * @param {Faction} faction - Faction value
  * @returns {string}
@@ -223,31 +157,3 @@ export function applyHauntState(gameState, hauntData) {
     });
 }
 
-/**
- * Check if a player is dead
- * @param {Object} gameState - Current game state
- * @param {string} playerId - Player ID to check
- * @returns {boolean}
- */
-export function isPlayerDead(gameState, playerId) {
-    const characterData = gameState?.playerState?.characterData?.[playerId]
-        || gameState?.characterData?.[playerId];
-    return characterData?.isDead === true;
-}
-
-/**
- * Get all alive players of a specific faction
- * @param {Object} gameState - Current game state
- * @param {Faction} faction - Faction to filter by
- * @returns {Array<string>} Array of alive player IDs
- */
-export function getAlivePlayersInFaction(gameState, faction) {
-    const players = gameState?.players || [];
-    return players
-        .filter(p => {
-            const playerFaction = getFaction(gameState, p.id);
-            const dead = isPlayerDead(gameState, p.id);
-            return playerFaction === faction && !dead;
-        })
-        .map(p => p.id);
-}
