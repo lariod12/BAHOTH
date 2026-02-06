@@ -115,8 +115,25 @@ export function attachEventListeners(mountEl, roomId) {
                     applyStatChange(loserId, 'might', -damage); syncGameStateToServer();
                     updateGameUI(mountEl, state.currentGameState, state.mySocketId);
                 } else if (loserId === state.mySocketId) {
+                    // I am the loser - show damage distribution (same as main flow)
                     closeCombatModal(mountEl, attackerLost);
                     openDamageDistributionModal(mountEl, damage, 'combat', 'physical');
+                } else if (state.isSoloDebug && state.soloDebugPlayerIds.includes(loserId)) {
+                    // Solo debug: I'm the winner - let closeCombatModal handle movement/sync first,
+                    // then defer switching to loser to avoid breaking async post-combat movement.
+                    // Save pending damage and use setTimeout(0) so dynamic import in closeCombatModal
+                    // resolves before we switch player perspective.
+                    const savedLoserId = loserId;
+                    const savedDamage = damage;
+                    closeCombatModal(mountEl, attackerLost);
+                    setTimeout(() => {
+                        state.mySocketId = savedLoserId;
+                        socketClient.setSoloDebugActivePlayer(savedLoserId);
+                        openDamageDistributionModal(mountEl, savedDamage, 'combat', 'physical');
+                        const player = state.currentGameState?.players?.find(p => p.id === savedLoserId);
+                        const charName = player?.characterId ? getCharacterName(player.characterId) : 'Player';
+                        showToast(`Switched to ${charName} (damage)`, 'info', 1500);
+                    }, 100);
                 } else { closeCombatModal(mountEl, attackerLost); }
             } else { closeCombatModal(mountEl, attackerLost); }
             return;
@@ -140,8 +157,34 @@ export function attachEventListeners(mountEl, roomId) {
         if (action === 'close-sidebar') { state.sidebarOpen = false; const sb = mountEl.querySelector('.game-sidebar'); if (sb) sb.classList.remove('is-open'); return; }
         if (action === 'reset-debug-game') { state.resetGameModal = { isOpen: true }; updateGameUI(mountEl, state.currentGameState, state.mySocketId); return; }
         if (action === 'close-reset-game') { state.resetGameModal = null; updateGameUI(mountEl, state.currentGameState, state.mySocketId); return; }
-        if (action === 'confirm-reset-game') { state.resetGameModal = null; await socketClient.resetDebugGame(); return; }
+        if (action === 'confirm-reset-game') {
+            state.resetGameModal = null;
+            if (state.isSoloDebug) {
+                await socketClient.resetSoloDebugRoom();
+            } else {
+                await socketClient.resetDebugGame();
+            }
+            return;
+        }
         if (action === 'expand-player') { const pid = target.closest('[data-player-id]')?.dataset.playerId; if (pid) { if (state.expandedPlayers.has(pid)) state.expandedPlayers.delete(pid); else state.expandedPlayers.add(pid); updateGameUI(mountEl, state.currentGameState, state.mySocketId); } return; }
+
+        // Solo debug: switch active player
+        if (action === 'solo-debug-switch') {
+            const newPlayerId = target.closest('[data-player-id]')?.dataset.playerId;
+            if (newPlayerId && state.isSoloDebug && newPlayerId !== state.mySocketId) {
+                console.log('[SoloDebug] Switching to player:', newPlayerId);
+                state.mySocketId = newPlayerId;
+                socketClient.setSoloDebugActivePlayer(newPlayerId);
+                state.movesInitializedForTurn = -1;
+                state.hasAttackedThisTurn = false;
+                updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+                centerMapOnPlayer(mountEl, true);
+                const player = state.currentGameState?.players?.find(p => p.id === newPlayerId);
+                const charName = player?.characterId ? getCharacterName(player.characterId) : 'Player';
+                showToast(`Switched to ${charName}`, 'info', 1500);
+            }
+            return;
+        }
 
         // Dice rolling phase
         if (action === 'roll-manual') {

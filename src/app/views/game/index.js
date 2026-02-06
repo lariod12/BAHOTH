@@ -35,7 +35,7 @@ function hideIntro(mountEl) {
     updateGameUI(mountEl, state.currentGameState, state.mySocketId);
 }
 
-export function renderGameView({ mountEl, onNavigate, roomId }) {
+export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false }) {
     // Clone and replace mountEl to remove all existing event listeners
     const newMountEl = mountEl.cloneNode(false);
     mountEl.parentNode?.replaceChild(newMountEl, mountEl);
@@ -45,6 +45,8 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
     // Reset state
     state.eventListenersAttached = false;
     state.isDebugMode = roomId === 'debug';
+    state.isSoloDebug = soloDebug;
+    state.soloDebugPlayerIds = [];
     state.sidebarOpen = false;
     state.introShown = false;
     state.movesInitializedForTurn = -1;
@@ -81,7 +83,19 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         clearLoadingTimeout();
 
         if (serverState?.isDebug) {
-            if (serverState.gamePhase === 'lobby' && serverState.players?.length < 2) {
+            // Solo debug: skip waiting, always in playing phase
+            if (serverState.isSoloDebug) {
+                removeDebugWaitingPopup();
+                state.introShown = true;
+
+                // Initialize solo debug player IDs on first state
+                if (state.soloDebugPlayerIds.length === 0 && serverState.players?.length >= 2) {
+                    state.soloDebugPlayerIds = serverState.players.map(p => p.id);
+                    state.mySocketId = state.soloDebugPlayerIds[0];
+                    socketClient.setSoloDebugActivePlayer(state.soloDebugPlayerIds[0]);
+                    console.log('[GameView] Solo debug initialized, players:', state.soloDebugPlayerIds);
+                }
+            } else if (serverState.gamePhase === 'lobby' && serverState.players?.length < 2) {
                 showDebugWaitingPopup();
                 state.currentGameState = serverState;
                 return;
@@ -106,7 +120,10 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         }
 
         state.currentGameState = serverState;
-        state.mySocketId = socketClient.getSocketId();
+        // In solo debug, preserve the user-selected active player ID
+        if (!state.isSoloDebug) {
+            state.mySocketId = socketClient.getSocketId();
+        }
         ensureCharacterDataInitialized(state.currentGameState);
 
         // Show haunt announcement
@@ -220,10 +237,14 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
     });
 
     state.unsubscribeDebugReset = socketClient.onDebugReset(() => {
-        console.log('[GameView] Debug reset received, redirecting to debug room...');
+        console.log('[GameView] Debug reset received, redirecting...');
         showToast('Game da duoc reset!', 'info', 2000);
         socketClient.clearSession();
-        setTimeout(() => onNavigate('#/game/debug'), 500);
+        if (state.isSoloDebug) {
+            setTimeout(() => onNavigate('#/game/solo-debug'), 500);
+        } else {
+            setTimeout(() => onNavigate('#/game/debug'), 500);
+        }
     });
 
     setupVisibilityTracking();
@@ -257,5 +278,12 @@ export function renderGameView({ mountEl, onNavigate, roomId }) {
         state.activePlayers.clear();
         state.endTurnModal = null;
         state.eventListenersAttached = false;
+        // Clean up solo debug state
+        if (state.isSoloDebug) {
+            state.isSoloDebug = false;
+            state.soloDebugPlayerIds = [];
+            state.soloDebugPendingDamage = null;
+            socketClient.setIsSoloDebug(false);
+        }
     }, { once: true });
 }

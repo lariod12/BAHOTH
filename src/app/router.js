@@ -30,9 +30,13 @@ function parseRoute(route) {
         return { path: '/room/:roomId', params: { roomId: roomMatch[1] } };
     }
 
-    // Match /game/debug first (before generic :roomId)
+    // Match /game/debug and /game/solo-debug first (before generic :roomId)
     if (route === '/game/debug') {
         return { path: '/game/debug', params: {} };
+    }
+
+    if (route === '/game/solo-debug' || route === '/game/SOLO_DEBUG') {
+        return { path: '/game/solo-debug', params: {} };
     }
 
     // Match /game/:roomId pattern
@@ -78,9 +82,15 @@ function renderRoute({ mountEl }) {
         return;
     }
 
-    // Debug mode: /game/debug - 3 players on same machine
+    // Debug mode: /game/debug - 2 players, 2 tabs
     if (path === '/game/debug') {
         renderGameView({ mountEl, onNavigate: navigateTo, roomId: null, debugMode: true });
+        return;
+    }
+
+    // Solo debug mode: /game/solo-debug - 1 tab, 2 virtual players, switch between them
+    if (path === '/game/solo-debug') {
+        renderGameView({ mountEl, onNavigate: navigateTo, roomId: 'SOLO_DEBUG', soloDebug: true });
         return;
     }
 

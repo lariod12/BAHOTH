@@ -340,25 +340,29 @@ export function socketIOPlugin() {
                 });
 
                 // Set player moves (called when turn starts to set speed-based moves)
-                socket.on('game:set-moves', ({ moves }, callback) => {
-                    const room = roomManager.setPlayerMoves(socket.id, moves);
+                socket.on('game:set-moves', ({ moves, asPlayerId }, callback) => {
+                    // For solo debug: allow acting as a different player
+                    const room = roomManager.getRoomBySocket(socket.id);
+                    const effectivePlayerId = (room?.isSoloDebug && asPlayerId) ? asPlayerId : socket.id;
+
+                    const updatedRoom = roomManager.setPlayerMoves(effectivePlayerId, moves);
 
                     if (callback) {
-                        callback({ success: !!room });
+                        callback({ success: !!updatedRoom });
                     }
 
-                    if (room) {
+                    if (updatedRoom) {
                         // Also set in playerManager
-                        playerManager.setPlayerMoves(room.id, socket.id, moves);
+                        playerManager.setPlayerMoves(updatedRoom.id, effectivePlayerId, moves);
 
-                        const mapState = mapManager.getFullMapState(room.id);
-                        const playerState = playerManager.getFullPlayerState(room.id);
+                        const mapState = mapManager.getFullMapState(updatedRoom.id);
+                        const playerState = playerManager.getFullPlayerState(updatedRoom.id);
                         const fullState = {
-                            ...room,
+                            ...updatedRoom,
                             map: mapState,
                             playerState: playerState,
                         };
-                        io.to(room.id).emit('game:state', fullState);
+                        io.to(updatedRoom.id).emit('game:state', fullState);
                     }
                 });
 
@@ -682,6 +686,69 @@ export function socketIOPlugin() {
                         console.log('[Socket.IO] Debug room has 2 players, game auto-started in playing phase');
                         io.to(result.room.id).emit('room:game-start', { roomId: result.room.id });
                     }
+                });
+
+                // Create solo debug room - 1 socket, 2 virtual players, instant start
+                socket.on('debug:solo-create', ({}, callback) => {
+                    const result = roomManager.createSoloDebugRoom(socket.id);
+
+                    if (!result.success) {
+                        if (callback) {
+                            callback({ success: false, error: result.error });
+                        }
+                        return;
+                    }
+
+                    socket.join(result.room.id);
+                    console.log(`[Socket.IO] Solo debug room created by ${socket.id}, players: ${result.player1Id}, ${result.player2Id}`);
+
+                    // Initialize fresh map and player state
+                    const mapState = mapManager.initializeMap(result.room.id);
+                    const playerState = playerManager.initializeGame(result.room.id, result.room.players);
+
+                    const fullState = {
+                        ...result.room,
+                        map: mapState,
+                        playerState: playerState || {},
+                    };
+
+                    if (callback) {
+                        callback({
+                            success: true,
+                            room: fullState,
+                            player1Id: result.player1Id,
+                            player2Id: result.player2Id
+                        });
+                    }
+
+                    socket.emit('game:state', fullState);
+                    console.log('[Socket.IO] Solo debug game auto-started');
+                });
+
+                // Reset solo debug room
+                socket.on('debug:solo-reset', ({}, callback) => {
+                    const roomId = roomManager.getPlayerRoom(socket.id);
+
+                    if (roomId !== 'SOLO_DEBUG') {
+                        if (callback) {
+                            callback({ success: false, error: 'Not in solo debug room' });
+                        }
+                        return;
+                    }
+
+                    console.log('[Socket.IO] Solo debug game reset requested by', socket.id);
+
+                    // Clear map and player state
+                    mapManager.cleanupMap(roomId);
+                    playerManager.cleanupGame(roomId);
+                    roomManager.resetSoloDebugRoom();
+
+                    if (callback) {
+                        callback({ success: true });
+                    }
+
+                    // Notify the socket about reset
+                    socket.emit('debug:reset', { message: 'Solo debug game reset' });
                 });
 
                 // Reset debug game - both players return to initial state

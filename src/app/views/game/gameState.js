@@ -19,6 +19,11 @@ export const state = {
     skipMapCentering: false,
     tutorialOpen: false,
     isDebugMode: false,
+    isSoloDebug: false,
+    /** @type {string[]} */
+    soloDebugPlayerIds: [],
+    /** @type {{ loserId: string; damage: number } | null} */
+    soloDebugPendingDamage: null,
     eventListenersAttached: false,
     showingDiceResults: false,
     /** @type {any} */

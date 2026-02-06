@@ -2,7 +2,9 @@ import * as socketClient from '../services/socketClient.js';
 
 // Debug mode constants
 const DEBUG_ROOM_ID = 'DEBUG';
+const SOLO_DEBUG_ROOM_ID = 'SOLO_DEBUG';
 const DEBUG_STORAGE_KEY = 'bahoth_debug_mode';
+const SOLO_DEBUG_STORAGE_KEY = 'bahoth_solo_debug_mode';
 
 // Random name generator - Horror/Haunted theme
 const ADJECTIVES = [
@@ -79,7 +81,11 @@ function renderHomeMarkup() {
                 <div class="debug-mode-section">
                     <label class="debug-toggle">
                         <input type="checkbox" id="debug-mode-toggle" />
-                        <span class="debug-toggle__label">Debug Mode (2 players, auto-start)</span>
+                        <span class="debug-toggle__label">Debug Mode (2 tabs, 2 players)</span>
+                    </label>
+                    <label class="debug-toggle">
+                        <input type="checkbox" id="solo-debug-toggle" />
+                        <span class="debug-toggle__label">Solo Debug (1 tab, switch players)</span>
                     </label>
                 </div>
             </div>
@@ -178,6 +184,7 @@ export function renderHomeView({ mountEl, onNavigate }) {
 
     // Debug mode elements
     const debugModeToggle = /** @type {HTMLInputElement} */ (mountEl.querySelector('#debug-mode-toggle'));
+    const soloDebugToggle = /** @type {HTMLInputElement} */ (mountEl.querySelector('#solo-debug-toggle'));
 
     // Auto-join debug room function
     const autoJoinDebugRoom = async () => {
@@ -202,22 +209,66 @@ export function renderHomeView({ mountEl, onNavigate }) {
         }
     };
 
+    // Solo debug room function
+    const autoJoinSoloDebugRoom = async () => {
+        socketClient.clearSession();
+
+        try {
+            const result = await socketClient.createSoloDebugRoom();
+            if (result.success && result.room) {
+                onNavigate(`#/game/${SOLO_DEBUG_ROOM_ID}`);
+            } else {
+                console.error('Failed to create solo debug room:', result.error);
+                if (soloDebugToggle) soloDebugToggle.checked = false;
+                localStorage.setItem(SOLO_DEBUG_STORAGE_KEY, 'false');
+            }
+        } catch (error) {
+            console.error('Error creating solo debug room:', error);
+            if (soloDebugToggle) soloDebugToggle.checked = false;
+            localStorage.setItem(SOLO_DEBUG_STORAGE_KEY, 'false');
+        }
+    };
+
     // Debug mode toggle handler
     debugModeToggle?.addEventListener('change', () => {
         const isChecked = debugModeToggle.checked;
         localStorage.setItem(DEBUG_STORAGE_KEY, isChecked.toString());
-
+        // Uncheck solo debug when normal debug is enabled
+        if (isChecked && soloDebugToggle) {
+            soloDebugToggle.checked = false;
+            localStorage.setItem(SOLO_DEBUG_STORAGE_KEY, 'false');
+        }
         if (isChecked) {
             autoJoinDebugRoom();
         }
     });
 
+    // Solo debug toggle handler
+    soloDebugToggle?.addEventListener('change', () => {
+        const isChecked = soloDebugToggle.checked;
+        localStorage.setItem(SOLO_DEBUG_STORAGE_KEY, isChecked.toString());
+        // Uncheck normal debug when solo debug is enabled
+        if (isChecked && debugModeToggle) {
+            debugModeToggle.checked = false;
+            localStorage.setItem(DEBUG_STORAGE_KEY, 'false');
+        }
+        if (isChecked) {
+            autoJoinSoloDebugRoom();
+        }
+    });
+
     // Check saved debug mode state on page load
     const savedDebugMode = localStorage.getItem(DEBUG_STORAGE_KEY) === 'true';
+    const savedSoloDebugMode = localStorage.getItem(SOLO_DEBUG_STORAGE_KEY) === 'true';
     if (debugModeToggle) {
         debugModeToggle.checked = savedDebugMode;
     }
-    if (savedDebugMode) {
+    if (soloDebugToggle) {
+        soloDebugToggle.checked = savedSoloDebugMode;
+    }
+    if (savedSoloDebugMode) {
+        autoJoinSoloDebugRoom();
+    } else if (savedDebugMode) {
         // Auto-join debug room if debug mode was saved
         autoJoinDebugRoom();
     }

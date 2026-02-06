@@ -79,6 +79,7 @@ const disconnectedPlayers = new Map();
 // Debug mode constants
 const DEBUG_ROOM_ID = 'DEBUG';
 const DEBUG_MAX_PLAYERS = 2;
+const SOLO_DEBUG_ROOM_ID = 'SOLO_DEBUG';
 
 // Random name generator for debug mode
 const DEBUG_ADJECTIVES = ['Swift', 'Brave', 'Clever', 'Quick', 'Bold', 'Wise', 'Keen', 'Calm'];
@@ -292,6 +293,13 @@ export function leaveRoom(socketId) {
     if (roomId === DEBUG_ROOM_ID) {
         console.log('[RoomManager] Player left debug room, resetting...');
         resetDebugRoom();
+        return { wasHost, roomDeleted: true };
+    }
+
+    // Special handling for solo debug room
+    if (roomId === SOLO_DEBUG_ROOM_ID) {
+        console.log('[RoomManager] Player left solo debug room, resetting...');
+        resetSoloDebugRoom();
         return { wasHost, roomDeleted: true };
     }
 
@@ -534,6 +542,13 @@ export function markPlayerDisconnected(socketId, onGracePeriodExpired) {
     if (roomId === DEBUG_ROOM_ID) {
         console.log('[RoomManager] Player disconnected from debug room, resetting...');
         resetDebugRoom();
+        return { success: true, debugReset: true };
+    }
+
+    // Special handling for solo debug room - reset immediately
+    if (roomId === SOLO_DEBUG_ROOM_ID) {
+        console.log('[RoomManager] Player disconnected from solo debug room, resetting...');
+        resetSoloDebugRoom();
         return { success: true, debugReset: true };
     }
 
@@ -1076,5 +1091,70 @@ export function resetDebugRoom() {
         rooms.delete(DEBUG_ROOM_ID);
         saveRooms();
         console.log('[RoomManager] Debug room reset');
+    }
+}
+
+/**
+ * Create solo debug room - 1 socket controls 2 virtual players
+ * Auto-assigns random characters and auto-starts the game immediately
+ * @param {string} socketId - The real socket ID
+ * @returns {{ success: boolean; room?: Room; error?: string; player1Id: string; player2Id: string }}
+ */
+export function createSoloDebugRoom(socketId) {
+    // Clean up any existing solo debug room
+    resetSoloDebugRoom();
+
+    const player2Id = `solo-p2-${socketId}`;
+
+    // Assign 2 different random characters
+    const char1 = CHARACTER_IDS[Math.floor(Math.random() * CHARACTER_IDS.length)];
+    let char2 = CHARACTER_IDS[Math.floor(Math.random() * CHARACTER_IDS.length)];
+    while (char2 === char1) {
+        char2 = CHARACTER_IDS[Math.floor(Math.random() * CHARACTER_IDS.length)];
+    }
+
+    const room = {
+        id: SOLO_DEBUG_ROOM_ID,
+        hostId: socketId,
+        players: [
+            { id: socketId, name: generateRandomDebugName(), status: 'ready', characterId: char1 },
+            { id: player2Id, name: generateRandomDebugName(), status: 'ready', characterId: char2 }
+        ],
+        maxPlayers: 2,
+        minPlayers: 2,
+        createdAt: new Date().toISOString(),
+        gamePhase: 'playing',
+        isDebug: true,
+        isSoloDebug: true,
+        diceRolls: {},
+        needsRoll: [],
+        turnOrder: [socketId, player2Id],
+        currentTurnIndex: 0,
+        playerMoves: { [socketId]: 0, [player2Id]: 0 }
+    };
+
+    rooms.set(SOLO_DEBUG_ROOM_ID, room);
+    socketToRoom.set(socketId, SOLO_DEBUG_ROOM_ID);
+    socketToRoom.set(player2Id, SOLO_DEBUG_ROOM_ID);
+
+    saveRooms();
+    console.log(`[RoomManager] Solo debug room created by ${socketId}, player2: ${player2Id}`);
+
+    return { success: true, room, player1Id: socketId, player2Id };
+}
+
+/**
+ * Reset solo debug room
+ * @returns {void}
+ */
+export function resetSoloDebugRoom() {
+    const room = rooms.get(SOLO_DEBUG_ROOM_ID);
+    if (room) {
+        for (const player of room.players) {
+            socketToRoom.delete(player.id);
+        }
+        rooms.delete(SOLO_DEBUG_ROOM_ID);
+        saveRooms();
+        console.log('[RoomManager] Solo debug room reset');
     }
 }

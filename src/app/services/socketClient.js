@@ -53,6 +53,12 @@ const playerReconnectedListeners = [];
 /** @type {((data: { message: string }) => void)[]} */
 const debugResetListeners = [];
 
+// Solo debug state - tracks which player is currently active
+/** @type {string|null} */
+let soloDebugActivePlayerId = null;
+/** @type {boolean} */
+let isSoloDebugMode = false;
+
 /**
  * Save session info for reconnection
  * @param {string} roomId
@@ -588,6 +594,7 @@ export function move(direction) {
 
 /**
  * Set player moves (for turn start)
+ * In solo debug mode, includes asPlayerId to tell server which player
  * @param {number} moves
  * @returns {Promise<{ success: boolean }>}
  */
@@ -598,7 +605,12 @@ export function setMoves(moves) {
             return;
         }
 
-        socket.emit('game:set-moves', { moves }, (response) => {
+        const payload = { moves };
+        if (isSoloDebugMode && soloDebugActivePlayerId) {
+            payload.asPlayerId = soloDebugActivePlayerId;
+        }
+
+        socket.emit('game:set-moves', payload, (response) => {
             resolve(response);
         });
     });
@@ -746,6 +758,83 @@ export function onDebugReset(callback) {
             debugResetListeners.splice(index, 1);
         }
     };
+}
+
+// ============================================
+// Solo Debug Mode Functions
+// ============================================
+
+/**
+ * Create solo debug room - 1 socket, 2 virtual players, instant start
+ * @returns {Promise<{ success: boolean; room?: any; player1Id?: string; player2Id?: string; error?: string }>}
+ */
+export function createSoloDebugRoom() {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        socket.emit('debug:solo-create', {}, (response) => {
+            if (response.success && response.room) {
+                saveSession(response.room.id, 'SoloDebug');
+                isSoloDebugMode = true;
+                soloDebugActivePlayerId = response.player1Id;
+            }
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Reset solo debug game
+ * @returns {Promise<{ success: boolean; error?: string }>}
+ */
+export function resetSoloDebugRoom() {
+    return new Promise((resolve) => {
+        if (!socket?.connected) {
+            resolve({ success: false, error: 'Not connected' });
+            return;
+        }
+
+        socket.emit('debug:solo-reset', {}, (response) => {
+            isSoloDebugMode = false;
+            soloDebugActivePlayerId = null;
+            resolve(response);
+        });
+    });
+}
+
+/**
+ * Set the active player for solo debug mode
+ * @param {string} playerId
+ */
+export function setSoloDebugActivePlayer(playerId) {
+    soloDebugActivePlayerId = playerId;
+}
+
+/**
+ * Get the current solo debug active player ID
+ * @returns {string|null}
+ */
+export function getSoloDebugActivePlayer() {
+    return soloDebugActivePlayerId;
+}
+
+/**
+ * Check if in solo debug mode
+ * @returns {boolean}
+ */
+export function getIsSoloDebug() {
+    return isSoloDebugMode;
+}
+
+/**
+ * Set solo debug mode flag
+ * @param {boolean} value
+ */
+export function setIsSoloDebug(value) {
+    isSoloDebugMode = value;
 }
 
 // ============================================
