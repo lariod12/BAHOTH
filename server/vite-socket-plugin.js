@@ -690,6 +690,10 @@ export function socketIOPlugin() {
 
                 // Create solo debug room - 1 socket, 2 virtual players, instant start
                 socket.on('debug:solo-create', ({}, callback) => {
+                    // Clean up old map/player state before creating fresh room
+                    mapManager.cleanupMap('SOLO_DEBUG');
+                    playerManager.cleanupGame('SOLO_DEBUG');
+
                     const result = roomManager.createSoloDebugRoom(socket.id);
 
                     if (!result.success) {

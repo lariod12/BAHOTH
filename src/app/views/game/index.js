@@ -54,6 +54,11 @@ export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false 
     state.activePlayers.clear();
     state.endTurnModal = null;
 
+    // For solo debug, clear stale session before connecting to avoid auto-reconnect
+    if (soloDebug) {
+        socketClient.clearSession();
+    }
+
     // Connect socket
     socketClient.connect();
     state.mySocketId = socketClient.getSocketId();
@@ -254,14 +259,25 @@ export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false 
 
     setupVisibilityTracking();
 
-    socketClient.getGameState(roomId).then((response) => {
-        if (!response.success) {
-            clearLoadingTimeout();
-            socketClient.clearSession();
-            showToast('Phong khong ton tai', 'error', 3000);
-            setTimeout(() => onNavigate('#/'), 1500);
-        }
-    });
+    if (state.isSoloDebug) {
+        // Solo debug: always create fresh room (session already cleared before connect)
+        socketClient.createSoloDebugRoom().then((response) => {
+            if (!response.success) {
+                clearLoadingTimeout();
+                showToast('Khong the tao solo debug room', 'error', 3000);
+                setTimeout(() => onNavigate('#/'), 1500);
+            }
+        });
+    } else {
+        socketClient.getGameState(roomId).then((response) => {
+            if (!response.success) {
+                clearLoadingTimeout();
+                socketClient.clearSession();
+                showToast('Phong khong ton tai', 'error', 3000);
+                setTimeout(() => onNavigate('#/'), 1500);
+            }
+        });
+    }
 
     attachEventListeners(mountEl, roomId);
 

@@ -770,19 +770,27 @@ export function onDebugReset(callback) {
  */
 export function createSoloDebugRoom() {
     return new Promise((resolve) => {
-        if (!socket?.connected) {
+        if (!socket) {
             resolve({ success: false, error: 'Not connected' });
             return;
         }
 
-        socket.emit('debug:solo-create', {}, (response) => {
-            if (response.success && response.room) {
-                saveSession(response.room.id, 'SoloDebug');
-                isSoloDebugMode = true;
-                soloDebugActivePlayerId = response.player1Id;
-            }
-            resolve(response);
-        });
+        const doCreate = () => {
+            socket.emit('debug:solo-create', {}, (response) => {
+                if (response.success && response.room) {
+                    saveSession(response.room.id, 'SoloDebug');
+                    isSoloDebugMode = true;
+                    soloDebugActivePlayerId = response.player1Id;
+                }
+                resolve(response);
+            });
+        };
+
+        if (socket.connected) {
+            doCreate();
+        } else {
+            socket.once('connect', doCreate);
+        }
     });
 }
 
