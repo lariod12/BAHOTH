@@ -678,33 +678,6 @@ function renderRoomDiscoveryModal(floor, doorSide, revealedRooms) {
         </div></div></div>`;
 }
 
-// ======================= SOLO DEBUG SWITCHER =======================
-
-function renderSoloDebugSwitcher(gameState, myId) {
-    if (!state.isSoloDebug || state.soloDebugPlayerIds.length < 2) return '';
-
-    const players = gameState?.players || [];
-    const currentTurnPlayerId = gameState?.turnOrder?.[gameState?.currentTurnIndex];
-
-    const buttons = state.soloDebugPlayerIds.map((pid, i) => {
-        const player = players.find(p => p.id === pid);
-        const charName = player?.characterId ? getCharacterName(player.characterId) : `Player ${i + 1}`;
-        const charColor = player?.characterId ? getCharacterColor(player.characterId) : '#888';
-        const isActive = pid === myId;
-        const isTurn = pid === currentTurnPlayerId;
-        return `<button class="solo-debug-switcher__btn ${isActive ? 'solo-debug-switcher__btn--active' : ''} ${isTurn ? 'solo-debug-switcher__btn--turn' : ''}"
-            type="button" data-action="solo-debug-switch" data-player-id="${pid}"
-            style="--char-color: ${charColor}">
-            <span class="solo-debug-switcher__name">${charName}</span>
-            ${isTurn ? '<span class="solo-debug-switcher__turn-badge">TURN</span>' : ''}
-        </button>`;
-    }).join('');
-
-    return `<div class="solo-debug-switcher">
-        <div class="solo-debug-switcher__buttons">${buttons}</div>
-    </div>`;
-}
-
 // ======================= MAIN RENDER/UPDATE =======================
 
 export function renderGameScreen(gameState, myId) {
@@ -792,7 +765,6 @@ export function renderGameScreen(gameState, myId) {
     }
 
     return `<div class="game-container">${content}${renderCharacterModal()}
-        ${renderSoloDebugSwitcher(gameState, myId)}
         <button class="tutorial-fab" type="button" data-action="open-tutorial" title="Huong dan choi">
             <svg class="tutorial-fab__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>

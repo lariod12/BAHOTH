@@ -120,8 +120,13 @@ export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false 
         }
 
         state.currentGameState = serverState;
-        // In solo debug, preserve the user-selected active player ID
-        if (!state.isSoloDebug) {
+        if (state.isSoloDebug) {
+            // Auto-switch to current turn player when turn changes
+            if (newTurnPlayer && newTurnPlayer !== state.mySocketId && state.soloDebugPlayerIds.includes(newTurnPlayer)) {
+                state.mySocketId = newTurnPlayer;
+                socketClient.setSoloDebugActivePlayer(newTurnPlayer);
+            }
+        } else {
             state.mySocketId = socketClient.getSocketId();
         }
         ensureCharacterDataInitialized(state.currentGameState);

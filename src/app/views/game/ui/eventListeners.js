@@ -168,24 +168,6 @@ export function attachEventListeners(mountEl, roomId) {
         }
         if (action === 'expand-player') { const pid = target.closest('[data-player-id]')?.dataset.playerId; if (pid) { if (state.expandedPlayers.has(pid)) state.expandedPlayers.delete(pid); else state.expandedPlayers.add(pid); updateGameUI(mountEl, state.currentGameState, state.mySocketId); } return; }
 
-        // Solo debug: switch active player
-        if (action === 'solo-debug-switch') {
-            const newPlayerId = target.closest('[data-player-id]')?.dataset.playerId;
-            if (newPlayerId && state.isSoloDebug && newPlayerId !== state.mySocketId) {
-                console.log('[SoloDebug] Switching to player:', newPlayerId);
-                state.mySocketId = newPlayerId;
-                socketClient.setSoloDebugActivePlayer(newPlayerId);
-                state.movesInitializedForTurn = -1;
-                state.hasAttackedThisTurn = false;
-                updateGameUI(mountEl, state.currentGameState, state.mySocketId);
-                centerMapOnPlayer(mountEl, true);
-                const player = state.currentGameState?.players?.find(p => p.id === newPlayerId);
-                const charName = player?.characterId ? getCharacterName(player.characterId) : 'Player';
-                showToast(`Switched to ${charName}`, 'info', 1500);
-            }
-            return;
-        }
-
         // Dice rolling phase
         if (action === 'roll-manual') {
             const input = mountEl.querySelector('#dice-manual-input');
