@@ -25,21 +25,6 @@ export function handlePlaceTokenEvent(mountEl, eventCard) {
     placeSpecialToken(roomId, eventCard.tokenType);
     console.log('[EventToken] Placed token', eventCard.tokenType, 'in room', roomId);
 
-    // Handle immediate effects (e.g., bo_hai_cot has immediateEffect)
-    if (eventCard.immediateEffect) {
-        const effect = eventCard.immediateEffect;
-        if (effect.effect === 'mentalDamage' && effect.dice) {
-            // If this token also has interaction, chain the prompt after damage resolves
-            const promptConfig = TOKEN_PROMPT_CONFIG[eventCard.tokenType];
-            if (promptConfig && promptConfig.promptOnPlacement) {
-                state.pendingTokenPromptAfterDamage = { roomId, tokenType: eventCard.tokenType };
-            }
-            syncGameStateToServer();
-            openDamageDiceModal(mountEl, 0, effect.dice);
-            return;
-        }
-    }
-
     // Build result message based on token type
     const tokenNames = {
         closet: 'Closet', smoke: 'Smoke', safe: 'Safe', skeletons: 'Skeletons',
@@ -74,7 +59,8 @@ export function handlePlaceTokenEvent(mountEl, eventCard) {
         };
     }
 
-    // For tokens with interactions (either explicit tokenInteraction or rollResults on the card)
+    // Store token interactions BEFORE handling immediate effects
+    // (so interaction data is available when the prompt opens after damage resolves)
     if (eventCard.tokenInteraction || eventCard.rollResults) {
         if (!state.currentGameState.tokenInteractions) {
             state.currentGameState.tokenInteractions = {};
@@ -91,6 +77,22 @@ export function handlePlaceTokenEvent(mountEl, eventCard) {
                 rollStat: eventCard.interactionRollStat || null,
                 rollResults: eventCard.rollResults,
             };
+        }
+    }
+
+    // Handle immediate effects (e.g., bo_hai_cot has immediateEffect)
+    // This must come AFTER storing tokenInteractions above
+    if (eventCard.immediateEffect) {
+        const effect = eventCard.immediateEffect;
+        if (effect.effect === 'mentalDamage' && effect.dice) {
+            // If this token also has interaction, chain the prompt after damage resolves
+            const promptConfig = TOKEN_PROMPT_CONFIG[eventCard.tokenType];
+            if (promptConfig && promptConfig.promptOnPlacement) {
+                state.pendingTokenPromptAfterDamage = { roomId, tokenType: eventCard.tokenType };
+            }
+            syncGameStateToServer();
+            openDamageDiceModal(mountEl, 0, effect.dice);
+            return;
         }
     }
 

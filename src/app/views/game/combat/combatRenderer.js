@@ -138,7 +138,7 @@ export function renderDamageDistributionModal() {
     const remaining = totalDamage - (stat1Damage || 0) - (stat2Damage || 0);
     const isComplete = remaining === 0;
 
-    const statLabels = { speed: 'Toc do', might: 'Suc manh', sanity: 'Tam tri', knowledge: 'Kien thuc' };
+    const statLabels = { speed: 'Toc do (Speed)', might: 'Suc manh (Might)', sanity: 'Tam tri (Sanity)', knowledge: 'Kien thuc (Knowledge)' };
 
     // Type selection screen (when damageType not yet chosen)
     if (!damageType) {
@@ -152,8 +152,8 @@ export function renderDamageDistributionModal() {
                         <p class="damage-dist-modal__damage-total">Tong sat thuong: <strong>${totalDamage}</strong></p>
                         <p class="damage-dist-modal__instruction">Chon loai sat thuong</p>
                         <div class="damage-dist-modal__type-buttons">
-                            <button class="damage-dist-modal__btn--physical" type="button" data-action="damage-dist-type" data-type="physical">Vat li<small>Toc do / Suc manh</small></button>
-                            <button class="damage-dist-modal__btn--mental" type="button" data-action="damage-dist-type" data-type="mental">Tinh than<small>Tam tri / Kien thuc</small></button>
+                            <button class="damage-dist-modal__btn--physical" type="button" data-action="damage-dist-type" data-type="physical">Vat li (Physical)<small>Toc do / Suc manh</small></button>
+                            <button class="damage-dist-modal__btn--mental" type="button" data-action="damage-dist-type" data-type="mental">Tinh than (Mental)<small>Tam tri / Kien thuc</small></button>
                         </div>
                     </div>
                 </div>
