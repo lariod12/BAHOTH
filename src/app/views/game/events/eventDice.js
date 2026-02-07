@@ -212,8 +212,9 @@ export function applyEventDiceResult(mountEl, result, stat) {
     console.log('[EventDice] applyEventDiceResult - Result:', result, 'Stat:', stat, 'Outcome:', outcome, 'OmenCount:', omenCount);
 
     if (!outcome) {
-        console.warn('[EventDice] No matching outcome found for result:', result);
-        closeEventDiceModal(mountEl);
+        console.log('[EventDice] No matching outcome for result:', result, '- nothing happens');
+        state.eventDiceModal = null;
+        openEventResultModal(mountEl, 'KHONG CO GI', 'Khong co gi xay ra.', 'neutral');
         return;
     }
 

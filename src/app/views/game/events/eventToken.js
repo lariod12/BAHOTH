@@ -182,7 +182,7 @@ export function applyTokenInteractionResult(mountEl) {
     const outcome = findMatchingOutcome(interaction.rollResults, result);
     if (!outcome) {
         state.tokenInteractionModal = null;
-        openEventResultModal(mountEl, 'LOI', 'Khong tim thay ket qua phu hop.', 'danger');
+        openEventResultModal(mountEl, 'KHONG CO GI', 'Khong co gi xay ra.', 'neutral');
         return;
     }
 

@@ -36,7 +36,7 @@ export function applySecondRollResult(mountEl) {
     state.secondRollModal = null;
 
     if (!outcome) {
-        openEventResultModal(mountEl, 'LOI', 'Khong tim thay ket qua phu hop.', 'danger');
+        openEventResultModal(mountEl, 'KHONG CO GI', 'Khong co gi xay ra.', 'neutral');
         return;
     }
 
