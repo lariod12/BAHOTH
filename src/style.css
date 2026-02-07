@@ -1767,6 +1767,92 @@ select.field__input option {
     font-size: 0.9rem;
 }
 
+/* Room token notification bar */
+.room-token-notif {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 6px 16px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
+    border-top: 1px solid rgba(251, 191, 36, 0.3);
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.room-token-notif:active {
+    background: rgba(251, 191, 36, 0.12);
+}
+
+.room-token-notif__item {
+    font-size: 0.72rem;
+    color: #fbbf24;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* Token detail popup */
+.token-detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    animation: fadeIn 0.2s ease;
+}
+
+.token-detail-popup {
+    background: linear-gradient(145deg, #1e293b, #0f172a);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 360px;
+    width: 100%;
+    max-height: 70vh;
+    overflow-y: auto;
+    pointer-events: none;
+}
+
+.token-detail__card {
+    margin-bottom: 16px;
+}
+
+.token-detail__card:last-of-type {
+    margin-bottom: 8px;
+}
+
+.token-detail__name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #fbbf24;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 8px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.token-detail__text {
+    font-size: 0.8rem;
+    color: #cbd5e1;
+    line-height: 1.55;
+    margin: 0;
+}
+
+.token-detail__hint {
+    text-align: center;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.35);
+    margin: 8px 0 0 0;
+    pointer-events: none;
+}
+
 /* Game controls */
 .game-controls {
     padding: 10px 16px;
@@ -7995,6 +8081,13 @@ select.field__input option {
     margin: 0.25rem 0;
 }
 
+.combat-modal__hint {
+    color: #fbbf24;
+    font-size: 0.8rem;
+    font-style: italic;
+    margin-top: 0.25rem;
+}
+
 .combat-modal__faction {
     color: #fb923c;
     font-size: 0.875rem;
@@ -9244,6 +9337,104 @@ select.field__input option {
 .rescue-trapped-modal__btn--continue:hover,
 .rescue-trapped-modal__btn--continue:active {
     background: linear-gradient(145deg, #3b82f6, #2563eb);
+    color: #fff;
+    transform: scale(1.02);
+}
+
+/* ===== EVENT CHOICE MODAL (optional roll + choice events) ===== */
+.event-choice-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 16px;
+}
+
+.event-choice-modal {
+    background: linear-gradient(145deg, #1e1b2e, #2a2540);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 420px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.event-choice-modal__title {
+    color: #e2e8f0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+    text-align: center;
+}
+
+.event-choice-modal__description {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0 0 20px 0;
+    white-space: pre-line;
+}
+
+.event-choice-modal__hint {
+    color: #64748b;
+    font-size: 0.75rem;
+    text-align: center;
+    margin: 0 0 16px 0;
+    font-style: italic;
+}
+
+.event-choice-modal__actions,
+.event-choice-modal__options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.event-choice-modal__btn {
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+
+.event-choice-modal__btn--accept,
+.event-choice-modal__btn--option {
+    background: linear-gradient(145deg, #1d4ed8, #2563eb);
+    color: #bfdbfe;
+    border-color: #3b82f6;
+}
+
+.event-choice-modal__btn--accept:hover,
+.event-choice-modal__btn--accept:active,
+.event-choice-modal__btn--option:hover,
+.event-choice-modal__btn--option:active {
+    background: linear-gradient(145deg, #3b82f6, #2563eb);
+    color: #fff;
+    transform: scale(1.02);
+}
+
+.event-choice-modal__btn--skip {
+    background: linear-gradient(145deg, #374151, #4b5563);
+    color: #9ca3af;
+    border-color: #6b7280;
+}
+
+.event-choice-modal__btn--skip:hover,
+.event-choice-modal__btn--skip:active {
+    background: linear-gradient(145deg, #4b5563, #6b7280);
     color: #fff;
     transform: scale(1.02);
 }

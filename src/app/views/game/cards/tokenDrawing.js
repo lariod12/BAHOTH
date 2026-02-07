@@ -79,6 +79,12 @@ export function confirmTokenDrawing(mountEl) {
     let immediateRollEvent = null;
     let directEffectEvent = null;
     let conditionalEvent = null;
+    let optionalRollEvent = null;
+    let choiceEvent = null;
+    let placeTokenEvent = null;
+    let conditionalCheckEvent = null;
+    let attackEvent = null;
+    let specialEvent = null;
 
     state.tokenDrawingModal.tokensToDrawn.forEach(token => {
         if (token.drawn && token.selectedCard) {
@@ -91,8 +97,20 @@ export function confirmTokenDrawing(mountEl) {
                 } else {
                     const eventCard = EVENTS.find(e => e.id === token.selectedCard);
                     if (eventCard) {
-                        if (eventCard.effect === 'drawItem') directEffectEvent = eventCard;
-                        if (eventCard.effect === 'conditional' && eventCard.id === 'anh_phan_chieu_2') conditionalEvent = eventCard;
+                        if (eventCard.affectsAllPlayers && eventCard.rollStat) {
+                            // Multi-player events take priority
+                            immediateRollEvent = token.selectedCard;
+                        } else if (eventCard.effect === 'placeToken') {
+                            // Token placement takes priority (even if also optional)
+                            placeTokenEvent = eventCard;
+                        } else if (eventCard.effect === 'drawItem') directEffectEvent = eventCard;
+                        else if (eventCard.effect === 'conditional' && eventCard.id === 'anh_phan_chieu_2') conditionalEvent = eventCard;
+                        else if (eventCard.optional === true) optionalRollEvent = eventCard;
+                        else if (eventCard.effect === 'choice') choiceEvent = eventCard;
+                        else if (eventCard.effect === 'conditional' && eventCard.id !== 'anh_phan_chieu_2') conditionalCheckEvent = eventCard;
+                        else if (eventCard.effect === 'attack') attackEvent = eventCard;
+                        else if (eventCard.effect === 'shuffleItems' || eventCard.effect === 'drawRoomTile' || eventCard.effect === 'relocateCurrentRoom') specialEvent = eventCard;
+                        else if (eventCard.persistent === true && !eventCard.immediateRoll && !eventCard.rollDice) specialEvent = eventCard;
                     }
                 }
             }
@@ -108,6 +126,14 @@ export function confirmTokenDrawing(mountEl) {
     state.tokenDrawingModal = null;
 
     if (immediateRollEvent) {
+        // Check if this is a multi-player event
+        const immediateCard = EVENTS.find(e => e.id === immediateRollEvent);
+        if (immediateCard?.affectsAllPlayers) {
+            console.log('[TokenDrawing] Multi-player event:', immediateRollEvent);
+            syncGameStateToServer();
+            import('../events/eventMultiPlayer.js').then(m => m.openMultiPlayerRollModal(mountEl, immediateCard));
+            return;
+        }
         console.log('[TokenDrawing] Event requires immediate roll:', immediateRollEvent);
         syncGameStateToServer();
         openEventDiceModal(mountEl, immediateRollEvent, tokenDrawingContext);
@@ -127,6 +153,54 @@ export function confirmTokenDrawing(mountEl) {
         syncGameStateToServer();
         const handled = handleReflectionEvent(mountEl, conditionalEvent, playerId);
         if (handled) return;
+    }
+
+    // Optional roll events (e.g., thu_gi_do_an_giau)
+    if (optionalRollEvent) {
+        console.log('[TokenDrawing] Optional roll event:', optionalRollEvent.id);
+        syncGameStateToServer();
+        import('../events/eventChoice.js').then(m => m.openOptionalRollModal(mountEl, optionalRollEvent));
+        return;
+    }
+
+    // Choice events (e.g., lao_gia_an_xin, dinh_truoc_tuong_lai)
+    if (choiceEvent) {
+        console.log('[TokenDrawing] Choice event:', choiceEvent.id);
+        syncGameStateToServer();
+        import('../events/eventChoice.js').then(m => m.openChoiceModal(mountEl, choiceEvent));
+        return;
+    }
+
+    // Place token events
+    if (placeTokenEvent) {
+        console.log('[TokenDrawing] Place token event:', placeTokenEvent.id);
+        syncGameStateToServer();
+        import('../events/eventToken.js').then(m => m.handlePlaceTokenEvent(mountEl, placeTokenEvent));
+        return;
+    }
+
+    // Conditional check events (e.g., luot_cua_jonah)
+    if (conditionalCheckEvent) {
+        console.log('[TokenDrawing] Conditional check event:', conditionalCheckEvent.id);
+        syncGameStateToServer();
+        import('../events/eventConditional.js').then(m => m.handleConditionalEvent(mountEl, conditionalCheckEvent));
+        return;
+    }
+
+    // Attack events (e.g., con_bup_be_kinh_di)
+    if (attackEvent) {
+        console.log('[TokenDrawing] Attack event:', attackEvent.id);
+        syncGameStateToServer();
+        import('../events/eventAttack.js').then(m => m.handleAttackEvent(mountEl, attackEvent));
+        return;
+    }
+
+    // Special events (shuffleItems, drawRoomTile, relocateCurrentRoom, persistent non-roll)
+    if (specialEvent) {
+        console.log('[TokenDrawing] Special event:', specialEvent.id);
+        syncGameStateToServer();
+        import('../events/eventSpecial.js').then(m => m.handleSpecialEvent(mountEl, specialEvent));
+        return;
     }
 
     if (state.currentGameState.playerMoves[playerId] <= 0) {

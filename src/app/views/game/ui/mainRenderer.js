@@ -33,6 +33,10 @@ import { renderReturnItemModal as renderReturnItemModalFn } from '../events/even
 import { renderTrappedEscapeModal as renderTrappedEscapeModalFn, renderRescueTrappedModal as renderRescueTrappedModalFn } from '../events/eventTrapped.js';
 import { renderPersistentDamageModal as renderPersistentDamageModalFn } from '../events/eventPersistent.js';
 import { renderRoomSelectModal as renderRoomSelectModalFn, renderRoomSelectConfirmModal as renderRoomSelectConfirmModalFn } from '../omens/omenSpecial.js';
+import { renderOptionalRollModal, renderChoiceModal, renderPeekModal, renderStoreDiceModal } from '../events/eventChoice.js';
+import { renderTokenInteractionModal, renderTokenPromptModal } from '../events/eventToken.js';
+import { renderMultiPlayerRollModal } from '../events/eventMultiPlayer.js';
+import { renderSecondRollModal } from '../events/eventSecondRoll.js';
 
 // ======================= HELPER FUNCTIONS =======================
 
@@ -359,6 +363,80 @@ function renderGameControls(gameState, myId) {
     </div>`;
 }
 
+function renderRoomTokenNotification(gameState, myId) {
+    if (!gameState || gameState.gamePhase !== 'playing') return '';
+
+    const currentRoomId = gameState?.playerState?.playerPositions?.[myId];
+    if (!currentRoomId) return '';
+
+    const currentRoom = gameState?.map?.revealedRooms?.[currentRoomId];
+    if (!currentRoom?.specialTokens || currentRoom.specialTokens.length === 0) return '';
+
+    // Token short descriptions
+    const tokenInfo = {
+        smoke: { icon: '🌫️', short: 'Khoi: Do it hon 2 xuc xac' },
+        drip: { icon: '💧', short: 'Nho giot: Do it hon 1 xuc xac (toi thieu 1)' },
+        blessing: { icon: '✨', short: 'Ban phep: Phe chinh dien +1 xuc xac' },
+        closet: { icon: '🚪', short: 'Tu: Do 2 xuc xac de mo (1 lan/luot)' },
+        safe: { icon: '🔒', short: 'Ket sat: Do Knowledge de mo (1 lan/luot)' },
+        skeletons: { icon: '💀', short: 'Hai cot: Do Sanity de dao (1 lan/luot)' },
+        wallSwitch: { icon: '🔄', short: 'Cua xoay: Do Knowledge de su dung' },
+        slide: { icon: '🎢', short: 'Cau truot: Do Might de truot xuong' },
+        secretPassage: { icon: '🚶', short: 'Loi bi mat: Su dung khi het buoc' },
+        secretStairs: { icon: '🪜', short: 'Cau thang bi mat: Su dung khi het buoc' },
+    };
+
+    const notifications = [];
+    for (const token of currentRoom.specialTokens) {
+        if (tokenInfo[token]) {
+            notifications.push({ ...tokenInfo[token], tokenType: token });
+        }
+    }
+
+    if (notifications.length === 0) return '';
+
+    const items = notifications.map(n =>
+        `<span class="room-token-notif__item">${n.icon} ${n.short}</span>`
+    ).join('');
+
+    return `<div class="room-token-notif" data-action="open-token-detail">${items}</div>`;
+}
+
+function renderTokenDetailPopup(gameState, myId) {
+    if (!state.tokenDetailOpen) return '';
+
+    const currentRoomId = gameState?.playerState?.playerPositions?.[myId];
+    if (!currentRoomId) return '';
+
+    const currentRoom = gameState?.map?.revealedRooms?.[currentRoomId];
+    if (!currentRoom?.specialTokens || currentRoom.specialTokens.length === 0) return '';
+
+    // Find the full card data for each token in the room
+    const cards = [];
+    for (const token of currentRoom.specialTokens) {
+        const card = EVENTS.find(e => e.tokenType === token);
+        if (card) cards.push(card);
+    }
+
+    if (cards.length === 0) return '';
+
+    const cardEntries = cards.map(card => {
+        const name = card.name?.vi || card.id;
+        const text = (card.text?.vi || '').replace(/\n/g, '<br>');
+        return `<div class="token-detail__card">
+            <h3 class="token-detail__name">${name}</h3>
+            <p class="token-detail__text">${text}</p>
+        </div>`;
+    }).join('');
+
+    return `<div class="token-detail-overlay" data-action="close-token-detail">
+        <div class="token-detail-popup">
+            ${cardEntries}
+            <p class="token-detail__hint">Tap de dong</p>
+        </div>
+    </div>`;
+}
+
 function renderHauntButton(gameState) {
     if (isHauntTriggered(gameState)) return '';
     if (gameState?.gamePhase !== 'playing') return '';
@@ -488,7 +566,7 @@ function renderEventDiceModal() {
     } else if (hasResult) {
         bodyContent = `<div class="event-dice-modal__result"><span class="event-dice-modal__result-label">Ket qua ${currentStatLabel}:</span><span class="event-dice-modal__result-value">${result}</span></div>`;
     } else {
-        bodyContent = `<div class="event-dice-modal__roll-info"><p>Do ${eventCard?.fixedDice || diceCount} vien xuc xac ${currentStatLabel}</p></div>
+        bodyContent = `<div class="event-dice-modal__roll-info"><p>Do ${eventCard?.fixedDice || eventCard?.rollDice || diceCount} vien xuc xac ${currentStatLabel}${state.eventDiceModal.chapelBonusDice ? ` (co bonus Chapel +${state.eventDiceModal.chapelBonusDice})` : ''}</p></div>
             <div class="event-dice-modal__input-group"><label class="event-dice-modal__label">Nhap ket qua xuc xac:</label>
             <input type="number" class="event-dice-modal__input" min="0" value="${inputValue}" data-input="event-dice-value" placeholder="Nhap so" /></div>
             <div class="event-dice-modal__actions">
@@ -573,14 +651,22 @@ function renderDamageDiceModal() {
 
 function renderStatChoiceModal() {
     if (!state.statChoiceModal?.isOpen) return '';
-    const { title, effect, amount, options } = state.statChoiceModal;
+    const { title, effect, amount, options, isAllPlayers } = state.statChoiceModal;
     const statLabels = { speed: 'Toc do', might: 'Suc manh', sanity: 'Tam tri', knowledge: 'Kien thuc' };
+    const effectLabel = effect === 'loseStat' ? 'Mat' : effect === 'gainStat' ? 'Tang' : effect;
+    const amountLabel = amount ? `${amount}` : '1';
+    const description = effect === 'loseStat'
+        ? `Chon 1 chi so de mat ${amountLabel} nac:`
+        : effect === 'gainStat'
+        ? `Chon 1 chi so de tang ${amountLabel} nac:`
+        : `${effectLabel} ${amountLabel}`;
+
     const statBtns = (options || ['speed', 'might', 'sanity', 'knowledge']).map(s =>
         `<button class="stat-choice-modal__btn" type="button" data-action="stat-choice-select" data-stat="${s}">${statLabels[s] || s}</button>`
     ).join('');
     return `<div class="stat-choice-overlay"><div class="stat-choice-modal">
         <h3 class="stat-choice-modal__title">${title || 'Chon chi so'}</h3>
-        <p class="stat-choice-modal__desc">${effect || ''} ${amount ? `(${amount > 0 ? '+' : ''}${amount})` : ''}</p>
+        <p class="stat-choice-modal__desc">${description}</p>
         <div class="stat-choice-modal__options">${statBtns}</div></div></div>`;
 }
 
@@ -734,8 +820,10 @@ export function renderGameScreen(gameState, myId) {
                     </div>
                 </div>
             </div>
+            ${renderRoomTokenNotification(gameState, myId)}
             ${renderGameControls(gameState, myId)}
             ${renderHauntButton(gameState)}
+            ${renderTokenDetailPopup(gameState, myId)}
             ${roomDiscoveryHtml}
             ${renderTokenDrawingModal()}
             ${renderCardsViewModal()}
@@ -756,6 +844,14 @@ export function renderGameScreen(gameState, myId) {
             ${renderRoomSelectConfirmModalFn()}
             ${renderReturnItemModalFn()}
             ${renderEventResultModalFn()}
+            ${renderOptionalRollModal()}
+            ${renderChoiceModal()}
+            ${renderPeekModal()}
+            ${renderStoreDiceModal()}
+            ${renderTokenInteractionModal()}
+            ${renderTokenPromptModal()}
+            ${renderMultiPlayerRollModal()}
+            ${renderSecondRollModal()}
             ${renderEndTurnModal()}
             ${renderResetGameModal()}
             ${renderTutorialModal()}
@@ -803,6 +899,24 @@ export async function updateGameUI(mountEl, gameState, myId) {
         }
 
         if (currentPlayer === myId && state.movesInitializedForTurn !== currentTurnIndex && !state.returnItemModal?.isOpen) {
+            // Check for pending stat choices (from allPlayersLoseStat events)
+            const pendingStatChoice = gameState?.playerState?.pendingStatChoices?.[myId];
+            if (pendingStatChoice && !state.statChoiceModal?.isOpen) {
+                // Remove from pending before showing modal
+                delete gameState.playerState.pendingStatChoices[myId];
+                syncGameStateToServer();
+                state.statChoiceModal = {
+                    isOpen: true,
+                    title: `MAT CHI SO (${pendingStatChoice.reason || 'HINH PHAT CHUNG'})`,
+                    effect: pendingStatChoice.effect || 'loseStat',
+                    amount: pendingStatChoice.amount || 1,
+                    options: ['speed', 'might', 'sanity', 'knowledge'],
+                    selectedStat: null,
+                    isAllPlayers: true,
+                };
+                // Don't return - still render the screen with the modal
+            }
+
             const pendingEvents = gameState?.playerState?.pendingEvents?.[myId] || [];
             const pendingReflection = pendingEvents.find(entry => entry.id === 'anh_phan_chieu_2');
             if (pendingReflection) {
@@ -828,6 +942,29 @@ export async function updateGameUI(mountEl, gameState, myId) {
                 const speed = getCharacterSpeed(me.characterId, charData);
                 await socketClient.setMoves(speed);
                 return;
+            }
+        }
+    }
+
+    // Check for interactive token prompt when entering a room with interactive tokens
+    if (gameState?.gamePhase === 'playing' && myId) {
+        const currentRoomId = gameState?.playerState?.playerPositions?.[myId];
+        const currentTurnIdx = gameState.currentTurnIndex ?? 0;
+        const currentTurnPlayerId = gameState.turnOrder?.[currentTurnIdx];
+        if (currentTurnPlayerId === myId && currentRoomId) {
+            const room = gameState?.map?.revealedRooms?.[currentRoomId];
+            if (room?.specialTokens?.length &&
+                !state.tokenPromptModal?.isOpen &&
+                !state.tokenInteractionModal?.isOpen &&
+                !state.tokenDrawingModal?.isOpen &&
+                !state.eventDiceModal?.isOpen &&
+                !state.roomDiscoveryModal?.isOpen &&
+                !state.damageDiceModal) {
+
+                // Dynamically import to check interactive tokens
+                import('../events/eventToken.js').then(m => {
+                    m.checkTokenInteractionOnRoomEntry(mountEl);
+                });
             }
         }
     }

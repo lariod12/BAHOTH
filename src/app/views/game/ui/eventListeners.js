@@ -71,6 +71,8 @@ export function attachEventListeners(mountEl, roomId) {
         if (action === 'skip-intro') { state.introShown = true; if (state.introTimeout) { clearTimeout(state.introTimeout); state.introTimeout = null; } updateGameUI(mountEl, state.currentGameState, state.mySocketId); return; }
         if (action === 'open-tutorial') { state.tutorialOpen = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId); return; }
         if (action === 'close-tutorial') { state.tutorialOpen = false; updateGameUI(mountEl, state.currentGameState, state.mySocketId); return; }
+        if (action === 'open-token-detail') { state.tokenDetailOpen = true; state.skipMapCentering = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId); return; }
+        if (action === 'close-token-detail') { state.tokenDetailOpen = false; state.skipMapCentering = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId); return; }
 
         // === COMBAT HANDLERS ===
         if (action === 'combat-start') {
@@ -88,8 +90,15 @@ export function attachEventListeners(mountEl, roomId) {
             const input = mountEl.querySelector('.combat-modal .dice-input');
             const value = parseInt(input?.value || '0', 10);
             if (isNaN(value) || value < 0) return;
-            state.combatModal.attackerRoll = value; state.combatModal.phase = 'waiting_defender'; state.combatModal.inputValue = '';
-            if (state.currentGameState?.combatState) { state.currentGameState.combatState.attackerRoll = value; state.currentGameState.combatState.phase = 'waiting_defender'; syncGameStateToServer(); }
+            state.combatModal.attackerRoll = value; state.combatModal.inputValue = '';
+            // Event combat: current player controls both rolls, skip waiting_defender
+            if (state.combatModal.eventSource) {
+                state.combatModal.phase = 'defender_roll';
+                if (state.currentGameState?.combatState) { state.currentGameState.combatState.attackerRoll = value; state.currentGameState.combatState.phase = 'waiting_defender'; syncGameStateToServer(); }
+            } else {
+                state.combatModal.phase = 'waiting_defender';
+                if (state.currentGameState?.combatState) { state.currentGameState.combatState.attackerRoll = value; state.currentGameState.combatState.phase = 'waiting_defender'; syncGameStateToServer(); }
+            }
             state.skipMapCentering = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId); return;
         }
         if (action === 'combat-submit-defender') {
@@ -109,8 +118,19 @@ export function attachEventListeners(mountEl, roomId) {
             const attackerLost = state.combatModal.winner === 'defender';
             const damage = state.combatModal.damage;
             const isForced = state.combatModal.isForced;
+            const isEventCombat = !!state.combatModal.eventSource;
             if (damage > 0 && loserId) {
-                if (state.isDebugMode || isForced) {
+                if (isEventCombat) {
+                    // Event combat: loser takes physical damage (distribute between Speed/Might)
+                    closeCombatModal(mountEl, attackerLost);
+                    if (loserId === state.mySocketId) {
+                        openDamageDistributionModal(mountEl, damage, 'event-combat', 'physical');
+                    } else {
+                        // Loser is another player - apply directly to might in solo/debug
+                        applyStatChange(loserId, 'might', -damage); syncGameStateToServer();
+                        updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+                    }
+                } else if (state.isDebugMode || isForced) {
                     closeCombatModal(mountEl, attackerLost);
                     applyStatChange(loserId, 'might', -damage); syncGameStateToServer();
                     updateGameUI(mountEl, state.currentGameState, state.mySocketId);
@@ -314,7 +334,7 @@ export function attachEventListeners(mountEl, roomId) {
         }
         if (action === 'event-dice-random') {
             if (!state.eventDiceModal) return;
-            const dc = state.eventDiceModal.eventCard?.fixedDice || state.eventDiceModal.diceCount || 1;
+            const dc = state.eventDiceModal.eventCard?.fixedDice || state.eventDiceModal.eventCard?.rollDice || state.eventDiceModal.diceCount || 1;
             let total = 0; for (let i = 0; i < dc; i++) total += Math.floor(Math.random() * 3);
             state.eventDiceModal.result = total; state.eventDiceModal.inputValue = total.toString();
             state.skipMapCentering = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId);
@@ -438,12 +458,22 @@ export function attachEventListeners(mountEl, roomId) {
         }
         if (action === 'damage-dist-confirm') { closeDamageDistributionModal(mountEl); return; }
 
-        // Stat choice modal
+        // Stat choice modal - direct select (click on stat button)
         if (action === 'stat-choice-select') {
             const stat = target.closest('[data-stat]')?.dataset.stat;
             if (stat && state.statChoiceModal) {
+                const { effect, amount, isAllPlayers } = state.statChoiceModal;
+                const playerId = state.mySocketId;
+                // Apply the stat change
+                if (effect === 'gainStat' || effect?.startsWith('+')) {
+                    applyStatChange(playerId, stat, amount || 1);
+                } else if (effect === 'loseStat' || effect?.startsWith('-')) {
+                    applyStatChange(playerId, stat, -(amount || 1));
+                }
                 state.statChoiceModal = null;
-                state.skipMapCentering = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+                syncGameStateToServer();
+                state.skipMapCentering = true;
+                updateGameUI(mountEl, state.currentGameState, state.mySocketId);
             }
             return;
         }
@@ -632,6 +662,169 @@ export function attachEventListeners(mountEl, roomId) {
                 state.skipMapCentering = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId);
                 return;
             }
+        }
+
+        // Optional roll modal
+        if (action === 'optional-roll-accept') {
+            import('../events/eventChoice.js').then(m => m.handleOptionalRollAccept(mountEl));
+            return;
+        }
+        if (action === 'optional-roll-skip') {
+            import('../events/eventChoice.js').then(m => m.handleOptionalRollSkip(mountEl));
+            return;
+        }
+
+        // Choice modal
+        if (action === 'choice-select') {
+            const choiceIndex = parseInt(target.closest('[data-choice-index]')?.dataset.choiceIndex, 10);
+            if (!isNaN(choiceIndex)) {
+                import('../events/eventChoice.js').then(m => m.handleChoiceSelect(mountEl, choiceIndex));
+            }
+            return;
+        }
+
+        // Peek modal
+        if (action === 'close-peek') {
+            import('../events/eventChoice.js').then(m => m.closePeekModal(mountEl));
+            return;
+        }
+
+        // Store dice modal
+        if (action === 'store-dice-input') {
+            if (!state.storeDiceModal) return;
+            const input = mountEl.querySelector('[data-input="store-dice-value"]');
+            const val = parseInt(input?.value, 10);
+            if (!isNaN(val) && val >= 0) {
+                state.storeDiceModal.result = val;
+                state.storeDiceModal.inputValue = val.toString();
+                state.skipMapCentering = true;
+                updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            }
+            return;
+        }
+        if (action === 'store-dice-random') {
+            if (!state.storeDiceModal) return;
+            const dc = state.storeDiceModal.diceCount || 4;
+            let total = 0;
+            for (let i = 0; i < dc; i++) total += Math.floor(Math.random() * 3);
+            state.storeDiceModal.result = total;
+            state.storeDiceModal.inputValue = total.toString();
+            state.skipMapCentering = true;
+            updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            return;
+        }
+        if (action === 'store-dice-confirm') {
+            if (!state.storeDiceModal?.result === null) return;
+            import('../events/eventChoice.js').then(m => m.confirmStoreDice(mountEl, state.storeDiceModal.result));
+            return;
+        }
+
+        // Token placement modal
+        if (action === 'token-placement-confirm') {
+            import('../events/eventToken.js').then(m => m.confirmTokenPlacement(mountEl));
+            return;
+        }
+
+        // Token interaction modal
+        if (action === 'token-interact') {
+            const tokenType = target.closest('[data-token-type]')?.dataset.tokenType;
+            if (tokenType) {
+                import('../events/eventToken.js').then(m => m.openTokenInteractionModal(mountEl, tokenType));
+            }
+            return;
+        }
+        if (action === 'token-interact-confirm') {
+            if (!state.tokenInteractionModal) return;
+            const input = mountEl.querySelector('[data-input="token-interact-dice-value"]');
+            const val = parseInt(input?.value, 10);
+            if (!isNaN(val) && val >= 0) {
+                state.tokenInteractionModal.result = val;
+                state.skipMapCentering = true;
+                updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            }
+            return;
+        }
+        if (action === 'token-interact-random') {
+            if (!state.tokenInteractionModal) return;
+            const dc = state.tokenInteractionModal.diceCount || 2;
+            let total = 0;
+            for (let i = 0; i < dc; i++) total += Math.floor(Math.random() * 3);
+            state.tokenInteractionModal.result = total;
+            state.skipMapCentering = true;
+            updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            return;
+        }
+        if (action === 'token-interact-apply') {
+            import('../events/eventToken.js').then(m => m.applyTokenInteractionResult(mountEl));
+            return;
+        }
+
+        // Token interaction prompt modal (generic for closet, safe, skeletons, wallSwitch)
+        if (action === 'token-prompt-accept') {
+            import('../events/eventToken.js').then(m => m.acceptTokenPrompt(mountEl));
+            return;
+        }
+        if (action === 'token-prompt-decline') {
+            import('../events/eventToken.js').then(m => m.declineTokenPrompt(mountEl));
+            return;
+        }
+
+        // Multi-player roll modal
+        if (action === 'multi-roll-confirm') {
+            if (!state.multiPlayerRollModal) return;
+            const input = mountEl.querySelector('[data-input="multi-roll-dice-value"]');
+            const val = parseInt(input?.value, 10);
+            if (!isNaN(val) && val >= 0) {
+                state.multiPlayerRollModal.currentResult = val;
+                state.skipMapCentering = true;
+                updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            }
+            return;
+        }
+        if (action === 'multi-roll-random') {
+            if (!state.multiPlayerRollModal) return;
+            const dc = state.multiPlayerRollModal.currentDiceCount || 1;
+            let total = 0;
+            for (let i = 0; i < dc; i++) total += Math.floor(Math.random() * 3);
+            state.multiPlayerRollModal.currentResult = total;
+            state.skipMapCentering = true;
+            updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            return;
+        }
+        if (action === 'multi-roll-apply') {
+            import('../events/eventMultiPlayer.js').then(m => m.applyMultiPlayerRollResult(mountEl));
+            return;
+        }
+        if (action === 'multi-roll-close') {
+            import('../events/eventMultiPlayer.js').then(m => m.closeMultiPlayerRollModal(mountEl));
+            return;
+        }
+
+        // Second roll modal
+        if (action === 'second-roll-confirm') {
+            if (!state.secondRollModal) return;
+            const input = mountEl.querySelector('[data-input="second-roll-dice-value"]');
+            const val = parseInt(input?.value, 10);
+            if (!isNaN(val) && val >= 0) {
+                state.secondRollModal.result = val;
+                state.skipMapCentering = true;
+                updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            }
+            return;
+        }
+        if (action === 'second-roll-random') {
+            if (!state.secondRollModal) return;
+            const dc = state.secondRollModal.diceCount || 3;
+            let total = 0;
+            for (let i = 0; i < dc; i++) total += Math.floor(Math.random() * 3);
+            state.secondRollModal.result = total;
+            state.skipMapCentering = true;
+            updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            return;
+        }
+        if (action === 'second-roll-apply') {
+            import('../events/eventSecondRoll.js').then(m => m.applySecondRollResult(mountEl));
+            return;
         }
 
         // Stat change notification

@@ -30,6 +30,7 @@ export const DESTINATION_TO_ROOM_NAME = {
     'tower': 'Tower',
     'balcony': 'Balcony',
     'basement_landing': 'Basement Landing',
+    'upper_landing': 'Upper Landing',
 };
 
 /**

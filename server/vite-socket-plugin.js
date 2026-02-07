@@ -515,6 +515,31 @@ export function socketIOPlugin() {
                         playerManager.updateCharacterData(room.id, stateUpdate.playerState.characterData);
                     }
 
+                    // Update pending stat choices (from allPlayersLoseStat events)
+                    if (stateUpdate.playerState?.pendingStatChoices !== undefined) {
+                        playerManager.updatePendingStatChoices(room.id, stateUpdate.playerState.pendingStatChoices);
+                    }
+
+                    // Update persistent effects if provided
+                    if (stateUpdate.playerState?.persistentEffects !== undefined) {
+                        playerManager.updatePersistentEffects(room.id, stateUpdate.playerState.persistentEffects);
+                    }
+
+                    // Update stored dice if provided
+                    if (stateUpdate.playerState?.storedDice !== undefined) {
+                        playerManager.updateStoredDice(room.id, stateUpdate.playerState.storedDice);
+                    }
+
+                    // Update room token effects if provided (sent at top level by client)
+                    if (stateUpdate.roomTokenEffects !== undefined) {
+                        playerManager.updateRoomTokenEffects(room.id, stateUpdate.roomTokenEffects);
+                    }
+
+                    // Update token interactions if provided (sent at top level by client)
+                    if (stateUpdate.tokenInteractions !== undefined) {
+                        playerManager.updateTokenInteractions(room.id, stateUpdate.tokenInteractions);
+                    }
+
                     // Note: trappedPlayers is updated earlier (before playerMoves processing)
 
                     // Update combat state if provided (for multiplayer combat sync)

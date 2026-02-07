@@ -18,6 +18,9 @@ export const state = {
     turnOrderExpanded: false,
     skipMapCentering: false,
     tutorialOpen: false,
+    tokenDetailOpen: false,
+    tokenPromptModal: null,
+    lastTokenPromptKey: null,
     isDebugMode: false,
     isSoloDebug: false,
     /** @type {string[]} */
@@ -101,6 +104,24 @@ export const state = {
     rescueTrappedModal: null,
     /** @type {any} */
     persistentDamageModal: null,
+    /** @type {any} */
+    optionalRollModal: null,
+    /** @type {any} */
+    choiceModal: null,
+    /** @type {any} */
+    peekModal: null,
+    /** @type {any} */
+    storeDiceModal: null,
+    /** @type {any} */
+    tokenPlacementModal: null,
+    /** @type {any} */
+    tokenInteractionModal: null,
+    /** @type {any} */
+    multiPlayerRollModal: null,
+    /** @type {any} */
+    secondRollModal: null,
+    /** @type {{ roomId: string; tokenType: string } | null} */
+    pendingTokenPromptAfterDamage: null,
 
     // === SOCKET SUBSCRIPTIONS ===
     /** @type {(() => void)|null} */
@@ -250,4 +271,12 @@ export function resetAllModalStates() {
     state.pendingCombatMovement = null;
     state.pendingMentalDamage = null;
     state.pendingTrappedEffect = null;
+    state.optionalRollModal = null;
+    state.choiceModal = null;
+    state.peekModal = null;
+    state.storeDiceModal = null;
+    state.tokenPlacementModal = null;
+    state.tokenInteractionModal = null;
+    state.multiPlayerRollModal = null;
+    state.secondRollModal = null;
 }

@@ -125,6 +125,15 @@ export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false 
         }
 
         state.currentGameState = serverState;
+
+        // Promote playerState sub-fields to top level where client code expects them
+        if (serverState.playerState?.roomTokenEffects && !serverState.roomTokenEffects) {
+            state.currentGameState.roomTokenEffects = serverState.playerState.roomTokenEffects;
+        }
+        if (serverState.playerState?.tokenInteractions && !serverState.tokenInteractions) {
+            state.currentGameState.tokenInteractions = serverState.playerState.tokenInteractions;
+        }
+
         if (state.isSoloDebug) {
             // Auto-switch to current turn player when turn changes
             if (newTurnPlayer && newTurnPlayer !== state.mySocketId && state.soloDebugPlayerIds.includes(newTurnPlayer)) {
@@ -155,7 +164,11 @@ export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false 
             const isAttacker = sc.attackerId === state.mySocketId;
             const expectedLocalPhase = mapServerPhaseToLocal(sc.phase, isDefender);
 
-            if (isDefender || isAttacker) {
+            // Event combat: current player controls both rolls locally, skip server sync
+            // to preserve eventSource, fixedAttackerDice, and correct local phase
+            const isLocalEventCombat = state.combatModal?.eventSource;
+
+            if ((isDefender || isAttacker) && !isLocalEventCombat) {
                 const shouldSync = !state.combatModal ||
                     (isDefender && state.combatModal.phase !== expectedLocalPhase) ||
                     sc.phase === 'result';

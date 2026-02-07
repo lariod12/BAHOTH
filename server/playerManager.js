@@ -126,6 +126,11 @@ export function initializeGame(roomId, players, startingRoom = 'entrance-hall') 
         playerCards: {},
         drawnRooms: [],
         pendingEvents: {},
+        pendingStatChoices: {},
+        persistentEffects: {},
+        storedDice: {},
+        roomTokenEffects: {},
+        tokenInteractions: {},
     };
 
     // Set all players to starting position and initialize character stats
@@ -374,6 +379,24 @@ export function updatePlayerId(roomId, oldId, newId) {
         delete state.pendingEvents[oldId];
     }
 
+    // Update pendingStatChoices
+    if (state.pendingStatChoices && state.pendingStatChoices[oldId]) {
+        state.pendingStatChoices[newId] = state.pendingStatChoices[oldId];
+        delete state.pendingStatChoices[oldId];
+    }
+
+    // Update persistentEffects
+    if (state.persistentEffects && state.persistentEffects[oldId]) {
+        state.persistentEffects[newId] = state.persistentEffects[oldId];
+        delete state.persistentEffects[oldId];
+    }
+
+    // Update storedDice
+    if (state.storedDice && state.storedDice[oldId]) {
+        state.storedDice[newId] = state.storedDice[oldId];
+        delete state.storedDice[oldId];
+    }
+
     savePlayers();
     console.log(`[PlayerManager] Updated player ID: ${oldId} -> ${newId}`);
 
@@ -399,6 +422,11 @@ export function getFullPlayerState(roomId) {
         drawnRooms: state.drawnRooms ? [...state.drawnRooms] : [],
         trappedPlayers: state.trappedPlayers ? { ...state.trappedPlayers } : {},
         pendingEvents: state.pendingEvents ? JSON.parse(JSON.stringify(state.pendingEvents)) : {},
+        pendingStatChoices: state.pendingStatChoices ? JSON.parse(JSON.stringify(state.pendingStatChoices)) : {},
+        persistentEffects: state.persistentEffects ? JSON.parse(JSON.stringify(state.persistentEffects)) : {},
+        storedDice: state.storedDice ? JSON.parse(JSON.stringify(state.storedDice)) : {},
+        roomTokenEffects: state.roomTokenEffects ? JSON.parse(JSON.stringify(state.roomTokenEffects)) : {},
+        tokenInteractions: state.tokenInteractions ? JSON.parse(JSON.stringify(state.tokenInteractions)) : {},
     };
 }
 
@@ -729,6 +757,86 @@ export function updatePendingEvents(roomId, pendingEvents) {
     state.pendingEvents = pendingEvents || {};
     savePlayers();
     console.log(`[PlayerManager] Updated pending events for room ${roomId}:`, Object.keys(state.pendingEvents));
+
+    return state;
+}
+
+/**
+ * Update pending stat choices for a room (from allPlayersLoseStat events)
+ * @param {string} roomId
+ * @param {Record<string, object> | null} pendingStatChoices
+ * @returns {PlayerState | undefined}
+ */
+export function updatePendingStatChoices(roomId, pendingStatChoices) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.pendingStatChoices = pendingStatChoices || {};
+    savePlayers();
+
+    return state;
+}
+
+/**
+ * Update persistent effects for a room
+ * @param {string} roomId
+ * @param {Record<string, Array> | null} persistentEffects
+ * @returns {PlayerState | undefined}
+ */
+export function updatePersistentEffects(roomId, persistentEffects) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.persistentEffects = persistentEffects || {};
+    savePlayers();
+
+    return state;
+}
+
+/**
+ * Update stored dice for a room
+ * @param {string} roomId
+ * @param {Record<string, object> | null} storedDice
+ * @returns {PlayerState | undefined}
+ */
+export function updateStoredDice(roomId, storedDice) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.storedDice = storedDice || {};
+    savePlayers();
+
+    return state;
+}
+
+/**
+ * Update room token effects for a room
+ * @param {string} roomId
+ * @param {Record<string, object> | null} roomTokenEffects
+ * @returns {PlayerState | undefined}
+ */
+export function updateRoomTokenEffects(roomId, roomTokenEffects) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.roomTokenEffects = roomTokenEffects || {};
+    savePlayers();
+
+    return state;
+}
+
+/**
+ * Update token interactions for a room
+ * @param {string} roomId
+ * @param {Record<string, object> | null} tokenInteractions
+ * @returns {PlayerState | undefined}
+ */
+export function updateTokenInteractions(roomId, tokenInteractions) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.tokenInteractions = tokenInteractions || {};
+    savePlayers();
 
     return state;
 }

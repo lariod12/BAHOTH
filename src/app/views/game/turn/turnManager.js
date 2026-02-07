@@ -45,7 +45,19 @@ export function advanceToNextTurn() {
             console.log('[Turn] === TURN ADVANCED (TRAPPED PLAYER) ===');
             console.log('[Turn] Next player is trapped! turnsTrapped:', isTrapped.turnsTrapped);
         } else {
-            state.currentGameState.playerMoves[nextPlayerId] = speed;
+            // Check for movement restriction (den_tat)
+            const persistentEffects = state.currentGameState.playerState?.persistentEffects?.[nextPlayerId] || [];
+            const movementRestriction = persistentEffects.find(e => e.movementRestriction);
+            if (movementRestriction) {
+                const restrictedMoves = movementRestriction.movesPerTurn || 1;
+                state.currentGameState.playerMoves[nextPlayerId] = Math.min(speed, restrictedMoves);
+                console.log('[Turn] Movement restricted to', restrictedMoves, 'by', movementRestriction.eventName);
+
+                // Check remove conditions
+                checkMovementRestrictionRemoval(nextPlayerId, movementRestriction);
+            } else {
+                state.currentGameState.playerMoves[nextPlayerId] = speed;
+            }
         }
 
         console.log('[Turn] === TURN ADVANCED ===');
@@ -61,6 +73,58 @@ export function advanceToNextTurn() {
     state.secretPassagePromptedTurnIndex = null;
     state.secretPassagePromptedPlayerId = null;
     console.log('[Turn] Reset hasAttackedThisTurn flag');
+}
+
+function checkMovementRestrictionRemoval(playerId, restriction) {
+    const gs = state.currentGameState;
+    const conditions = restriction.removeConditions || [];
+    const positions = gs?.playerState?.playerPositions || {};
+    const rooms = gs?.map?.revealedRooms || {};
+    const playerRoom = positions[playerId];
+
+    for (const cond of conditions) {
+        if (cond === 'sameRoomWithPlayer') {
+            // Check if another player is in the same room
+            for (const [pid, roomId] of Object.entries(positions)) {
+                if (pid !== playerId && roomId === playerRoom) {
+                    removeMovementRestriction(playerId, restriction);
+                    console.log('[Turn] Movement restriction removed: same room with player');
+                    return;
+                }
+            }
+        }
+        if (cond === 'hasCandle') {
+            const cards = gs?.playerState?.playerCards?.[playerId];
+            if (cards?.items?.includes('ngon_nen')) {
+                removeMovementRestriction(playerId, restriction);
+                console.log('[Turn] Movement restriction removed: has candle');
+                return;
+            }
+        }
+        if (cond === 'inFurnaceRoom') {
+            const room = rooms[playerRoom];
+            if (room && (room.name === 'Furnace Room' || room.name?.includes('(Furnace Room)'))) {
+                removeMovementRestriction(playerId, restriction);
+                console.log('[Turn] Movement restriction removed: in Furnace Room');
+                return;
+            }
+        }
+    }
+}
+
+function removeMovementRestriction(playerId, restriction) {
+    const effects = state.currentGameState?.playerState?.persistentEffects?.[playerId];
+    if (!effects) return;
+    const idx = effects.indexOf(restriction);
+    if (idx >= 0) effects.splice(idx, 1);
+
+    // Restore normal speed
+    const player = state.currentGameState?.players?.find(p => p.id === playerId);
+    if (player) {
+        const charData = state.currentGameState?.playerState?.characterData?.[playerId];
+        const speed = getCharacterSpeed(player.characterId, charData);
+        state.currentGameState.playerMoves[playerId] = speed;
+    }
 }
 
 export function handleEndTurn(mountEl) {
@@ -94,12 +158,17 @@ export async function syncGameStateToServer() {
             playerState: {
                 characterData: state.currentGameState.playerState?.characterData,
                 trappedPlayers: state.currentGameState.playerState?.trappedPlayers,
-                pendingEvents: state.currentGameState.playerState?.pendingEvents
+                pendingEvents: state.currentGameState.playerState?.pendingEvents,
+                persistentEffects: state.currentGameState.playerState?.persistentEffects,
+                storedDice: state.currentGameState.playerState?.storedDice,
+                pendingStatChoices: state.currentGameState.playerState?.pendingStatChoices,
             },
             currentTurnIndex: state.currentGameState.currentTurnIndex,
             combatState: state.currentGameState.combatState || null,
             combatResult: state.currentGameState.combatResult || null,
-            gameOver: state.currentGameState.gameOver || null
+            gameOver: state.currentGameState.gameOver || null,
+            roomTokenEffects: state.currentGameState.roomTokenEffects || null,
+            tokenInteractions: state.currentGameState.tokenInteractions || null,
         });
         console.log('[Sync] Game state synced to server:', result);
     } catch (error) {

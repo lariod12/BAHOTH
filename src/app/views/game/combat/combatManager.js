@@ -186,6 +186,16 @@ export function closeDamageDistributionModal(mountEl) {
             }
             state.pendingTrappedEffect = null;
 
+            // Check if there's a pending token interaction prompt to show after damage
+            if (!died && state.pendingTokenPromptAfterDamage) {
+                const { roomId, tokenType } = state.pendingTokenPromptAfterDamage;
+                state.pendingTokenPromptAfterDamage = null;
+                import('../events/eventToken.js').then(m => {
+                    m.showTokenInteractionPrompt(mountEl, roomId, tokenType);
+                });
+                return;
+            }
+
             if (!died) updateGameUI(mountEl, state.currentGameState, state.mySocketId);
         });
     });

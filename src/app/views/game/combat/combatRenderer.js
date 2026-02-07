@@ -7,36 +7,45 @@ export function renderCombatModal() {
     const {
         phase, attackerName, defenderName, defenderFactionLabel,
         attackerDiceCount, defenderDiceCount, attackerRoll, defenderRoll,
-        inputValue, winner, damage, loserId, isForced
+        inputValue, winner, damage, loserId, isForced,
+        fixedAttackerDice, eventSource
     } = state.combatModal;
 
     const isAttacker = state.combatModal.attackerId === state.mySocketId;
     const isDefender = state.combatModal.defenderId === state.mySocketId;
     const myRole = isAttacker ? 'attacker' : isDefender ? 'defender' : 'observer';
 
+    // Event-triggered combat: current player controls both attacker and defender rolls
+    const isEventCombat = !!eventSource;
+    const canInputAttacker = isAttacker || isEventCombat;
+    const canInputDefender = isDefender || isEventCombat;
+
+    const attackDiceLabel = fixedAttackerDice ? `${fixedAttackerDice} dice (su kien)` : `${attackerDiceCount} dice`;
+
     let content = '';
 
     if (phase === 'confirm') {
         content = `
             <div class="combat-modal__header">
-                <h2 class="combat-modal__title">CHIEN DAU${isForced ? ' (CUONG CHE)' : ''}</h2>
+                <h2 class="combat-modal__title">CHIEN DAU${isForced ? ' (SU KIEN)' : ''}</h2>
             </div>
             <div class="combat-modal__info">
-                <p><strong>${attackerName}</strong> tan cong <strong>${defenderName}</strong> (${defenderFactionLabel})</p>
+                <p><strong>${attackerName}</strong> tan cong <strong>${defenderName}</strong>${defenderFactionLabel ? ` (${defenderFactionLabel})` : ''}</p>
                 <p>Su dung: Might</p>
-                <p>${attackerName}: ${attackerDiceCount} dice | ${defenderName}: ${defenderDiceCount} dice</p>
+                <p>${attackerName}: ${attackDiceLabel} | ${defenderName}: ${defenderDiceCount} dice</p>
             </div>
             <div class="combat-modal__actions">
                 <button class="action-button action-button--primary" type="button" data-action="combat-start">BAT DAU</button>
             </div>
         `;
-    } else if (phase === 'attacker_roll' && isAttacker) {
+    } else if (phase === 'attacker_roll' && canInputAttacker) {
         content = `
             <div class="combat-modal__header">
-                <h2 class="combat-modal__title">LUOT TAN CONG</h2>
+                <h2 class="combat-modal__title">${isEventCombat ? 'TAN CONG TU SU KIEN' : 'LUOT TAN CONG'}</h2>
             </div>
             <div class="combat-modal__info">
-                <p>${attackerName} tung ${attackerDiceCount} dice</p>
+                <p>${attackerName} tung ${attackDiceLabel}</p>
+                ${isEventCombat && !isAttacker ? `<p class="combat-modal__hint">Ban nhap ket qua xuc xac cua ${attackerName}</p>` : ''}
             </div>
             <div class="combat-modal__input">
                 <label>Nhap ket qua:</label>
@@ -46,14 +55,14 @@ export function renderCombatModal() {
                 <button class="action-button action-button--primary" type="button" data-action="combat-submit-attacker">XAC NHAN</button>
             </div>
         `;
-    } else if (phase === 'defender_roll' && isDefender) {
+    } else if (phase === 'defender_roll' && canInputDefender) {
         content = `
             <div class="combat-modal__header">
                 <h2 class="combat-modal__title">LUOT PHONG THU</h2>
             </div>
             <div class="combat-modal__info">
                 <p>${attackerName} da tung: ${attackerRoll}</p>
-                <p>${defenderName} tung ${defenderDiceCount} dice</p>
+                <p>${defenderName} tung ${defenderDiceCount} dice (Might)</p>
             </div>
             <div class="combat-modal__input">
                 <label>Nhap ket qua:</label>
@@ -119,46 +128,63 @@ export function renderDamageDistributionModal() {
     const remaining = totalDamage - (stat1Damage || 0) - (stat2Damage || 0);
     const isComplete = remaining === 0;
 
-    let typeLabel = '';
-    if (damageType === 'physical') typeLabel = 'Physical (Speed/Might)';
-    else if (damageType === 'mental') typeLabel = 'Mental (Sanity/Knowledge)';
-    else typeLabel = 'Chon loai sat thuong';
+    const statLabels = { speed: 'Toc do', might: 'Suc manh', sanity: 'Tam tri', knowledge: 'Kien thuc' };
 
+    // Type selection screen (when damageType not yet chosen)
     if (!damageType) {
         return `
             <div class="damage-dist-overlay">
                 <div class="damage-dist-modal">
-                    <h2 class="damage-dist__title">PHAN CHIA SAT THUONG</h2>
-                    <p>Tong sat thuong: ${totalDamage}</p>
-                    <p>${typeLabel}</p>
-                    <div class="damage-dist__type-select">
-                        <button class="action-button action-button--primary" type="button" data-action="damage-dist-type" data-type="physical">Physical (Speed/Might)</button>
-                        <button class="action-button action-button--primary" type="button" data-action="damage-dist-type" data-type="mental">Mental (Sanity/Knowledge)</button>
+                    <header class="damage-dist-modal__header">
+                        <h2 class="damage-dist-modal__title">PHAN CHIA SAT THUONG</h2>
+                    </header>
+                    <div class="damage-dist-modal__body">
+                        <p class="damage-dist-modal__damage-total">Tong sat thuong: <strong>${totalDamage}</strong></p>
+                        <p class="damage-dist-modal__instruction">Chon loai sat thuong</p>
+                        <div class="damage-dist-modal__type-buttons">
+                            <button class="damage-dist-modal__btn--physical" type="button" data-action="damage-dist-type" data-type="physical">Vat li<small>Toc do / Suc manh</small></button>
+                            <button class="damage-dist-modal__btn--mental" type="button" data-action="damage-dist-type" data-type="mental">Tinh than<small>Tam tri / Kien thuc</small></button>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
     }
 
+    const stat1Label = statLabels[stat1] || stat1 || '?';
+    const stat2Label = statLabels[stat2] || stat2 || '?';
+    const remainingClass = isComplete ? 'damage-dist-modal__remaining damage-dist-modal__remaining--done' : 'damage-dist-modal__remaining';
+
     return `
         <div class="damage-dist-overlay">
             <div class="damage-dist-modal">
-                <h2 class="damage-dist__title">PHAN CHIA SAT THUONG</h2>
-                <p>Tong: ${totalDamage} | ${typeLabel} | Con lai: ${remaining}</p>
-                <div class="damage-dist__stats">
-                    <div class="damage-dist__stat">
-                        <label>${stat1 || '?'}: ${stat1Damage || 0}</label>
-                        <button type="button" data-action="damage-dist-inc" data-stat="stat1" ${remaining <= 0 ? 'disabled' : ''}>+</button>
-                        <button type="button" data-action="damage-dist-dec" data-stat="stat1" ${(stat1Damage || 0) <= 0 ? 'disabled' : ''}>-</button>
+                <header class="damage-dist-modal__header">
+                    <h2 class="damage-dist-modal__title">PHAN CHIA SAT THUONG</h2>
+                </header>
+                <div class="damage-dist-modal__body">
+                    <p class="damage-dist-modal__damage-total">Tong sat thuong: <strong>${totalDamage}</strong></p>
+                    <div class="${remainingClass}">Con lai: <strong>${remaining}</strong></div>
+                    <div class="damage-dist-modal__stat-row">
+                        <div class="damage-dist-modal__stat-info">
+                            <span class="damage-dist-modal__stat-label">${stat1Label}</span>
+                        </div>
+                        <div class="damage-dist-modal__stat-input">
+                            <button class="damage-dist-modal__btn--minus" type="button" data-action="damage-dist-dec" data-stat="stat1" ${(stat1Damage || 0) <= 0 ? 'disabled' : ''}>-</button>
+                            <span class="damage-dist-modal__stat-value">${stat1Damage || 0}</span>
+                            <button class="damage-dist-modal__btn--plus" type="button" data-action="damage-dist-inc" data-stat="stat1" ${remaining <= 0 ? 'disabled' : ''}>+</button>
+                        </div>
                     </div>
-                    <div class="damage-dist__stat">
-                        <label>${stat2 || '?'}: ${stat2Damage || 0}</label>
-                        <button type="button" data-action="damage-dist-inc" data-stat="stat2" ${remaining <= 0 ? 'disabled' : ''}>+</button>
-                        <button type="button" data-action="damage-dist-dec" data-stat="stat2" ${(stat2Damage || 0) <= 0 ? 'disabled' : ''}>-</button>
+                    <div class="damage-dist-modal__stat-row">
+                        <div class="damage-dist-modal__stat-info">
+                            <span class="damage-dist-modal__stat-label">${stat2Label}</span>
+                        </div>
+                        <div class="damage-dist-modal__stat-input">
+                            <button class="damage-dist-modal__btn--minus" type="button" data-action="damage-dist-dec" data-stat="stat2" ${(stat2Damage || 0) <= 0 ? 'disabled' : ''}>-</button>
+                            <span class="damage-dist-modal__stat-value">${stat2Damage || 0}</span>
+                            <button class="damage-dist-modal__btn--plus" type="button" data-action="damage-dist-inc" data-stat="stat2" ${remaining <= 0 ? 'disabled' : ''}>+</button>
+                        </div>
                     </div>
-                </div>
-                <div class="damage-dist__actions">
-                    <button class="action-button action-button--primary" type="button" data-action="damage-dist-confirm" ${!isComplete ? 'disabled' : ''}>XAC NHAN</button>
+                    <button class="damage-dist-modal__btn--confirm" type="button" data-action="damage-dist-confirm" ${!isComplete ? 'disabled' : ''}>XAC NHAN</button>
                 </div>
             </div>
         </div>

@@ -21,7 +21,10 @@ function findExistingRooms(destinations) {
 
 export function checkEventRequiresImmediateRoll(cardId) {
     const card = EVENTS.find(e => e.id === cardId);
-    return card?.immediateRoll === true;
+    if (!card) return false;
+    // immediateRoll, rollDice (fixed die), or rollStat with rollResults (direct roll)
+    return card.immediateRoll === true || card.rollDice > 0 ||
+        (card.rollStat && card.rollResults && !card.optional && card.effect !== 'choice' && card.effect !== 'placeToken' && card.effect !== 'conditional' && card.effect !== 'attack');
 }
 
 export function getEventCardById(cardId) {
@@ -37,10 +40,36 @@ export function openEventDiceModal(mountEl, cardId, tokenDrawingContext = null) 
 
     const playerId = state.mySocketId;
     let rollStat = card.rollStat || card.rollStats?.[0];
-    let diceCount = card.fixedDice || 0;
+    const fixedDice = card.fixedDice || card.rollDice || 0;
+    let diceCount = fixedDice;
 
-    if (!card.fixedDice && rollStat && typeof rollStat === 'string') {
+    // Chapel bonus check for tieng_buoc_chan
+    let chapelBonusDice = 0;
+    if (card.chapelBonus && card.chapelBonus.fromAlly) {
+        const hasAllyInChapel = checkAllyInRoom(playerId, 'Chapel');
+        if (hasAllyInChapel) {
+            chapelBonusDice = card.chapelBonus.addDice || 0;
+            diceCount += chapelBonusDice;
+            console.log('[EventDice] Chapel bonus applied! +' + chapelBonusDice + ' dice');
+        }
+    }
+
+    if (!fixedDice && rollStat && typeof rollStat === 'string') {
         diceCount = getPlayerStatForDice(playerId, rollStat);
+    }
+
+    // Room modifier (e.g., nguoi_lam_vuon in Gardens)
+    let roomModifierInfo = '';
+    if (card.roomModifier) {
+        const currentRoomId = state.currentGameState?.playerState?.playerPositions?.[playerId];
+        const currentRoom = currentRoomId ? state.currentGameState?.map?.revealedRooms?.[currentRoomId] : null;
+        const targetRoomName = card.roomModifier.room;
+        if (currentRoom && (currentRoom.name?.toLowerCase().includes(targetRoomName) || currentRoom.name?.includes(`(${targetRoomName.charAt(0).toUpperCase() + targetRoomName.slice(1)})`))) {
+            const reduction = card.roomModifier.diceReduction || 0;
+            diceCount = Math.max(1, diceCount - reduction);
+            roomModifierInfo = ` (giam ${reduction} xuc xac vi dang o ${targetRoomName})`;
+            console.log('[EventDice] Room modifier applied! -' + reduction + ' dice for ' + targetRoomName);
+        }
     }
 
     state.eventDiceModal = {
@@ -56,10 +85,80 @@ export function openEventDiceModal(mountEl, cardId, tokenDrawingContext = null) 
         allResults: [],
         pendingEffect: null,
         tokenDrawingContext: tokenDrawingContext,
+        chapelBonusDice: chapelBonusDice,
+        roomModifierInfo: roomModifierInfo,
     };
 
-    console.log('[EventDice] Opened modal for:', card.name?.vi, 'rollStat:', rollStat, 'diceCount:', diceCount);
+    console.log('[EventDice] Opened modal for:', card.name?.vi, 'rollStat:', rollStat, 'diceCount:', diceCount, 'chapelBonus:', chapelBonusDice);
     updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+}
+
+/**
+ * Check if any ally (non-current player) is in a specific room
+ */
+function checkAllyInRoom(currentPlayerId, roomName) {
+    const gs = state.currentGameState;
+    if (!gs?.playerState?.playerPositions || !gs?.map?.revealedRooms) return false;
+    const positions = gs.playerState.playerPositions;
+    const rooms = gs.map.revealedRooms;
+    for (const [pid, roomId] of Object.entries(positions)) {
+        if (pid === currentPlayerId) continue;
+        const room = rooms[roomId];
+        if (room && (room.name === roomName || room.name?.includes(`(${roomName})`))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Find the nearest player to a given player by room distance (BFS on map connections)
+ */
+function findNearestPlayer(currentPlayerId) {
+    const gs = state.currentGameState;
+    if (!gs?.playerState?.playerPositions || !gs?.map?.connections) return null;
+    const positions = gs.playerState.playerPositions;
+    const connections = gs.map.connections;
+    const myRoom = positions[currentPlayerId];
+    if (!myRoom) return null;
+
+    // BFS from my room
+    const visited = new Set();
+    const queue = [{ roomId: myRoom, distance: 0 }];
+    visited.add(myRoom);
+
+    while (queue.length > 0) {
+        const { roomId, distance } = queue.shift();
+        // Check if any other player is in this room
+        for (const [pid, pRoom] of Object.entries(positions)) {
+            if (pid !== currentPlayerId && pRoom === roomId && distance > 0) {
+                return pid;
+            }
+        }
+        // Add connected rooms
+        const roomConns = connections[roomId];
+        if (roomConns) {
+            for (const dir of ['north', 'south', 'east', 'west']) {
+                const nextRoom = roomConns[dir];
+                if (nextRoom && !visited.has(nextRoom)) {
+                    visited.add(nextRoom);
+                    queue.push({ roomId: nextRoom, distance: distance + 1 });
+                }
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Get right player (next in turn order)
+ */
+export function getRightPlayer(currentPlayerId) {
+    const gs = state.currentGameState;
+    if (!gs?.turnOrder) return null;
+    const idx = gs.turnOrder.indexOf(currentPlayerId);
+    if (idx === -1) return null;
+    return gs.turnOrder[(idx + 1) % gs.turnOrder.length];
 }
 
 export function openDamageDiceModal(mountEl, physicalDice, mentalDice) {
@@ -136,8 +235,29 @@ export function applyEventDiceResult(mountEl, result, stat) {
             const oldValue = getPlayerStatForDice(playerId, gainStatName);
             applyStatChange(playerId, gainStatName, amount);
             const newValue = getPlayerStatForDice(playerId, gainStatName);
+            let extraMsg = '';
+
+            // Handle nearestPlayer sub-effect
+            if (outcome.nearestPlayer) {
+                const nearestPid = findNearestPlayer(playerId);
+                if (nearestPid) {
+                    const npEffect = outcome.nearestPlayer;
+                    const npStat = npEffect.stat;
+                    const npAmount = npEffect.amount || 1;
+                    const npPlayer = state.currentGameState?.players?.find(p => p.id === nearestPid);
+                    const npCharName = npPlayer?.characterId ? (() => { const c = CHARACTER_BY_ID[npPlayer.characterId]; return c?.name?.vi || c?.name?.en || 'Player'; })() : 'Player';
+                    if (npEffect.effect === 'gainStat') {
+                        applyStatChange(nearestPid, npStat, npAmount);
+                        extraMsg = `. ${npCharName} +${npAmount} ${statLabels[npStat]}`;
+                    } else if (npEffect.effect === 'loseStat') {
+                        applyStatChange(nearestPid, npStat, -npAmount);
+                        extraMsg = `. ${npCharName} -${npAmount} ${statLabels[npStat]}`;
+                    }
+                }
+            }
+
             state.eventDiceModal = null;
-            openEventResultModal(mountEl, 'TANG CHI SO', `${statLabels[gainStatName]}: ${oldValue} → ${newValue} (+${amount})`, 'success');
+            openEventResultModal(mountEl, 'TANG CHI SO', `${statLabels[gainStatName]}: ${oldValue} → ${newValue} (+${amount})${extraMsg}`, 'success');
             break;
         }
 
@@ -233,9 +353,68 @@ export function applyEventDiceResult(mountEl, result, stat) {
             break;
         }
 
-        case 'attack':
-            closeEventDiceModal(mountEl);
+        case 'drawEvent': {
+            const eventTokens = Array(outcome.amount || 1).fill('event');
+            state.eventDiceModal = null;
+            import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(mountEl, eventTokens));
             break;
+        }
+
+        case 'secondRoll': {
+            state.eventDiceModal = null;
+            import('./eventSecondRoll.js').then(m => m.openSecondRollModal(mountEl, eventCard, outcome));
+            break;
+        }
+
+        case 'attack': {
+            // Event-triggered combat (e.g., nguoi_lam_vuon 0-3 result)
+            if (outcome.attackerDice && outcome.defenderStat) {
+                const rightPlayerId = getRightPlayer(playerId);
+                if (rightPlayerId) {
+                    const attackerPlayer = state.currentGameState?.players?.find(pp => pp.id === rightPlayerId);
+                    const defenderPlayer = state.currentGameState?.players?.find(pp => pp.id === playerId);
+                    const attackerName = attackerPlayer ? (CHARACTER_BY_ID[attackerPlayer.characterId]?.name?.vi || 'Player') : 'Player';
+                    const defenderName = defenderPlayer ? (CHARACTER_BY_ID[defenderPlayer.characterId]?.name?.vi || 'Player') : 'Player';
+                    const defenderDiceCount = getPlayerStatForDice(playerId, outcome.defenderStat);
+
+                    state.eventDiceModal = null;
+                    state.combatModal = {
+                        isOpen: true,
+                        phase: 'confirm',
+                        attackerId: rightPlayerId,
+                        defenderId: playerId,
+                        attackerName,
+                        defenderName,
+                        defenderFactionLabel: '',
+                        attackerDiceCount: outcome.attackerDice,
+                        defenderDiceCount,
+                        attackerRoll: null,
+                        defenderRoll: null,
+                        winner: null,
+                        damage: 0,
+                        loserId: null,
+                        isForced: true,
+                        inputValue: '',
+                        fixedAttackerDice: outcome.attackerDice,
+                        defenderStat: outcome.defenderStat,
+                        eventSource: eventCard.id,
+                    };
+                    if (!state.currentGameState.combatState) state.currentGameState.combatState = {};
+                    state.currentGameState.combatState = {
+                        isActive: true, attackerId: rightPlayerId, defenderId: playerId,
+                        phase: 'waiting_attacker', attackerRoll: null, defenderRoll: null,
+                        attackStat: 'event', winner: null, damage: 0, loserId: null,
+                    };
+                    syncGameStateToServer();
+                    updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+                } else {
+                    closeEventDiceModal(mountEl);
+                }
+            } else {
+                closeEventDiceModal(mountEl);
+            }
+            break;
+        }
 
         case 'forcedAttack': {
             state.eventDiceModal = null;
@@ -252,6 +431,41 @@ export function applyEventDiceResult(mountEl, result, stat) {
             state.eventDiceModal = null;
             applyPersistentEffect(mountEl, playerId, eventCard);
             break;
+
+        case 'allPlayersLoseStat': {
+            // All players choose 1 stat to lose
+            const amt = outcome.amount || 1;
+
+            // Store pending stat choice for ALL other players
+            if (!state.currentGameState.playerState.pendingStatChoices) {
+                state.currentGameState.playerState.pendingStatChoices = {};
+            }
+            const allPlayers = state.currentGameState.players || [];
+            for (const p of allPlayers) {
+                if (p.id !== playerId) {
+                    state.currentGameState.playerState.pendingStatChoices[p.id] = {
+                        effect: 'loseStat',
+                        amount: amt,
+                        reason: eventCard.name?.vi || 'Event',
+                    };
+                }
+            }
+
+            // Current player sees the modal immediately
+            state.eventDiceModal = null;
+            state.statChoiceModal = {
+                isOpen: true,
+                title: 'MAT CHI SO (HINH PHAT CHUNG)',
+                effect: 'loseStat',
+                amount: amt,
+                options: ['speed', 'might', 'sanity', 'knowledge'],
+                selectedStat: null,
+                isAllPlayers: true,
+            };
+            syncGameStateToServer();
+            updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            break;
+        }
 
         case 'setStatToLowest': {
             const targetStatName = outcome.stat === 'rolled' ? stat : outcome.stat;
@@ -329,18 +543,36 @@ export function closeDamageDiceModal(mountEl) {
     if (!state.damageDiceModal) return;
     const physicalDamage = state.damageDiceModal.physicalResult || 0;
     const mentalDamage = state.damageDiceModal.mentalResult || 0;
-    const physicalStat = state.damageDiceModal.selectedPhysicalStat;
-    const mentalStat = state.damageDiceModal.selectedMentalStat;
-
-    import('../characters/characterManager.js').then(m => {
-        m.applyDamageToPlayer(state.mySocketId, physicalDamage, mentalDamage, physicalStat, mentalStat);
-    });
 
     state.damageDiceModal = null;
-    const playerId = state.mySocketId;
-    if (state.currentGameState && state.currentGameState.playerMoves[playerId] <= 0) {
-        advanceToNextTurn();
-    }
-    updateGameUI(mountEl, state.currentGameState, state.mySocketId);
-    syncGameStateToServer();
+
+    // Open damage distribution modal so player can choose how to distribute damage
+    import('../combat/combatManager.js').then(combatMod => {
+        if (physicalDamage > 0 && mentalDamage > 0) {
+            // Both physical and mental: distribute physical first, then mental will chain
+            state.pendingMentalDamage = mentalDamage;
+            combatMod.openDamageDistributionModal(mountEl, physicalDamage, 'event', 'physical');
+        } else if (physicalDamage > 0) {
+            combatMod.openDamageDistributionModal(mountEl, physicalDamage, 'event', 'physical');
+        } else if (mentalDamage > 0) {
+            combatMod.openDamageDistributionModal(mountEl, mentalDamage, 'event', 'mental');
+        } else {
+            // No damage at all, just continue
+            if (state.pendingTokenPromptAfterDamage) {
+                const { roomId, tokenType } = state.pendingTokenPromptAfterDamage;
+                state.pendingTokenPromptAfterDamage = null;
+                syncGameStateToServer();
+                import('../events/eventToken.js').then(m => {
+                    m.showTokenInteractionPrompt(mountEl, roomId, tokenType);
+                });
+                return;
+            }
+            const playerId = state.mySocketId;
+            if (state.currentGameState && state.currentGameState.playerMoves[playerId] <= 0) {
+                advanceToNextTurn();
+            }
+            updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+            syncGameStateToServer();
+        }
+    });
 }
