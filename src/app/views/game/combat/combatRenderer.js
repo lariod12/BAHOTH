@@ -121,6 +121,16 @@ export function renderCombatModal() {
     `;
 }
 
+/**
+ * Get the current stat index for a player's stat (0-7, where 0 = skull/death)
+ */
+function getPlayerStatIndex(statName) {
+    const playerId = state.mySocketId;
+    const charData = state.currentGameState?.playerState?.characterData?.[playerId];
+    if (!charData?.stats) return 4; // fallback
+    return charData.stats[statName] ?? 4;
+}
+
 export function renderDamageDistributionModal() {
     if (!state.damageDistributionModal || !state.damageDistributionModal.isOpen) return '';
 
@@ -155,6 +165,46 @@ export function renderDamageDistributionModal() {
     const stat2Label = statLabels[stat2] || stat2 || '?';
     const remainingClass = isComplete ? 'damage-dist-modal__remaining damage-dist-modal__remaining--done' : 'damage-dist-modal__remaining';
 
+    // Get current stat indices to determine max allocatable damage
+    const stat1Index = getPlayerStatIndex(stat1);
+    const stat2Index = getPlayerStatIndex(stat2);
+    const stat1MaxDmg = stat1Index; // can go down to 0 (skull)
+    const stat2MaxDmg = stat2Index;
+    const s1Dmg = stat1Damage || 0;
+    const s2Dmg = stat2Damage || 0;
+
+    // Disable + if stat is maxed out (already at 0 or allocated damage would reach 0)
+    const stat1AtMax = s1Dmg >= stat1MaxDmg;
+    const stat2AtMax = s2Dmg >= stat2MaxDmg;
+    const stat1PlusDisabled = remaining <= 0 || stat1AtMax;
+    const stat2PlusDisabled = remaining <= 0 || stat2AtMax;
+
+    // Warning messages
+    const stat1Warning = stat1Index === 0
+        ? `<span class="damage-dist-modal__death-warning">DA CHET!</span>`
+        : stat1AtMax
+        ? `<span class="damage-dist-modal__death-warning">TOI DA!</span>`
+        : '';
+    const stat2Warning = stat2Index === 0
+        ? `<span class="damage-dist-modal__death-warning">DA CHET!</span>`
+        : stat2AtMax
+        ? `<span class="damage-dist-modal__death-warning">TOI DA!</span>`
+        : '';
+
+    // Show current stat value and what it will become after damage
+    const stat1After = stat1Index - s1Dmg;
+    const stat2After = stat2Index - s2Dmg;
+    const stat1Preview = s1Dmg > 0
+        ? `<span class="damage-dist-modal__stat-preview">${stat1Index} <span class="damage-dist-modal__stat-arrow">→</span> <span class="${stat1After <= 0 ? 'damage-dist-modal__stat-new--dead' : 'damage-dist-modal__stat-new'}">${stat1After}</span></span>`
+        : `<span class="damage-dist-modal__stat-preview">Hien tai: ${stat1Index}</span>`;
+    const stat2Preview = s2Dmg > 0
+        ? `<span class="damage-dist-modal__stat-preview">${stat2Index} <span class="damage-dist-modal__stat-arrow">→</span> <span class="${stat2After <= 0 ? 'damage-dist-modal__stat-new--dead' : 'damage-dist-modal__stat-new'}">${stat2After}</span></span>`
+        : `<span class="damage-dist-modal__stat-preview">Hien tai: ${stat2Index}</span>`;
+
+    // If both stats are maxed but there's still remaining damage, allow confirm anyway
+    const bothMaxed = stat1AtMax && stat2AtMax && remaining > 0;
+    const canConfirm = isComplete || bothMaxed;
+
     return `
         <div class="damage-dist-overlay">
             <div class="damage-dist-modal">
@@ -164,27 +214,30 @@ export function renderDamageDistributionModal() {
                 <div class="damage-dist-modal__body">
                     <p class="damage-dist-modal__damage-total">Tong sat thuong: <strong>${totalDamage}</strong></p>
                     <div class="${remainingClass}">Con lai: <strong>${remaining}</strong></div>
-                    <div class="damage-dist-modal__stat-row">
+                    ${bothMaxed ? '<p class="damage-dist-modal__instruction" style="color:#f87171;">Ca 2 chi so deu da toi da. Sat thuong thua se bi bo qua.</p>' : ''}
+                    <div class="damage-dist-modal__stat-row ${stat1After <= 0 && s1Dmg > 0 ? 'damage-dist-modal__stat-row--dead' : ''}">
                         <div class="damage-dist-modal__stat-info">
-                            <span class="damage-dist-modal__stat-label">${stat1Label}</span>
+                            <span class="damage-dist-modal__stat-label">${stat1Label} ${stat1Warning}</span>
+                            ${stat1Preview}
                         </div>
                         <div class="damage-dist-modal__stat-input">
-                            <button class="damage-dist-modal__btn--minus" type="button" data-action="damage-dist-dec" data-stat="stat1" ${(stat1Damage || 0) <= 0 ? 'disabled' : ''}>-</button>
-                            <span class="damage-dist-modal__stat-value">${stat1Damage || 0}</span>
-                            <button class="damage-dist-modal__btn--plus" type="button" data-action="damage-dist-inc" data-stat="stat1" ${remaining <= 0 ? 'disabled' : ''}>+</button>
+                            <button class="damage-dist-modal__btn--minus" type="button" data-action="damage-dist-dec" data-stat="stat1" ${s1Dmg <= 0 ? 'disabled' : ''}>-</button>
+                            <span class="damage-dist-modal__stat-value">${s1Dmg}</span>
+                            <button class="damage-dist-modal__btn--plus" type="button" data-action="damage-dist-inc" data-stat="stat1" ${stat1PlusDisabled ? 'disabled' : ''}>+</button>
                         </div>
                     </div>
-                    <div class="damage-dist-modal__stat-row">
+                    <div class="damage-dist-modal__stat-row ${stat2After <= 0 && s2Dmg > 0 ? 'damage-dist-modal__stat-row--dead' : ''}">
                         <div class="damage-dist-modal__stat-info">
-                            <span class="damage-dist-modal__stat-label">${stat2Label}</span>
+                            <span class="damage-dist-modal__stat-label">${stat2Label} ${stat2Warning}</span>
+                            ${stat2Preview}
                         </div>
                         <div class="damage-dist-modal__stat-input">
-                            <button class="damage-dist-modal__btn--minus" type="button" data-action="damage-dist-dec" data-stat="stat2" ${(stat2Damage || 0) <= 0 ? 'disabled' : ''}>-</button>
-                            <span class="damage-dist-modal__stat-value">${stat2Damage || 0}</span>
-                            <button class="damage-dist-modal__btn--plus" type="button" data-action="damage-dist-inc" data-stat="stat2" ${remaining <= 0 ? 'disabled' : ''}>+</button>
+                            <button class="damage-dist-modal__btn--minus" type="button" data-action="damage-dist-dec" data-stat="stat2" ${s2Dmg <= 0 ? 'disabled' : ''}>-</button>
+                            <span class="damage-dist-modal__stat-value">${s2Dmg}</span>
+                            <button class="damage-dist-modal__btn--plus" type="button" data-action="damage-dist-inc" data-stat="stat2" ${stat2PlusDisabled ? 'disabled' : ''}>+</button>
                         </div>
                     </div>
-                    <button class="damage-dist-modal__btn--confirm" type="button" data-action="damage-dist-confirm" ${!isComplete ? 'disabled' : ''}>XAC NHAN</button>
+                    <button class="damage-dist-modal__btn--confirm" type="button" data-action="damage-dist-confirm" ${!canConfirm ? 'disabled' : ''}>XAC NHAN</button>
                 </div>
             </div>
         </div>

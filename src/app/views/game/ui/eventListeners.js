@@ -441,10 +441,22 @@ export function attachEventListeners(mountEl, roomId) {
         if (action === 'damage-dist-inc') {
             if (!state.damageDistributionModal) return;
             const stat = target.closest('[data-stat]')?.dataset.stat;
-            const remaining = state.damageDistributionModal.totalDamage - (state.damageDistributionModal.stat1Damage || 0) - (state.damageDistributionModal.stat2Damage || 0);
+            const dm = state.damageDistributionModal;
+            const remaining = dm.totalDamage - (dm.stat1Damage || 0) - (dm.stat2Damage || 0);
             if (remaining <= 0) return;
-            if (stat === 'stat1') state.damageDistributionModal.stat1Damage = (state.damageDistributionModal.stat1Damage || 0) + 1;
-            else if (stat === 'stat2') state.damageDistributionModal.stat2Damage = (state.damageDistributionModal.stat2Damage || 0) + 1;
+
+            // Get current stat index to enforce max damage limit
+            const playerId = state.mySocketId;
+            const charData = state.currentGameState?.playerState?.characterData?.[playerId];
+            const statName = stat === 'stat1' ? dm.stat1 : dm.stat2;
+            const currentIndex = charData?.stats?.[statName] ?? 4;
+            const currentDmg = stat === 'stat1' ? (dm.stat1Damage || 0) : (dm.stat2Damage || 0);
+
+            // Don't allow damage beyond stat index (can't go below 0)
+            if (currentDmg >= currentIndex) return;
+
+            if (stat === 'stat1') dm.stat1Damage = (dm.stat1Damage || 0) + 1;
+            else if (stat === 'stat2') dm.stat2Damage = (dm.stat2Damage || 0) + 1;
             state.skipMapCentering = true; updateGameUI(mountEl, state.currentGameState, state.mySocketId);
             return;
         }
