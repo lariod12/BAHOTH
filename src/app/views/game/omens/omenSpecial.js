@@ -3,6 +3,7 @@ import { state } from '../gameState.js';
 import { updateGameUI } from '../ui/mainRenderer.js';
 import { syncGameStateToServer } from '../turn/turnManager.js';
 import { openEventResultModal } from '../events/eventResult.js';
+import { getCharacterSpeed } from '../characters/characterManager.js';
 
 export function getRevealedRoomsByFloor(floor) {
     const revealedRooms = state.currentGameState?.map?.revealedRooms || {};
@@ -109,6 +110,18 @@ export function handleRoomSelectChoice(mountEl, roomId) {
             state.currentGameState.playerState.playerPositions[playerId] = roomId;
         }
         state.roomSelectModal = null;
+        // Advance turn synchronously before syncing
+        const gs = state.currentGameState;
+        gs.currentTurnIndex = (gs.currentTurnIndex + 1) % gs.turnOrder.length;
+        const nextPlayerId = gs.turnOrder[gs.currentTurnIndex];
+        const nextPlayer = gs.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const nextCharData = gs.playerState?.characterData?.[nextPlayerId];
+            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+            gs.playerMoves[nextPlayerId] = speed;
+        }
+        state.hasAttackedThisTurn = false;
+        state.movesInitializedForTurn = -1;
         syncGameStateToServer();
         // Draw event card after teleporting via secret stairs
         import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(mountEl, ['event']));
@@ -308,6 +321,8 @@ export function tryPromptSecretPassageBeforeTurnEnd() {
     }
 
     // Check Secret Stairs
+    // Unlike secretPassage, secretStairs returns false so the calling advanceToNextTurn()
+    // handles the turn advance itself. We just teleport + queue event draw as side effect.
     if (currentRoom?.specialTokens?.includes('secretStairs')) {
         const roomsWithToken = getRoomsWithSpecialToken(state.currentGameState, 'secretStairs')
             .filter(room => room.roomId !== currentRoomId);
@@ -315,19 +330,22 @@ export function tryPromptSecretPassageBeforeTurnEnd() {
             state.secretPassagePromptedTurnIndex = state.currentGameState.currentTurnIndex;
             state.secretPassagePromptedPlayerId = currentTurnPlayer;
 
+            if (roomsWithToken.length === 1) {
+                // Auto-teleport to the only target, then let advanceToNextTurn proceed
+                const targetRoomId = roomsWithToken[0].roomId;
+                state.currentGameState.playerState.playerPositions[currentTurnPlayer] = targetRoomId;
+                // Queue event draw after turn advances
+                setTimeout(() => {
+                    import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(state.mountElRef, ['event']));
+                }, 100);
+                // Return false so the original advanceToNextTurn() completes the turn advance
+                return false;
+            }
+
+            // Multiple targets: show room select modal, block turn advance
             const allowedFloors = [...new Set(roomsWithToken.map(room => room.floor))];
             const selectedFloor = allowedFloors.includes(currentRoom?.floor) ? currentRoom.floor : allowedFloors[0];
             const originRoomName = currentRoom?.name || currentRoomId || 'phong hien tai';
-
-            if (roomsWithToken.length === 1) {
-                // Auto-teleport to the only target and draw event
-                const targetRoomId = roomsWithToken[0].roomId;
-                state.currentGameState.playerState.playerPositions[currentTurnPlayer] = targetRoomId;
-                syncGameStateToServer();
-                // Draw event card after teleporting
-                import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(state.mountElRef, ['event']));
-                return true;
-            }
 
             openRoomSelectModal(
                 state.mountElRef,
@@ -363,10 +381,21 @@ export function useSecretStairs(mountEl) {
     }
 
     if (roomsWithToken.length === 1) {
-        // Auto-teleport and draw event
+        // Auto-teleport, advance turn synchronously, then draw event
         const targetRoomId = roomsWithToken[0].roomId;
-        const targetRoomName = state.currentGameState.map?.revealedRooms?.[targetRoomId]?.name || targetRoomId;
         state.currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+        // Advance turn directly by manipulating state, then sync
+        const gs = state.currentGameState;
+        gs.currentTurnIndex = (gs.currentTurnIndex + 1) % gs.turnOrder.length;
+        const nextPlayerId = gs.turnOrder[gs.currentTurnIndex];
+        const nextPlayer = gs.players.find(p => p.id === nextPlayerId);
+        if (nextPlayer) {
+            const nextCharData = gs.playerState?.characterData?.[nextPlayerId];
+            const speed = getCharacterSpeed(nextPlayer.characterId, nextCharData);
+            gs.playerMoves[nextPlayerId] = speed;
+        }
+        state.hasAttackedThisTurn = false;
+        state.movesInitializedForTurn = -1;
         syncGameStateToServer();
         import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(mountEl, ['event']));
         return;
