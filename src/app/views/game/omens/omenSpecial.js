@@ -103,6 +103,18 @@ export function handleRoomSelectChoice(mountEl, roomId) {
         return;
     }
 
+    if (mode === 'teleportAndDrawEvent') {
+        const playerId = state.mySocketId;
+        if (state.currentGameState?.playerState?.playerPositions) {
+            state.currentGameState.playerState.playerPositions[playerId] = roomId;
+        }
+        state.roomSelectModal = null;
+        syncGameStateToServer();
+        // Draw event card after teleporting via secret stairs
+        import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(mountEl, ['event']));
+        return;
+    }
+
     if (!placeSpecialToken(roomId, tokenType)) {
         openEventResultModal(mountEl, 'DAT TOKEN THAT BAI', 'Khong the dat token tai phong duoc chon.', 'danger');
         return;
@@ -262,38 +274,111 @@ export function tryPromptSecretPassageBeforeTurnEnd() {
 
     const currentRoomId = state.currentGameState.playerState?.playerPositions?.[currentTurnPlayer];
     const currentRoom = currentRoomId ? state.currentGameState.map?.revealedRooms?.[currentRoomId] : null;
-    if (!currentRoom?.specialTokens?.includes('secretPassage')) return false;
 
-    const roomsWithToken = getRoomsWithSpecialToken(state.currentGameState, 'secretPassage')
-        .filter(room => room.roomId !== currentRoomId);
-    if (roomsWithToken.length === 0) return false;
+    // Check Secret Passage first
+    if (currentRoom?.specialTokens?.includes('secretPassage')) {
+        const roomsWithToken = getRoomsWithSpecialToken(state.currentGameState, 'secretPassage')
+            .filter(room => room.roomId !== currentRoomId);
+        if (roomsWithToken.length > 0) {
+            state.secretPassagePromptedTurnIndex = state.currentGameState.currentTurnIndex;
+            state.secretPassagePromptedPlayerId = currentTurnPlayer;
 
-    const allowedFloors = [...new Set(roomsWithToken.map(room => room.floor))];
-    const selectedFloor = allowedFloors.includes(currentRoom?.floor) ? currentRoom.floor : allowedFloors[0];
-    const title = 'SU DUNG SECRET PASSAGE';
-    const description = 'Ban dang dung tren Secret Passage. Muon dich chuyen truoc khi ket thuc luot?';
-    const originRoomName = currentRoom?.name || currentRoomId || 'phong hien tai';
+            const allowedFloors = [...new Set(roomsWithToken.map(room => room.floor))];
+            const selectedFloor = allowedFloors.includes(currentRoom?.floor) ? currentRoom.floor : allowedFloors[0];
+            const originRoomName = currentRoom?.name || currentRoomId || 'phong hien tai';
 
-    state.secretPassagePromptedTurnIndex = state.currentGameState.currentTurnIndex;
-    state.secretPassagePromptedPlayerId = currentTurnPlayer;
+            if (roomsWithToken.length === 1) {
+                const targetRoomId = roomsWithToken[0].roomId;
+                state.currentGameState.playerState.playerPositions[currentTurnPlayer] = targetRoomId;
+                import('../turn/turnManager.js').then(m => m.advanceToNextTurn());
+                syncGameStateToServer();
+                updateGameUI(state.mountElRef, state.currentGameState, state.mySocketId);
+                return true;
+            }
 
-    if (roomsWithToken.length === 1) {
-        const targetRoomId = roomsWithToken[0].roomId;
-        state.currentGameState.playerState.playerPositions[currentTurnPlayer] = targetRoomId;
-        import('../turn/turnManager.js').then(m => m.advanceToNextTurn());
-        syncGameStateToServer();
-        updateGameUI(state.mountElRef, state.currentGameState, state.mySocketId);
-        return true;
+            openRoomSelectModal(
+                state.mountElRef,
+                'SU DUNG SECRET PASSAGE',
+                'Ban dang dung tren Secret Passage. Muon dich chuyen truoc khi ket thuc luot?',
+                roomsWithToken, 'secretPassage', originRoomName,
+                { allowedFloors, selectedFloor, mode: 'teleport', allowSkip: false }
+            );
+            return true;
+        }
     }
 
+    // Check Secret Stairs
+    if (currentRoom?.specialTokens?.includes('secretStairs')) {
+        const roomsWithToken = getRoomsWithSpecialToken(state.currentGameState, 'secretStairs')
+            .filter(room => room.roomId !== currentRoomId);
+        if (roomsWithToken.length > 0) {
+            state.secretPassagePromptedTurnIndex = state.currentGameState.currentTurnIndex;
+            state.secretPassagePromptedPlayerId = currentTurnPlayer;
+
+            const allowedFloors = [...new Set(roomsWithToken.map(room => room.floor))];
+            const selectedFloor = allowedFloors.includes(currentRoom?.floor) ? currentRoom.floor : allowedFloors[0];
+            const originRoomName = currentRoom?.name || currentRoomId || 'phong hien tai';
+
+            if (roomsWithToken.length === 1) {
+                // Auto-teleport to the only target and draw event
+                const targetRoomId = roomsWithToken[0].roomId;
+                state.currentGameState.playerState.playerPositions[currentTurnPlayer] = targetRoomId;
+                syncGameStateToServer();
+                // Draw event card after teleporting
+                import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(state.mountElRef, ['event']));
+                return true;
+            }
+
+            openRoomSelectModal(
+                state.mountElRef,
+                'CAU THANG BI MAT',
+                'Ban dang dung tren Cau thang bi mat. Muon dich chuyen va rut Event?',
+                roomsWithToken, 'secretStairs', originRoomName,
+                { allowedFloors, selectedFloor, mode: 'teleportAndDrawEvent', allowSkip: false }
+            );
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Use secret stairs manually (button click when moves = 0)
+ */
+export function useSecretStairs(mountEl) {
+    const playerId = state.mySocketId;
+    const movesLeft = state.currentGameState?.playerMoves?.[playerId] ?? 0;
+    if (movesLeft > 0) return;
+
+    const currentRoomId = state.currentGameState?.playerState?.playerPositions?.[playerId];
+    const currentRoom = currentRoomId ? state.currentGameState?.map?.revealedRooms?.[currentRoomId] : null;
+    if (!currentRoom?.specialTokens?.includes('secretStairs')) return;
+
+    const roomsWithToken = getRoomsWithSpecialToken(state.currentGameState, 'secretStairs')
+        .filter(room => room.roomId !== currentRoomId);
+    if (roomsWithToken.length === 0) {
+        openEventResultModal(mountEl, 'CAU THANG BI MAT', 'Khong co phong nao khac co cau thang bi mat.', 'neutral');
+        return;
+    }
+
+    if (roomsWithToken.length === 1) {
+        // Auto-teleport and draw event
+        const targetRoomId = roomsWithToken[0].roomId;
+        const targetRoomName = state.currentGameState.map?.revealedRooms?.[targetRoomId]?.name || targetRoomId;
+        state.currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+        syncGameStateToServer();
+        import('../cards/tokenDrawing.js').then(m => m.initTokenDrawing(mountEl, ['event']));
+        return;
+    }
+
+    const allowedFloors = [...new Set(roomsWithToken.map(r => r.floor))];
+    const selectedFloor = allowedFloors.includes(currentRoom?.floor) ? currentRoom.floor : allowedFloors[0];
     openRoomSelectModal(
-        state.mountElRef,
-        title,
-        description,
-        roomsWithToken,
-        'secretPassage',
-        originRoomName,
-        { allowedFloors, selectedFloor, mode: 'teleport', allowSkip: false }
+        mountEl,
+        'CAU THANG BI MAT',
+        'Chon phong de dich chuyen qua cau thang bi mat. Sau do rut 1 la Event.',
+        roomsWithToken, 'secretStairs', currentRoom?.name || currentRoomId,
+        { allowedFloors, selectedFloor, mode: 'teleportAndDrawEvent', allowSkip: false }
     );
-    return true;
 }

@@ -234,6 +234,12 @@ export function attachEventListeners(mountEl, roomId) {
         if (action === 'use-stairs') { const t = target.closest('[data-action="use-stairs"]')?.dataset.target; if (t) handleMoveAfterStairs(mountEl, t); return; }
         if (action === 'use-elevator') { const f = target.closest('[data-action="use-elevator"]')?.dataset.floor; if (f) handleMoveAfterElevator(mountEl, f); return; }
 
+        // Secret Stairs
+        if (action === 'use-secret-stairs') {
+            import('../omens/omenSpecial.js').then(m => m.useSecretStairs(mountEl));
+            return;
+        }
+
         // Secret Passage
         if (action === 'use-secret-passage') {
             const pid = state.mySocketId;

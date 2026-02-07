@@ -335,6 +335,8 @@ function renderGameControls(gameState, myId) {
     const currentRoom = currentRoomId ? gameState?.map?.revealedRooms?.[currentRoomId] : null;
     const secretPassageRooms = getRoomsWithSpecialToken(gameState, 'secretPassage').filter(room => room.roomId !== currentRoomId);
     const canUseSecretPassage = myTurn && movesLeft === 0 && !isBlocked && currentRoom?.specialTokens?.includes('secretPassage') && secretPassageRooms.length > 0;
+    const secretStairsRooms = getRoomsWithSpecialToken(gameState, 'secretStairs').filter(room => room.roomId !== currentRoomId);
+    const canUseSecretStairs = myTurn && movesLeft === 0 && !isBlocked && currentRoom?.specialTokens?.includes('secretStairs') && secretStairsRooms.length > 0;
 
     return `<div class="game-controls">
         <div class="movement-controls">
@@ -355,6 +357,7 @@ function renderGameControls(gameState, myId) {
             </svg>
         </button>
         ${canUseSecretPassage ? `<button class="secret-passage-btn" type="button" data-action="use-secret-passage" title="Su dung Secret Passage"><span class="secret-passage-btn__label">SP</span></button>` : ''}
+        ${canUseSecretStairs ? `<button class="secret-passage-btn" type="button" data-action="use-secret-stairs" title="Su dung Cau thang bi mat"><span class="secret-passage-btn__label">SS</span></button>` : ''}
         <div class="stairs-controls">
             ${showUpBtn ? `<button class="stairs-btn stairs-btn--up" type="button" data-action="use-stairs" data-target="${stairs.targetRoom}" title="Leo len tang tren"><span class="stairs-btn__arrow">▲</span><span class="stairs-btn__label">UP</span></button>` : ''}
             ${showDownBtn ? `<button class="stairs-btn stairs-btn--down" type="button" data-action="use-stairs" data-target="${stairs.targetRoom}" title="Di xuong tang duoi"><span class="stairs-btn__arrow">▼</span><span class="stairs-btn__label">DOWN</span></button>` : ''}
