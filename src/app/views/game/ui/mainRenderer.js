@@ -366,6 +366,18 @@ function renderGameControls(gameState, myId) {
     </div>`;
 }
 
+function renderWallSwitchPlacementBar() {
+    const wsModal = state.wallSwitchPlacementModal;
+    if (!wsModal?.isOpen) return '';
+
+    return `
+        <div class="wall-switch-bar">
+            <div class="wall-switch-bar__icon">🔄</div>
+            <div class="wall-switch-bar__text">Chon canh tuong de dat Cua Xoay</div>
+        </div>
+    `;
+}
+
 function renderRoomTokenNotification(gameState, myId) {
     if (!gameState || gameState.gamePhase !== 'playing') return '';
 
@@ -824,6 +836,7 @@ export function renderGameScreen(gameState, myId) {
                 </div>
             </div>
             ${renderRoomTokenNotification(gameState, myId)}
+            ${renderWallSwitchPlacementBar()}
             ${renderGameControls(gameState, myId)}
             ${renderHauntButton(gameState)}
             ${renderTokenDetailPopup(gameState, myId)}
@@ -933,6 +946,8 @@ export async function updateGameUI(mountEl, gameState, myId) {
         if (currentPlayer === myId && myMoves === 0 && state.movesInitializedForTurn !== currentTurnIndex) {
             if (me?.characterId) {
                 state.movesInitializedForTurn = currentTurnIndex;
+                // Clear wallSwitch prompt keys for new turn
+                state.lastTokenPromptKeys.clear();
                 const persistentEffects = gameState.playerState?.persistentEffects?.[myId];
                 if (persistentEffects && persistentEffects.length > 0) {
                     const effect = persistentEffects[0];
@@ -944,6 +959,17 @@ export async function updateGameUI(mountEl, gameState, myId) {
                 const charData = gameState.playerState?.characterData?.[myId] || gameState.characterData?.[myId];
                 const speed = getCharacterSpeed(me.characterId, charData);
                 await socketClient.setMoves(speed);
+
+                // After moves set, check for interactive tokens (e.g., wallSwitch) in current room
+                const currentRoomId = gameState?.playerState?.playerPositions?.[myId];
+                if (currentRoomId) {
+                    const room = gameState?.map?.revealedRooms?.[currentRoomId];
+                    if (room?.specialTokens?.length) {
+                        import('../events/eventToken.js').then(m => {
+                            m.checkTokenInteractionOnRoomEntry(mountEl);
+                        });
+                    }
+                }
                 return;
             }
         }
@@ -962,7 +988,9 @@ export async function updateGameUI(mountEl, gameState, myId) {
                 !state.tokenDrawingModal?.isOpen &&
                 !state.eventDiceModal?.isOpen &&
                 !state.roomDiscoveryModal?.isOpen &&
-                !state.damageDiceModal) {
+                !state.damageDiceModal &&
+                !state.wallSwitchPlacementModal?.isOpen &&
+                !state.eventResultModal?.isOpen) {
 
                 // Dynamically import to check interactive tokens
                 import('../events/eventToken.js').then(m => {

@@ -31,6 +31,11 @@ export function advanceToNextTurn() {
 
     state.currentGameState.currentTurnIndex = (state.currentGameState.currentTurnIndex + 1) % state.currentGameState.turnOrder.length;
 
+    // Reset per-turn state for the new turn
+    state.turnCounter++;
+    state.lastTokenPromptKeys.clear();
+    state.hasAttackedThisTurn = false;
+
     const nextIndex = state.currentGameState.currentTurnIndex;
     const nextPlayerId = state.currentGameState.turnOrder[nextIndex];
     const nextPlayer = state.currentGameState.players.find(p => p.id === nextPlayerId);
@@ -169,6 +174,7 @@ export async function syncGameStateToServer() {
             gameOver: state.currentGameState.gameOver || null,
             roomTokenEffects: state.currentGameState.roomTokenEffects || null,
             tokenInteractions: state.currentGameState.tokenInteractions || null,
+            wallSwitchConnections: state.currentGameState.wallSwitchConnections || null,
         });
         console.log('[Sync] Game state synced to server:', result);
     } catch (error) {

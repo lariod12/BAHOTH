@@ -20,7 +20,10 @@ export const state = {
     tutorialOpen: false,
     tokenDetailOpen: false,
     tokenPromptModal: null,
-    lastTokenPromptKey: null,
+    /** @type {Set<string>} */
+    lastTokenPromptKeys: new Set(),
+    /** Monotonically increasing turn counter (never wraps) */
+    turnCounter: 0,
     isDebugMode: false,
     isSoloDebug: false,
     /** @type {string[]} */
@@ -116,6 +119,8 @@ export const state = {
     tokenPlacementModal: null,
     /** @type {any} */
     tokenInteractionModal: null,
+    /** @type {any} */
+    wallSwitchPlacementModal: null,
     /** @type {any} */
     multiPlayerRollModal: null,
     /** @type {any} */
@@ -277,6 +282,7 @@ export function resetAllModalStates() {
     state.storeDiceModal = null;
     state.tokenPlacementModal = null;
     state.tokenInteractionModal = null;
+    state.wallSwitchPlacementModal = null;
     state.multiPlayerRollModal = null;
     state.secondRollModal = null;
 }

@@ -131,6 +131,7 @@ export function initializeGame(roomId, players, startingRoom = 'entrance-hall') 
         storedDice: {},
         roomTokenEffects: {},
         tokenInteractions: {},
+        wallSwitchConnections: {},
     };
 
     // Set all players to starting position and initialize character stats
@@ -427,6 +428,7 @@ export function getFullPlayerState(roomId) {
         storedDice: state.storedDice ? JSON.parse(JSON.stringify(state.storedDice)) : {},
         roomTokenEffects: state.roomTokenEffects ? JSON.parse(JSON.stringify(state.roomTokenEffects)) : {},
         tokenInteractions: state.tokenInteractions ? JSON.parse(JSON.stringify(state.tokenInteractions)) : {},
+        wallSwitchConnections: state.wallSwitchConnections ? JSON.parse(JSON.stringify(state.wallSwitchConnections)) : {},
     };
 }
 
@@ -836,6 +838,22 @@ export function updateTokenInteractions(roomId, tokenInteractions) {
     if (!state) return undefined;
 
     state.tokenInteractions = tokenInteractions || {};
+    savePlayers();
+
+    return state;
+}
+
+/**
+ * Update wall switch connections
+ * @param {string} roomId
+ * @param {Record<string, object> | null} wallSwitchConnections
+ * @returns {PlayerState | undefined}
+ */
+export function updateWallSwitchConnections(roomId, wallSwitchConnections) {
+    const state = games.get(roomId);
+    if (!state) return undefined;
+
+    state.wallSwitchConnections = wallSwitchConnections || {};
     savePlayers();
 
     return state;

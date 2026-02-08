@@ -540,6 +540,11 @@ export function socketIOPlugin() {
                         playerManager.updateTokenInteractions(room.id, stateUpdate.tokenInteractions);
                     }
 
+                    // Update wall switch connections if provided
+                    if (stateUpdate.wallSwitchConnections !== undefined) {
+                        playerManager.updateWallSwitchConnections(room.id, stateUpdate.wallSwitchConnections);
+                    }
+
                     // Note: trappedPlayers is updated earlier (before playerMoves processing)
 
                     // Update combat state if provided (for multiplayer combat sync)

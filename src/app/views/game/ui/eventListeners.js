@@ -777,6 +777,15 @@ export function attachEventListeners(mountEl, roomId) {
             return;
         }
 
+        // Wall Switch wall side selection
+        if (action === 'select-wall-side') {
+            const side = target.dataset.side;
+            if (side) {
+                import('../events/eventToken.js').then(m => m.completeWallSwitchPlacement(mountEl, side));
+            }
+            return;
+        }
+
         // Token interaction prompt modal (generic for closet, safe, skeletons, wallSwitch)
         if (action === 'token-prompt-accept') {
             import('../events/eventToken.js').then(m => m.acceptTokenPrompt(mountEl));

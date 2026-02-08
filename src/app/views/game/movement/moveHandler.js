@@ -454,17 +454,22 @@ export function handleMoveAfterElevator(mountEl, targetFloor) {
 export function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     if (!state.currentGameState || !state.roomDiscoveryModal) return;
     const playerId = state.mySocketId;
-    const currentRoomId = state.currentGameState.playerState.playerPositions[playerId];
+    const wallSwitchCtx = state.roomDiscoveryModal.wallSwitchContext || null;
+
+    // For wall switch placement, the origin room is the room where the wall switch is being placed
+    const originRoomId = wallSwitchCtx
+        ? wallSwitchCtx.originRoomId
+        : state.currentGameState.playerState.playerPositions[playerId];
     const revealedRooms = state.currentGameState.map?.revealedRooms || {};
-    const currentRoom = revealedRooms[currentRoomId];
-    if (!currentRoom) return;
+    const originRoom = revealedRooms[originRoomId];
+    if (!originRoom) return;
 
     const roomDef = ROOMS.find(r => r.name.en === roomNameEn);
     if (!roomDef) { console.log(`Room definition not found: ${roomNameEn}`); return; }
 
-    const targetFloor = currentRoom.floor;
+    const targetFloor = originRoom.floor;
     const newRoomId = generateRoomId(roomNameEn);
-    const newPosition = calculateNewRoomPosition(currentRoom, state.roomDiscoveryModal.direction);
+    const newPosition = calculateNewRoomPosition(originRoom, state.roomDiscoveryModal.direction);
     const originalDoors = roomDef.doors.filter(d => d.kind === 'door').map(d => convertDoorSide(d.side));
     const rotatedDoors = rotateRoomDoors(originalDoors, rotation);
 
@@ -487,12 +492,21 @@ export function handleRoomDiscovery(mountEl, roomNameEn, rotation = 0) {
     }
 
     const direction = state.roomDiscoveryModal.direction;
-    if (!state.currentGameState.map.connections[currentRoomId]) state.currentGameState.map.connections[currentRoomId] = {};
-    state.currentGameState.map.connections[currentRoomId][direction] = newRoomId;
+    if (!state.currentGameState.map.connections[originRoomId]) state.currentGameState.map.connections[originRoomId] = {};
+    state.currentGameState.map.connections[originRoomId][direction] = newRoomId;
     if (!state.currentGameState.map.connections[newRoomId]) state.currentGameState.map.connections[newRoomId] = {};
-    state.currentGameState.map.connections[newRoomId][oppositeDir] = currentRoomId;
+    state.currentGameState.map.connections[newRoomId][oppositeDir] = originRoomId;
 
-    clearCompletedCombatForPlayer(playerId, currentRoomId);
+    // Wall switch context: don't move player, just finalize the connection
+    if (wallSwitchCtx) {
+        state.roomDiscoveryModal = null;
+        import('../events/eventToken.js').then(m => {
+            m._finalizeWallSwitchConnection(mountEl, wallSwitchCtx.originRoomId, newRoomId, wallSwitchCtx.side, wallSwitchCtx.eventCard);
+        });
+        return;
+    }
+
+    clearCompletedCombatForPlayer(playerId, originRoomId);
     state.currentGameState.playerState.playerPositions[playerId] = newRoomId;
     if (!state.currentGameState.playerState.playerEntryDirections) state.currentGameState.playerState.playerEntryDirections = {};
     state.currentGameState.playerState.playerEntryDirections[playerId] = oppositeDir;

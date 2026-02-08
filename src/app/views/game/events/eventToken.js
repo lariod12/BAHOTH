@@ -8,6 +8,7 @@ import { openEventDiceModal, openDamageDiceModal } from './eventDice.js';
 import { getPlayerStatForDice } from '../characters/characterManager.js';
 import { findMatchingOutcome } from '../../../utils/eventEffects.js';
 import { placeSpecialToken } from '../omens/omenSpecial.js';
+import { getOppositeDoor, doorDirToSide } from '../movement/roomUtils.js';
 
 /**
  * Handle place token event - places token on current room and shows result
@@ -18,6 +19,20 @@ export function handlePlaceTokenEvent(mountEl, eventCard) {
 
     if (!roomId) {
         openEventResultModal(mountEl, 'LOI', 'Khong tim thay phong hien tai.', 'danger');
+        return;
+    }
+
+    // Wall Switch: special placement flow - need to pick a wall side
+    if (eventCard.tokenType === 'wallSwitch') {
+        state.wallSwitchPlacementModal = {
+            isOpen: true,
+            roomId,
+            eventCard,
+            selectedSide: null,
+        };
+        console.log('[EventToken] Opening wall switch placement mode for room', roomId);
+        state.skipMapCentering = true;
+        updateGameUI(mountEl, state.currentGameState, state.mySocketId);
         return;
     }
 
@@ -246,6 +261,21 @@ export function applyTokenInteractionResult(mountEl) {
             openDamageDiceModal(mountEl, 0, outcome.dice);
             break;
         }
+        case 'useWallSwitch': {
+            // Look up wall switch connection and teleport player
+            const wsConn = state.currentGameState?.wallSwitchConnections?.[roomId];
+            if (!wsConn || !wsConn.connectedRoomId) {
+                openEventResultModal(mountEl, 'LOI', 'Khong tim thay ket noi cua xoay.', 'danger');
+                break;
+            }
+            const targetRoomId = wsConn.connectedRoomId;
+            const targetRoomName = state.currentGameState?.map?.revealedRooms?.[targetRoomId]?.name || targetRoomId;
+            state.currentGameState.playerState.playerPositions[playerId] = targetRoomId;
+            // Free move - do NOT deduct movement
+            syncGameStateToServer();
+            openEventResultModal(mountEl, 'CUA XOAY', `Ban da dung cua xoay de di chuyen den ${targetRoomName} (khong ton buoc).`, 'success');
+            break;
+        }
         case 'nothing': {
             openEventResultModal(mountEl, 'KHONG CO GI', 'Khong co gi xay ra.', 'neutral');
             break;
@@ -255,6 +285,136 @@ export function applyTokenInteractionResult(mountEl) {
             break;
         }
     }
+}
+
+// ============================================================
+// WALL SWITCH PLACEMENT FLOW
+// ============================================================
+
+/**
+ * Complete the wall switch placement after a wall side is selected
+ */
+export function completeWallSwitchPlacement(mountEl, side) {
+    const wsModal = state.wallSwitchPlacementModal;
+    if (!wsModal) return;
+
+    const { roomId, eventCard } = wsModal;
+    const playerId = state.mySocketId;
+    const revealedRooms = state.currentGameState?.map?.revealedRooms || {};
+    const currentRoom = revealedRooms[roomId];
+    if (!currentRoom) return;
+
+    // Close the wall selection mode
+    state.wallSwitchPlacementModal = null;
+
+    // Place the wallSwitch token on the current room
+    placeSpecialToken(roomId, eventCard.tokenType);
+    console.log('[EventToken] Placed wallSwitch token in room', roomId, 'on side', side);
+
+    // Calculate adjacent position
+    const dirOffsets = { north: { x: 0, y: 1 }, south: { x: 0, y: -1 }, east: { x: 1, y: 0 }, west: { x: -1, y: 0 } };
+    const offset = dirOffsets[side];
+    const targetX = currentRoom.x + offset.x;
+    const targetY = currentRoom.y + offset.y;
+
+    // Check if an adjacent room already exists at that position on the same floor
+    let adjacentRoomId = null;
+    for (const [rid, room] of Object.entries(revealedRooms)) {
+        if (room.floor === currentRoom.floor && room.x === targetX && room.y === targetY) {
+            adjacentRoomId = rid;
+            break;
+        }
+    }
+
+    // Store token interactions for current room
+    if (!state.currentGameState.tokenInteractions) {
+        state.currentGameState.tokenInteractions = {};
+    }
+    state.currentGameState.tokenInteractions[roomId] = {
+        tokenType: 'wallSwitch',
+        rollStat: eventCard.tokenInteraction?.rollStat || 'knowledge',
+        rollResults: eventCard.tokenInteraction?.rollResults || [
+            { range: '3+', effect: 'useWallSwitch', freeMove: true },
+            { range: '0-2', effect: 'nothing' },
+        ],
+    };
+
+    if (adjacentRoomId) {
+        // Adjacent room exists - connect them and place token on the second room
+        _finalizeWallSwitchConnection(mountEl, roomId, adjacentRoomId, side, eventCard);
+    } else {
+        // No adjacent room - open room discovery modal to draw a new room
+        const currentFloor = currentRoom.floor;
+        const requiredDoorSide = doorDirToSide(getOppositeDoor(side));
+
+        state.roomDiscoveryModal = {
+            isOpen: true,
+            direction: side,
+            floor: currentFloor,
+            doorSide: requiredDoorSide,
+            selectedRoom: null,
+            currentRotation: 0,
+            selectedFloor: null,
+            needsFloorSelection: false,
+            // Custom flag to indicate this is for wall switch placement
+            wallSwitchContext: {
+                originRoomId: roomId,
+                side: side,
+                eventCard: eventCard,
+            },
+        };
+        updateGameUI(mountEl, state.currentGameState, state.mySocketId);
+    }
+}
+
+/**
+ * Finalize the wall switch connection between two rooms
+ * Called either after side selection (adjacent exists) or after room discovery (new room placed)
+ */
+export function _finalizeWallSwitchConnection(mountEl, roomAId, roomBId, side, eventCard) {
+    const oppositeSide = getOppositeDoor(side);
+
+    // Place wallSwitch token on the second room too
+    placeSpecialToken(roomBId, 'wallSwitch');
+
+    // Ensure map connections exist between the two rooms (for wall switch traversal)
+    if (!state.currentGameState.map.connections[roomAId]) state.currentGameState.map.connections[roomAId] = {};
+    if (!state.currentGameState.map.connections[roomBId]) state.currentGameState.map.connections[roomBId] = {};
+
+    // Store bidirectional wall switch connections
+    if (!state.currentGameState.wallSwitchConnections) {
+        state.currentGameState.wallSwitchConnections = {};
+    }
+    state.currentGameState.wallSwitchConnections[roomAId] = {
+        side: side,
+        connectedRoomId: roomBId,
+    };
+    state.currentGameState.wallSwitchConnections[roomBId] = {
+        side: oppositeSide,
+        connectedRoomId: roomAId,
+    };
+
+    // Store token interactions for second room too
+    if (!state.currentGameState.tokenInteractions) {
+        state.currentGameState.tokenInteractions = {};
+    }
+    state.currentGameState.tokenInteractions[roomBId] = {
+        tokenType: 'wallSwitch',
+        rollStat: eventCard.tokenInteraction?.rollStat || 'knowledge',
+        rollResults: eventCard.tokenInteraction?.rollResults || [
+            { range: '3+', effect: 'useWallSwitch', freeMove: true },
+            { range: '0-2', effect: 'nothing' },
+        ],
+    };
+
+    const roomAName = state.currentGameState?.map?.revealedRooms?.[roomAId]?.name || roomAId;
+    const roomBName = state.currentGameState?.map?.revealedRooms?.[roomBId]?.name || roomBId;
+    console.log('[EventToken] Wall switch connected:', roomAName, '<->', roomBName);
+
+    syncGameStateToServer();
+
+    // Prompt the player to use the wall switch immediately
+    showTokenInteractionPrompt(mountEl, roomAId, 'wallSwitch');
 }
 
 /**
@@ -315,9 +475,9 @@ const TOKEN_PROMPT_CONFIG = {
     },
     wallSwitch: {
         title: 'CUA XOAY',
-        description: 'Cai cua xoay dan den noi khac.\nBan co muon su dung cua xoay khong? (Do xuc xac Knowledge)',
+        description: 'Cai cua xoay dan den noi khac.\nBan co muon su dung cua xoay khong? (Do xuc xac Knowledge 3+)',
         acceptLabel: 'SU DUNG',
-        promptOnPlacement: false,
+        promptOnPlacement: true,
         promptOnEntry: true,
     },
 };
@@ -327,6 +487,24 @@ const TOKEN_PROMPT_CONFIG = {
 // ============================================================
 
 /**
+ * Block all wallSwitch prompts for the current turn (any room)
+ * Called after accepting OR declining a wallSwitch prompt (1 attempt per turn)
+ */
+function _blockAllWallSwitchPromptsThisTurn() {
+    const tc = state.turnCounter;
+    const wsConns = state.currentGameState?.wallSwitchConnections || {};
+    for (const rid of Object.keys(wsConns)) {
+        state.lastTokenPromptKeys.add(`${rid}_wallSwitch_${tc}`);
+    }
+    // Also block for the player's current room
+    const playerId = state.mySocketId;
+    const currentRoomId = state.currentGameState?.playerState?.playerPositions?.[playerId];
+    if (currentRoomId) {
+        state.lastTokenPromptKeys.add(`${currentRoomId}_wallSwitch_${tc}`);
+    }
+}
+
+/**
  * Show prompt asking if player wants to interact with a token
  */
 export function showTokenInteractionPrompt(mountEl, roomId, tokenType) {
@@ -334,7 +512,7 @@ export function showTokenInteractionPrompt(mountEl, roomId, tokenType) {
     if (!config) return;
 
     const roomName = state.currentGameState?.map?.revealedRooms?.[roomId]?.name || roomId;
-    const currentTurnIdx = state.currentGameState?.currentTurnIndex ?? 0;
+    const currentTurnIdx = state.turnCounter;
 
     state.tokenPromptModal = {
         isOpen: true,
@@ -342,7 +520,7 @@ export function showTokenInteractionPrompt(mountEl, roomId, tokenType) {
         roomName,
         tokenType,
     };
-    state.lastTokenPromptKey = `${roomId}_${tokenType}_${currentTurnIdx}`;
+    state.lastTokenPromptKeys.add(`${roomId}_${tokenType}_${currentTurnIdx}`);
     state.skipMapCentering = true;
     updateGameUI(mountEl, state.currentGameState, state.mySocketId);
 }
@@ -361,9 +539,11 @@ export function checkTokenInteractionOnRoomEntry(mountEl) {
     // Don't prompt if another modal is open
     if (state.tokenInteractionModal?.isOpen || state.tokenPromptModal?.isOpen ||
         state.tokenDrawingModal?.isOpen || state.eventDiceModal?.isOpen ||
-        state.roomDiscoveryModal?.isOpen || state.damageDiceModal) return false;
+        state.roomDiscoveryModal?.isOpen || state.damageDiceModal ||
+        state.wallSwitchPlacementModal?.isOpen ||
+        state.eventResultModal?.isOpen) return false;
 
-    const currentTurnIdx = state.currentGameState?.currentTurnIndex ?? 0;
+    const currentTurnIdx = state.turnCounter;
 
     // Check each interactive token in the room
     for (const tokenType of room.specialTokens) {
@@ -371,7 +551,7 @@ export function checkTokenInteractionOnRoomEntry(mountEl) {
         if (!config || !config.promptOnEntry) continue;
 
         const promptKey = `${roomId}_${tokenType}_${currentTurnIdx}`;
-        if (state.lastTokenPromptKey === promptKey) continue;
+        if (state.lastTokenPromptKeys.has(promptKey)) continue;
 
         // Check that there's actually an interaction registered for this token
         const hasInteraction = state.currentGameState?.tokenInteractions?.[roomId]?.tokenType === tokenType;
@@ -390,6 +570,12 @@ export function checkTokenInteractionOnRoomEntry(mountEl) {
 export function acceptTokenPrompt(mountEl) {
     const tokenType = state.tokenPromptModal?.tokenType;
     state.tokenPromptModal = null;
+
+    // Wall switch: block all prompts for this turn after accepting (1 attempt per turn)
+    if (tokenType === 'wallSwitch') {
+        _blockAllWallSwitchPromptsThisTurn();
+    }
+
     if (tokenType) {
         openTokenInteractionModal(mountEl, tokenType);
     }
@@ -399,7 +585,14 @@ export function acceptTokenPrompt(mountEl) {
  * Handle token prompt decline - close and continue
  */
 export function declineTokenPrompt(mountEl) {
+    const declinedType = state.tokenPromptModal?.tokenType;
     state.tokenPromptModal = null;
+
+    // Wall switch: block all prompts for this turn after declining (1 attempt per turn)
+    if (declinedType === 'wallSwitch') {
+        _blockAllWallSwitchPromptsThisTurn();
+    }
+
     state.skipMapCentering = true;
     updateGameUI(mountEl, state.currentGameState, state.mySocketId);
 }

@@ -2,6 +2,7 @@
 // Uses focused viewport centered on player position
 
 import { calculateVaultLayout, getDividerOrientation } from '../utils/vaultLayout.js';
+import { state } from '../views/game/gameState.js';
 
 /**
  * @typedef {{
@@ -213,13 +214,19 @@ function renderTokens(tokens, vaultLayout = null) {
  * @param {string[]} specialTokens
  * @returns {string}
  */
-function renderSpecialTokens(specialTokens) {
+function renderSpecialTokens(specialTokens, roomId) {
     if (!specialTokens || specialTokens.length === 0) return '';
 
     const tokenHtml = [];
+    let nonWallSwitchIdx = 0;
 
-    specialTokens.forEach((tokenType, i) => {
-        const leftOffset = 4 + i * 12;
+    specialTokens.forEach((tokenType) => {
+        if (tokenType === 'wallSwitch') {
+            // Wall switch is rendered separately at its wall position
+            return;
+        }
+        const leftOffset = 4 + nonWallSwitchIdx * 12;
+        nonWallSwitchIdx++;
         if (tokenType === 'secretPassage') {
             tokenHtml.push(`
                 <div class="map-token map-token--special map-token--secret-passage"
@@ -238,6 +245,15 @@ function renderSpecialTokens(specialTokens) {
             `);
         }
     });
+
+    // Render wall switch token at its wall side position
+    if (specialTokens.includes('wallSwitch')) {
+        const wsConn = state.currentGameState?.wallSwitchConnections?.[roomId];
+        const wsSide = wsConn?.side || 'north';
+        tokenHtml.push(`
+            <div class="map-wall-switch-token map-wall-switch-token--${wsSide}" title="Wall Switch"></div>
+        `);
+    }
 
     return `<div class="map-tokens map-tokens--special">${tokenHtml.join('')}</div>`;
 }
@@ -459,6 +475,16 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
         vaultDivider = `<div class="map-room__divider map-room__divider--${vaultLayout.dividerOrientation}"></div>`;
     }
 
+    // Render wall selection highlights for wallSwitch placement
+    let wallSelectHtml = '';
+    const wsModal = state.wallSwitchPlacementModal;
+    if (wsModal?.isOpen && wsModal.roomId === room.id) {
+        const sides = ['north', 'south', 'east', 'west'];
+        wallSelectHtml = sides.map(dir => {
+            return `<div class="map-wall-select map-wall-select--${dir}" data-action="select-wall-side" data-side="${dir}"></div>`;
+        }).join('');
+    }
+
     return `
         <div class="map-room ${floorClass} ${currentClass} ${tokensClass} ${vaultClass} ${dividerOrientationClass}"
              data-room-id="${room.id}"
@@ -467,9 +493,10 @@ function renderRoomTile(room, connections, playerPositions, playerNames, playerC
                 <span class="map-room__name">${room.name}</span>
                 ${vaultDivider}
                 ${renderTokens(room.tokens, vaultLayout)}
-                ${renderSpecialTokens(room.specialTokens)}
+                ${renderSpecialTokens(room.specialTokens, room.id)}
                 ${renderDoors(room.doors, connections, room, allRooms)}
                 ${renderPawnMarkers(room.id, playerPositions, playerNames, playerColors, myId, activePlayerId, vaultLayout, playerEntryDirections)}
+                ${wallSelectHtml}
             </div>
         </div>
     `;

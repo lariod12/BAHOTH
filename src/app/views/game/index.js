@@ -119,9 +119,14 @@ export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false 
 
         const oldTurnPlayer = state.currentGameState?.turnOrder?.[state.currentGameState?.currentTurnIndex];
         const newTurnPlayer = serverState?.turnOrder?.[serverState?.currentTurnIndex];
-        if (oldTurnPlayer !== newTurnPlayer && oldTurnPlayer !== undefined) {
+        const oldTurnIndex = state.currentGameState?.currentTurnIndex;
+        const newTurnIndex = serverState?.currentTurnIndex;
+        if ((oldTurnPlayer !== newTurnPlayer && oldTurnPlayer !== undefined) ||
+            (oldTurnIndex !== newTurnIndex && oldTurnIndex !== undefined)) {
             state.hasAttackedThisTurn = false;
             state.movesInitializedForTurn = -1;
+            state.turnCounter++;
+            state.lastTokenPromptKeys.clear();
         }
 
         state.currentGameState = serverState;
@@ -132,6 +137,9 @@ export function renderGameView({ mountEl, onNavigate, roomId, soloDebug = false 
         }
         if (serverState.playerState?.tokenInteractions && !serverState.tokenInteractions) {
             state.currentGameState.tokenInteractions = serverState.playerState.tokenInteractions;
+        }
+        if (serverState.playerState?.wallSwitchConnections && !serverState.wallSwitchConnections) {
+            state.currentGameState.wallSwitchConnections = serverState.playerState.wallSwitchConnections;
         }
 
         if (state.isSoloDebug) {

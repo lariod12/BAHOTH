@@ -4566,6 +4566,122 @@ select.field__input option {
     background: rgba(139, 90, 43, 0.7);
 }
 
+/* Wall Switch Placement - selectable wall sides */
+.map-wall-select {
+    position: absolute;
+    background: rgba(0, 200, 255, 0.35);
+    border: 2px solid rgba(0, 200, 255, 0.8);
+    z-index: 15;
+    cursor: pointer;
+    animation: wall-select-pulse 1.2s ease-in-out infinite;
+    border-radius: 3px;
+}
+
+.map-wall-select:active {
+    background: rgba(0, 200, 255, 0.6);
+}
+
+.map-wall-select--north {
+    top: 0;
+    left: 10%;
+    right: 10%;
+    height: 25%;
+}
+
+.map-wall-select--south {
+    bottom: 0;
+    left: 10%;
+    right: 10%;
+    height: 25%;
+}
+
+.map-wall-select--east {
+    right: 0;
+    top: 10%;
+    bottom: 10%;
+    width: 25%;
+}
+
+.map-wall-select--west {
+    left: 0;
+    top: 10%;
+    bottom: 10%;
+    width: 25%;
+}
+
+@keyframes wall-select-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+/* Wall Switch token positioned on wall side */
+.map-wall-switch-token {
+    position: absolute;
+    background: rgba(0, 200, 255, 0.85);
+    border: 1px solid rgba(0, 220, 255, 1);
+    border-radius: 2px;
+    z-index: 12;
+    box-shadow: 0 0 8px rgba(0, 200, 255, 0.6);
+}
+
+.map-wall-switch-token--north {
+    top: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 6px;
+}
+
+.map-wall-switch-token--south {
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 6px;
+}
+
+.map-wall-switch-token--east {
+    right: -3px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 20px;
+}
+
+.map-wall-switch-token--west {
+    left: -3px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 20px;
+}
+
+.wall-switch-bar {
+    position: fixed;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(0, 50, 80, 0.9);
+    border: 1px solid rgba(0, 200, 255, 0.6);
+    border-radius: 20px;
+    z-index: 25;
+    animation: wall-select-pulse 1.2s ease-in-out infinite;
+}
+
+.wall-switch-bar__icon {
+    font-size: 1.2rem;
+}
+
+.wall-switch-bar__text {
+    color: #fff;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
 /* Responsive sidebar and layout */
 /* Tablet: 768px - 1024px */
 @media (max-width: 1024px) {
